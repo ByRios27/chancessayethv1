@@ -1,0 +1,5 @@
+        <div className="min-h-screen bg-[#E4E3E0] flex items-center justify-center p-8">
+    <div className="min-h-screen flex items-center justify-center bg-background p-4 relative overflow-hidden">
+        <div className="min-h-screen bg-[#E4E3E0] flex items-center justify-center font-mono">CARGANDO SISTEMA...</div>
+        <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+        <div className="min-h-screen bg-background text-foreground font-sans flex overflow-hidden">

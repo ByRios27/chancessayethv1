@@ -1,0 +1,4 @@
+2705:                    let bgColor = 'bg-[#1F2937]/30';
+2747:                    <div className="bg-[#1F2937]/30 rounded-lg p-4 border border-gray-800/50">
+2763:                    <div className="bg-[#1F2937]/30 rounded-lg p-4 border border-gray-800/50">
+2783:                <div className="bg-[#1F2937]/30 rounded-lg p-4 border border-gray-800/50">

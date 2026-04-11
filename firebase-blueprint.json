@@ -1,0 +1,150 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User profile information including role and financial status.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["ceo", "admin", "seller"] },
+        "sellerId": { "type": "string" },
+        "commissionRate": { "type": "number" },
+        "specialChanceEnabled": { "type": "boolean" },
+        "currentDebt": { "type": "number" }
+      },
+      "required": ["email", "name", "role"]
+    },
+    "Lottery": {
+      "title": "Lottery Configuration",
+      "description": "Configuration for a specific lottery draw.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "drawTime": { "type": "string" },
+        "closingTime": { "type": "string" },
+        "isFourDigits": { "type": "boolean" },
+        "active": { "type": "boolean" }
+      },
+      "required": ["name", "drawTime", "closingTime", "active"]
+    },
+    "Ticket": {
+      "title": "Lottery Ticket",
+      "description": "A ticket containing one or more bets sold by a seller.",
+      "type": "object",
+      "properties": {
+        "bets": { "type": "array" },
+        "totalAmount": { "type": "number" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "sellerId": { "type": "string" },
+        "sellerCode": { "type": "string" },
+        "sellerEmail": { "type": "string", "format": "email" },
+        "sellerName": { "type": "string" },
+        "commissionRate": { "type": "number" },
+        "status": { "type": "string", "enum": ["active", "cancelled", "winner"] },
+        "customerName": { "type": "string" },
+        "sequenceNumber": { "type": "string" },
+        "liquidated": { "type": "boolean" },
+        "specialChanceEnabled": { "type": "boolean" }
+      },
+      "required": ["bets", "totalAmount", "timestamp", "sellerId", "sellerEmail", "status"]
+    },
+    "Result": {
+      "title": "Lottery Result",
+      "description": "The winning numbers for a specific lottery and date.",
+      "type": "object",
+      "properties": {
+        "lotteryName": { "type": "string" },
+        "date": { "type": "string", "format": "date" },
+        "firstPrize": { "type": "string" },
+        "secondPrize": { "type": "string" },
+        "thirdPrize": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["lotteryName", "date", "firstPrize", "timestamp"]
+    },
+    "Injection": {
+      "title": "Financial Transaction",
+      "description": "A record of an injection, payment, or debt transaction.",
+      "type": "object",
+      "properties": {
+        "userEmail": { "type": "string", "format": "email" },
+        "amount": { "type": "number" },
+        "type": { "type": "string", "enum": ["injection", "payment", "debt"] },
+        "date": { "type": "string", "format": "date" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "addedBy": { "type": "string" },
+        "liquidated": { "type": "boolean" }
+      },
+      "required": ["userEmail", "amount", "type", "date", "timestamp", "addedBy"]
+    },
+    "Settlement": {
+      "title": "Daily Settlement",
+      "description": "A summary of daily sales and profits for a user.",
+      "type": "object",
+      "properties": {
+        "userEmail": { "type": "string", "format": "email" },
+        "date": { "type": "string", "format": "date" },
+        "totalSales": { "type": "number" },
+        "totalCommission": { "type": "number" },
+        "totalPrizes": { "type": "number" },
+        "netProfit": { "type": "number" },
+        "injections": { "type": "number" },
+        "bankProfit": { "type": "number" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "liquidated": { "type": "boolean" }
+      },
+      "required": ["userEmail", "date", "totalSales", "timestamp"]
+    },
+    "GlobalSettings": {
+      "title": "Global Settings",
+      "description": "Global configuration for the application.",
+      "type": "object",
+      "properties": {
+        "chancePrices": { "type": "array" },
+        "specialChanceMultipliers": { "type": "object" },
+        "palesEnabled": { "type": "boolean" },
+        "billetesEnabled": { "type": "boolean" },
+        "pl12Multiplier": { "type": "number" },
+        "pl13Multiplier": { "type": "number" },
+        "pl23Multiplier": { "type": "number" },
+        "nextSellerNumber": { "type": "number" },
+        "specialChanceGlobalEnabled": { "type": "boolean" }
+      }
+    }
+  },
+  "firestore": {
+    "users/{email}": {
+      "schema": { "$ref": "User" },
+      "description": "User profiles indexed by lowercase email."
+    },
+    "lotteries": {
+      "schema": { "$ref": "Lottery" },
+      "description": "Collection of available lotteries."
+    },
+    "tickets": {
+      "schema": { "$ref": "Ticket" },
+      "description": "Collection of sold lottery tickets."
+    },
+    "results": {
+      "schema": { "$ref": "Result" },
+      "description": "Collection of lottery results."
+    },
+    "injections": {
+      "schema": { "$ref": "Injection" },
+      "description": "Collection of financial transactions (injections, payments, debts)."
+    },
+    "settlements": {
+      "schema": { "$ref": "Settlement" },
+      "description": "Collection of daily settlements."
+    },
+    "settings/global": {
+      "schema": { "$ref": "GlobalSettings" },
+      "description": "Global application settings."
+    },
+    "public/connectivity": {
+      "schema": { "type": "object", "properties": { "lastTested": { "type": "string", "format": "date-time" } } },
+      "description": "Public document for testing connectivity."
+    }
+  }
+}

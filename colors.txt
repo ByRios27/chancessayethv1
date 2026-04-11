@@ -1,0 +1,18 @@
+        <div className="min-h-screen bg-[#E4E3E0] flex items-center justify-center p-8">
+              className="w-full bg-[#141414] text-white py-3 font-bold uppercase tracking-widest"
+              <option value="" className="bg-[#141414]">Seleccionar Sorteo</option>
+                <option key={l.id} value={l.id} className="bg-[#141414]">{l.name}</option>
+  const cardBgClass = hasResult ? 'bg-[#3F1616]/80 border-[#7F1D1D]/60' : 'bg-[#111827] border-gray-800';
+                    let bgColor = 'bg-[#1F2937]/30';
+                    <div className="bg-[#1F2937]/30 rounded-lg p-4 border border-gray-800/50">
+                    <div className="bg-[#1F2937]/30 rounded-lg p-4 border border-gray-800/50">
+                <div className="bg-[#1F2937]/30 rounded-lg p-4 border border-gray-800/50">
+        <div className="min-h-screen bg-[#E4E3E0] flex items-center justify-center font-mono">CARGANDO SISTEMA...</div>
+                      <div key={lot.id} className={`overflow-hidden rounded-2xl border transition-all ${isLoss ? 'bg-red-600 border-red-500' : 'bg-[#1a1b23] border-white/5'} group`}>
+                      <div className="flex items-center gap-2 bg-[#111827] border border-gray-800 rounded-lg px-3 py-2">
+                          <option value="all" className="bg-[#111827]">Global (Todos)</option>
+                          <option value={userProfile.email} className="bg-[#111827]">Mis Ventas</option>
+                          <optgroup label="Vendedores" className="bg-[#111827]">
+                              <option key={u.email} value={u.email} className="bg-[#111827]">
+                    <div className="flex items-center gap-2 bg-[#111827] border border-gray-800 rounded-lg px-3 py-2">
+                        <div className="text-center py-12 text-[#9CA3AF] bg-[#111827] rounded-xl border border-gray-800">

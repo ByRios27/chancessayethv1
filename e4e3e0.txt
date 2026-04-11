@@ -1,0 +1,2 @@
+344:        <div className="min-h-screen bg-[#E4E3E0] flex items-center justify-center p-8">
+4481:        <div className="min-h-screen bg-[#E4E3E0] flex items-center justify-center font-mono">CARGANDO SISTEMA...</div>

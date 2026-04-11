@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.firebase/
+android/.gradle/
+android/app/build/
+android/build/
+android/capacitor-cordova-android-plugins/build/
+.vite-dev.log
+.vite-dev.err.log

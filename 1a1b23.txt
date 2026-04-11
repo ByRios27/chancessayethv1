@@ -1,0 +1,1 @@
+5573:                      <div key={lot.id} className={`overflow-hidden rounded-2xl border transition-all ${isLoss ? 'bg-red-600 border-red-500' : 'bg-[#1a1b23] border-white/5'} group`}>

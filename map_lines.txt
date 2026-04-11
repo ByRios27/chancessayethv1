@@ -1,0 +1,71 @@
+273:  const [hours, minutes] = time24.split(':').map(Number);
+307:      providerInfo: auth.currentUser?.providerData.map(provider => ({
+688:    Array.from(new Set((ticket.bets || []).map(b => b?.lottery)))
+778:        {selectedLotteryName && new Set(ticket.bets.map(b => b.lottery)).size > 1 && (
+848:              {Array.from(new Set((ticket.bets || []).map(b => b?.lottery)))
+850:                .map(lotName => {
+880:                      {(ticket.bets || []).map((bet, originalIdx) => ({ bet, originalIdx }))
+882:                        .map(({ bet, originalIdx }, idx) => {
+900:                                    {betWinnings.map((wb, wIdx) => (
+927:              {!showFullTicket && selectedLotteryName && Array.from(new Set((ticket.bets || []).map(b => b?.lottery))).length > 1 && (
+1238:          {lotteries.filter(l => l.active).map(lot => (
+1313:              {lotteries.map(l => (
+1641:              {chancePrices.map((config, idx) => (
+1830:                {[1, 2, 3].map((prizeNum) => {
+2104:              {allUsers.filter(u => u.role === 'seller' || u.role === 'admin' || u.role === 'ceo').map(u => {
+2499:              {preview.valid.slice(0, 20).map((bet, i) => (
+2519:              {preview.invalid.map((token, i) => (
+2599:    const data = new Array(100).fill(null).map(() => ({ amount: 0, count: 0 }));
+2612:  const maxVolume = Math.max(...heatmapData.map(d => d.count), 1);
+2625:    return Object.entries(groups).map(([number, data]) => ({ number, ...data })).sort((a, b) => b.amount - a.amount);
+2636:    return Object.entries(groups).map(([number, data]) => ({ number, ...data })).sort((a, b) => b.amount - a.amount);
+2649:    return Object.entries(breakdown).map(([email, amount]) => ({
+2727:                  {heatmapData.map((data, index) => {
+2848:                          {groupedPales.map(p => (
+2864:                          {groupedBilletes.map(b => (
+2885:                    {userBreakdown.map((ub) => (
+3040:        const docs = snapshot.docs.map(doc => doc.data() as UserProfile);
+3170:        {keys.map((key) => (
+3321:      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Lottery));
+3327:          const [h, m] = time.split(':').map(Number);
+3422:      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LotteryTicket));
+3441:      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Injection));
+3451:      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LotteryResult));
+3469:      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Settlement));
+3513:      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as LotteryTicket));
+3685:    setCart(prev => prev.map((item, i) => {
+3694:    setCart(prev => prev.map((item, i) => i === index ? { ...item, amount: newAmount } : item));
+3867:      let [closeH, closeM] = lot.closingTime.split(':').map(Number);
+4191:      const [h, m] = time.split(':').map(Number);
+4332:    const newBets = reuseModal.ticket.bets.map(b => ({ ...b, lottery: lotteryName }));
+4660:            ...unliquidatedTickets.map(t => ({ ref: doc(db, 'tickets', t.id), data: { liquidated: true, settlementId: settlementRef.id } })),
+4661:            ...unliquidatedInjections.map(i => ({ ref: doc(db, 'injections', i.id), data: { liquidated: true, settlementId: settlementRef.id } }))
+4755:    setCart(cart.map(item => ({ ...item, lottery: lotteryName })));
+4994:          }).map((item) => (
+5183:                              {[...results].sort((a, b) => b.timestamp - a.timestamp).slice(0, 3).map((res) => (
+5223:                              {users.filter(u => u.role === 'vendedor').map((v) => {
+5274:                        {injections.filter(i => i.date === todayStr && (userProfile?.role !== 'vendedor' || i.userEmail?.toLowerCase() === userProfile.email?.toLowerCase())).slice(0, 5).map((inj) => (
+5335:                                            onClick={() => setMultiLottery(activeLotteries.map(l => l.name))}
+5347:                                        {activeLotteries.map(l => (
+5383:                          {activeLotteries.map(l => (
+5570:                      {cart.map((bet, idx) => (
+5718:                            {users.filter(u => u.email !== user.email).map(u => (
+5740:                      {['TODO', 'CHANCE', 'BILLETE', 'PALE'].map((f) => (
+5770:                        }).map(u => {
+5876:                  {(selectedUserEmail !== 'all' || userProfile?.role === 'vendedor' || userProfile?.role === 'ceo' || userProfile?.role === 'admin') && sortedLotteries.map(lot => {
+5921:                                    {[resultForLottery.firstPrize, resultForLottery.secondPrize, resultForLottery.thirdPrize].map((num, i) => (
+5954:                                    .map(t => ({ t, prize: getTicketPrizes(t, lot.name, typeFilterCode).totalPrize }))
+5956:                                    .map(({ t: ticket }) => {
+5968:                                              {new Set(ticket.bets.map(b => b.lottery)).size > 1 && (
+6031:                                            .map((b, originalIdx) => ({ b, originalIdx }))
+6033:                                            .map(({ b, originalIdx }, i) => {
+6091:                            {users.filter(u => u.email !== userProfile.email).map(u => (
+6151:                    return sortedLotteries.map(lottery => (
+6213:                          results.sort((a, b) => b.date.localeCompare(a.date)).map((res) => (
+6301:                      {sortedLotteries.map(lot => (
+6427:                        {users.map(u => (
+6578:                          }).map(u => (
+6664:                                  {unliquidatedInjections.map(i => (
+6812:                    {Object.entries(groupedSettlements).map(([email, dates]) => {
+6846:                            {Object.entries(dates).sort((a, b) => b[0].localeCompare(a[0])).map(([date, daySettlements]) => (
+6853:                                  {daySettlements.map((s, idx) => (
