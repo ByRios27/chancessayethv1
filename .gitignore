@@ -7,3 +7,8 @@ android/build/
 android/capacitor-cordova-android-plugins/build/
 .vite-dev.log
 .vite-dev.err.log
+credentials/
+*.service-account.json
+scripts/.env
+firebase-debug.log
+auth-users-old.json

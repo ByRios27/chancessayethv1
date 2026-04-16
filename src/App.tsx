@@ -95,7 +95,6 @@ import { Share } from '@capacitor/share';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import * as htmlToImage from 'html-to-image';
 import { jsPDF } from 'jspdf';
-import 'jspdf-autotable';
 import QRCode from 'react-qr-code';
 import { toPng } from 'html-to-image';
 import { 
@@ -3008,6 +3007,12 @@ function App() {
   const [selectedManageUserEmail, setSelectedManageUserEmail] = useState<string>('');
   const [liquidationDate, setLiquidationDate] = useState<string>(format(getBusinessDate(), 'yyyy-MM-dd'));
   const [amountPaid, setAmountPaid] = useState<string>('');
+  const [isGeneratingYesterdayReport, setIsGeneratingYesterdayReport] = useState(false);
+  const [consolidatedReportDate, setConsolidatedReportDate] = useState<string>(() => {
+    const d = getBusinessDate();
+    d.setDate(d.getDate() - 1);
+    return format(d, 'yyyy-MM-dd');
+  });
 
   useEffect(() => {
     if (userProfile && userProfile.role === 'seller' && user?.email) {
@@ -4977,6 +4982,333 @@ function App() {
         }
       }
     });
+  };
+
+  const generateConsolidatedReport = async () => {
+    if (!(userProfile?.role === 'ceo' || userProfile?.role === 'admin')) {
+      toast.error('Solo CEO/Admin puede generar este reporte');
+      return;
+    }
+
+    if (!consolidatedReportDate) {
+      toast.error('Selecciona una fecha para generar el reporte');
+      return;
+    }
+
+    const reportDate = consolidatedReportDate;
+    const start = new Date(`${reportDate}T03:00:00`);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 1);
+
+    const toastId = toast.loading(`Generando PDF consolidado de ${reportDate}...`);
+    setIsGeneratingYesterdayReport(true);
+
+    try {
+      const [ticketsSnap, injectionsSnap, settlementsSnap, resultsSnap] = await Promise.all([
+        getDocs(query(
+          collection(db, 'tickets'),
+          where('timestamp', '>=', start),
+          where('timestamp', '<', end),
+          limit(5000)
+        )),
+        getDocs(query(
+          collection(db, 'injections'),
+          where('date', '==', reportDate),
+          limit(3000)
+        )),
+        getDocs(query(
+          collection(db, 'settlements'),
+          where('date', '==', reportDate),
+          limit(3000)
+        )),
+        getDocs(query(
+          collection(db, 'results'),
+          where('date', '==', reportDate),
+          limit(300)
+        ))
+      ]);
+
+      const reportTickets = ticketsSnap.docs
+        .map(d => ({ id: d.id, ...d.data() } as LotteryTicket))
+        .filter(t => t.status === 'active' || t.status === 'winner');
+      const reportInjections = injectionsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Injection));
+      const reportSettlements = settlementsSnap.docs.map(d => ({ id: d.id, ...d.data() } as Settlement));
+      const reportResults = resultsSnap.docs.map(d => ({ id: d.id, ...d.data() } as LotteryResult));
+
+      const getTicketDateSafe = (ticket: LotteryTicket) => {
+        if (ticket.timestamp?.toDate) return format(ticket.timestamp.toDate(), 'yyyy-MM-dd');
+        if (ticket.timestamp?.seconds) return format(new Date(ticket.timestamp.seconds * 1000), 'yyyy-MM-dd');
+        const parsed = new Date(ticket.timestamp ?? Date.now());
+        return isNaN(parsed.getTime()) ? reportDate : format(parsed, 'yyyy-MM-dd');
+      };
+
+      const calculateTicketPrizesForReport = (ticket: LotteryTicket) => {
+        let totalPrize = 0;
+        const winningBets: { idx: number, prize: number, rank: number, lotteryName: string, winningNumber: string, matchType?: string }[] = [];
+        if (ticket.status === 'cancelled') return { totalPrize, winningBets };
+
+        const ticketDate = getTicketDateSafe(ticket);
+        (ticket.bets || []).forEach((bet, idx) => {
+          const result = reportResults.find(r => cleanText(r.lotteryName) === cleanText(bet.lottery) && r.date === ticketDate);
+          if (!result) return;
+
+          const last2 = (bet.number || '').slice(-2);
+          if (bet.type === 'CH') {
+            const quantity = bet.quantity || 1;
+            const pricePerChance = (bet.amount || 0) / quantity;
+            const priceConfig = globalSettings.chancePrices?.find(cp => Math.abs(cp.price - pricePerChance) < 0.001);
+            if (last2 === result.firstPrize.slice(-2)) {
+              const p = (priceConfig ? priceConfig.ch1 : 0) * quantity;
+              totalPrize += p;
+              winningBets.push({ idx, prize: p, rank: 1, lotteryName: bet.lottery, winningNumber: result.firstPrize });
+            }
+            if (result.secondPrize && last2 === result.secondPrize.slice(-2)) {
+              const p = (priceConfig ? priceConfig.ch2 : 0) * quantity;
+              totalPrize += p;
+              winningBets.push({ idx, prize: p, rank: 2, lotteryName: bet.lottery, winningNumber: result.secondPrize });
+            }
+            if (result.thirdPrize && last2 === result.thirdPrize.slice(-2)) {
+              const p = (priceConfig ? priceConfig.ch3 : 0) * quantity;
+              totalPrize += p;
+              winningBets.push({ idx, prize: p, rank: 3, lotteryName: bet.lottery, winningNumber: result.thirdPrize });
+            }
+          } else if (bet.type === 'PL' && globalSettings.palesEnabled) {
+            const n1 = bet.number.slice(0, 2);
+            const n2 = bet.number.slice(2, 4);
+            const r1 = result.firstPrize.slice(-2);
+            const r2 = result.secondPrize.slice(-2);
+            const r3 = result.thirdPrize.slice(-2);
+            if ((n1 === r1 && n2 === r2) || (n1 === r2 && n2 === r1)) {
+              const p = (bet.amount || 0) * (globalSettings.pl12Multiplier || 1000);
+              totalPrize += p;
+              winningBets.push({ idx, prize: p, rank: 1, lotteryName: bet.lottery, winningNumber: `${r1}-${r2}`, matchType: 'Pale' });
+            }
+            if ((n1 === r1 && n2 === r3) || (n1 === r3 && n2 === r1)) {
+              const p = (bet.amount || 0) * (globalSettings.pl13Multiplier || 1000);
+              totalPrize += p;
+              winningBets.push({ idx, prize: p, rank: 1, lotteryName: bet.lottery, winningNumber: `${r1}-${r3}`, matchType: 'Pale' });
+            }
+            if ((n1 === r2 && n2 === r3) || (n1 === r3 && n2 === r2)) {
+              const p = (bet.amount || 0) * (globalSettings.pl23Multiplier || 200);
+              totalPrize += p;
+              winningBets.push({ idx, prize: p, rank: 2, lotteryName: bet.lottery, winningNumber: `${r2}-${r3}`, matchType: 'Pale' });
+            }
+          } else if (bet.type === 'BL' && globalSettings.billetesEnabled) {
+            const defaultPrizes = { full4: 2000, first3: 200, last3: 200, first2: 20, last2: 20 };
+            const multipliers = globalSettings.billeteMultipliers || {
+              p1: { ...defaultPrizes },
+              p2: { ...defaultPrizes },
+              p3: { ...defaultPrizes }
+            };
+            const checkPrize = (winningNum: string, prizeRank: number) => {
+              if (winningNum.length !== 4) return;
+              const pKey = `p${prizeRank}` as keyof typeof multipliers;
+              const prizeMults = multipliers[pKey] || defaultPrizes;
+              const betNum = bet.number;
+              const amount = bet.amount || 0;
+              if (betNum === winningNum) {
+                const p = amount * prizeMults.full4;
+                totalPrize += p;
+                winningBets.push({ idx, prize: p, rank: prizeRank, lotteryName: bet.lottery, winningNumber: winningNum, matchType: '4 Cifras' });
+                return;
+              }
+              if (betNum.slice(0, 3) === winningNum.slice(0, 3)) {
+                const p = amount * prizeMults.first3;
+                totalPrize += p;
+                winningBets.push({ idx, prize: p, rank: prizeRank, lotteryName: bet.lottery, winningNumber: winningNum, matchType: '3 Primeras' });
+              } else if (betNum.slice(0, 2) === winningNum.slice(0, 2)) {
+                const p = amount * prizeMults.first2;
+                totalPrize += p;
+                winningBets.push({ idx, prize: p, rank: prizeRank, lotteryName: bet.lottery, winningNumber: winningNum, matchType: '2 Primeras' });
+              }
+              if (betNum.slice(1, 4) === winningNum.slice(1, 4)) {
+                const p = amount * prizeMults.last3;
+                totalPrize += p;
+                winningBets.push({ idx, prize: p, rank: prizeRank, lotteryName: bet.lottery, winningNumber: winningNum, matchType: '3 Ultimas' });
+              } else if (betNum.slice(2, 4) === winningNum.slice(2, 4)) {
+                const p = amount * prizeMults.last2;
+                totalPrize += p;
+                winningBets.push({ idx, prize: p, rank: prizeRank, lotteryName: bet.lottery, winningNumber: winningNum, matchType: '2 Ultimas' });
+              }
+            };
+            checkPrize(result.firstPrize, 1);
+            checkPrize(result.secondPrize, 2);
+            checkPrize(result.thirdPrize, 3);
+          }
+        });
+        return { totalPrize, winningBets };
+      };
+
+      type ReportUserData = {
+        email: string;
+        name: string;
+        sellerId?: string;
+        tickets: LotteryTicket[];
+        injections: Injection[];
+        settlements: Settlement[];
+      };
+      const reportUsersMap = new Map<string, ReportUserData>();
+      const findUserProfile = (email: string) => users.find(u => u.email?.toLowerCase() === email.toLowerCase());
+      const ensureReportUser = (emailRaw?: string, fallbackName?: string, fallbackSellerId?: string) => {
+        const email = (emailRaw || '').toLowerCase().trim() || `sin-correo-${(fallbackSellerId || fallbackName || 'usuario').toLowerCase().replace(/\s+/g, '-')}`;
+        if (!reportUsersMap.has(email)) {
+          const profile = findUserProfile(email);
+          reportUsersMap.set(email, {
+            email,
+            name: profile?.name || fallbackName || email,
+            sellerId: profile?.sellerId || fallbackSellerId,
+            tickets: [],
+            injections: [],
+            settlements: []
+          });
+        }
+        return reportUsersMap.get(email)!;
+      };
+
+      reportTickets.forEach(ticket => {
+        const sellerEmail = ticket.sellerEmail?.toLowerCase() || '';
+        ensureReportUser(sellerEmail, ticket.sellerName, ticket.sellerCode).tickets.push(ticket);
+      });
+      reportInjections.forEach(inj => {
+        const email = inj.userEmail?.toLowerCase() || '';
+        ensureReportUser(email).injections.push(inj);
+      });
+      reportSettlements.forEach(settlement => {
+        const email = settlement.userEmail?.toLowerCase() || '';
+        ensureReportUser(email).settlements.push(settlement);
+      });
+
+      const reportUsers = Array.from(reportUsersMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+      const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
+      const marginX = 12;
+      const maxWidth = 186;
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const lineHeight = 5;
+      let y = 14;
+
+      const ensureSpace = (lines = 1) => {
+        if (y + (lines * lineHeight) > pageHeight - 12) {
+          pdf.addPage();
+          y = 14;
+        }
+      };
+
+      const writeLine = (text: string, font: 'normal' | 'bold' = 'normal', size = 9) => {
+        pdf.setFont('helvetica', font);
+        pdf.setFontSize(size);
+        const lines = pdf.splitTextToSize(text, maxWidth) as string[];
+        lines.forEach(line => {
+          ensureSpace(1);
+          pdf.text(line, marginX, y);
+          y += lineHeight;
+        });
+      };
+
+      const separator = () => {
+        writeLine('==================================================', 'normal', 8);
+      };
+
+      const globalSales = reportUsers.reduce((acc, u) => acc + u.tickets.reduce((s, t) => s + (t.totalAmount || 0), 0), 0);
+      const globalPrizes = reportUsers.reduce((acc, u) => acc + u.tickets.reduce((s, t) => s + calculateTicketPrizesForReport(t).totalPrize, 0), 0);
+      const globalInjections = reportUsers.reduce((acc, u) => acc + u.injections.filter(i => !i.type || i.type === 'injection').reduce((s, i) => s + (i.amount || 0), 0), 0);
+      const globalCommissions = reportUsers.reduce((acc, u) => acc + u.tickets.reduce((s, t) => s + ((t.totalAmount || 0) * ((t.commissionRate || 0) / 100)), 0), 0);
+      const globalLiquidations = reportUsers.reduce((acc, u) => acc + u.settlements.reduce((s, set) => s + (set.amountPaid || 0), 0), 0);
+      const globalNet = globalSales - globalCommissions - globalPrizes + globalInjections;
+
+      writeLine('REPORTE CONSOLIDADO DIARIO', 'bold', 15);
+      writeLine(`Fecha operativa seleccionada: ${reportDate}`, 'bold', 10);
+      writeLine(`Generado: ${format(new Date(), 'dd/MM/yyyy hh:mm a')}`, 'normal', 9);
+      separator();
+      writeLine('RESUMEN GLOBAL', 'bold', 11);
+      writeLine(`Usuarios con actividad: ${reportUsers.length}`);
+      writeLine(`Total ventas: USD ${globalSales.toFixed(2)}`);
+      writeLine(`Total premios: USD ${globalPrizes.toFixed(2)}`);
+      writeLine(`Total inyecciones: USD ${globalInjections.toFixed(2)}`);
+      writeLine(`Total liquidaciones (monto pagado): USD ${globalLiquidations.toFixed(2)}`);
+      writeLine(`Neto global estimado: USD ${globalNet.toFixed(2)}`, 'bold', 10);
+      separator();
+
+      if (reportUsers.length === 0) writeLine('Sin datos para la fecha seleccionada.', 'bold', 10);
+
+      reportUsers.forEach((ru) => {
+        ensureSpace(6);
+        separator();
+        writeLine(`USUARIO: ${ru.name}`, 'bold', 11);
+        writeLine(`Correo: ${ru.email}`);
+        writeLine(`SellerId: ${ru.sellerId || '-'}`);
+
+        const userSales = ru.tickets.reduce((s, t) => s + (t.totalAmount || 0), 0);
+        const userCommissions = ru.tickets.reduce((s, t) => s + ((t.totalAmount || 0) * ((t.commissionRate || 0) / 100)), 0);
+        const ticketPrizeData = ru.tickets.map(t => ({ ticket: t, prize: calculateTicketPrizesForReport(t) }));
+        const userPrizes = ticketPrizeData.reduce((s, item) => s + item.prize.totalPrize, 0);
+        const userInjectionOnly = ru.injections.filter(i => !i.type || i.type === 'injection').reduce((s, i) => s + (i.amount || 0), 0);
+        const userLiquidations = ru.settlements.reduce((s, set) => s + (set.amountPaid || 0), 0);
+        const userNet = userSales - userCommissions - userPrizes + userInjectionOnly;
+
+        writeLine('SUBTOTALES POR USUARIO', 'bold', 10);
+        writeLine(`Total ventas: USD ${userSales.toFixed(2)}`);
+        writeLine(`Total premios: USD ${userPrizes.toFixed(2)}`);
+        writeLine(`Total inyecciones: USD ${userInjectionOnly.toFixed(2)}`);
+        writeLine(`Total liquidaciones (monto pagado): USD ${userLiquidations.toFixed(2)}`);
+        writeLine(`Neto estimado/final: USD ${userNet.toFixed(2)}`, 'bold', 10);
+        separator();
+
+        writeLine('DETALLE DE TICKETS', 'bold', 10);
+        if (!ticketPrizeData.length) {
+          writeLine('Sin tickets para este usuario en la fecha seleccionada.');
+        } else {
+          ticketPrizeData.forEach(({ ticket, prize }, idx) => {
+            const ticketTime = ticket.timestamp?.toDate ? format(ticket.timestamp.toDate(), 'hh:mm a') : '--:--';
+            const lotteriesText = Array.from(new Set((ticket.bets || []).map(b => cleanText(b.lottery)))).join(', ') || '-';
+            const winnerTag = prize.totalPrize > 0 ? ' [GANADOR]' : '';
+            writeLine(`${idx + 1}. Ticket ${ticket.id.slice(0, 8)} | ${ticketTime} | ${ticket.status}${winnerTag}`, 'bold', 9);
+            writeLine(`   Loterias: ${lotteriesText}`);
+            writeLine(`   Venta: USD ${(ticket.totalAmount || 0).toFixed(2)} | Premio: USD ${(prize.totalPrize || 0).toFixed(2)}`);
+
+            (ticket.bets || []).forEach((bet, bIdx) => {
+              writeLine(`   - Bet ${bIdx + 1}: ${cleanText(bet.lottery)} | ${bet.type} ${bet.number} | qty ${bet.quantity} | USD ${(bet.amount || 0).toFixed(2)}`);
+            });
+
+            if (prize.winningBets.length) {
+              prize.winningBets.forEach((w, wIdx) => {
+                const hit = `${cleanText(w.lotteryName)} ${w.winningNumber}${w.matchType ? ` (${w.matchType})` : ''}`;
+                writeLine(`   * Acierto ${wIdx + 1}: ${hit} | Premio USD ${(w.prize || 0).toFixed(2)}`);
+              });
+            }
+            separator();
+          });
+        }
+
+        writeLine('INYECCIONES / AJUSTES', 'bold', 10);
+        if (!ru.injections.length) {
+          writeLine('Sin movimientos de inyecciones/ajustes.');
+        } else {
+          ru.injections.forEach((inj, iIdx) => {
+            writeLine(`${iIdx + 1}. Tipo: ${inj.type || 'injection'} | Monto: USD ${(inj.amount || 0).toFixed(2)} | Fecha: ${inj.date || reportDate}`);
+          });
+        }
+        separator();
+
+        writeLine('LIQUIDACIONES', 'bold', 10);
+        if (!ru.settlements.length) {
+          writeLine('Sin liquidaciones registradas para esta fecha.');
+        } else {
+          ru.settlements.forEach((set, sIdx) => {
+            writeLine(`${sIdx + 1}. Ventas USD ${(set.totalSales || 0).toFixed(2)} | Premios USD ${(set.totalPrizes || 0).toFixed(2)} | Inyecciones USD ${(set.totalInjections || 0).toFixed(2)}`);
+            writeLine(`   Neto USD ${(set.netProfit || 0).toFixed(2)} | Pagado USD ${(set.amountPaid || 0).toFixed(2)} | Deuda Final USD ${(set.newTotalDebt || 0).toFixed(2)}`);
+          });
+        }
+        separator();
+      });
+
+      pdf.save(`Reporte-Consolidado-${reportDate}.pdf`);
+      toast.success(`Reporte consolidado listo (${reportDate})`, { id: toastId });
+    } catch (error) {
+      console.error('Error generating consolidated report:', error);
+      toast.error('No se pudo generar el reporte consolidado', { id: toastId });
+    } finally {
+      setIsGeneratingYesterdayReport(false);
+    }
   };
 
   const handleDeleteAllSalesData = () => {
@@ -7152,6 +7484,23 @@ function App() {
                       <h2 className="text-2xl font-black italic tracking-tighter neon-text uppercase">LIQUIDACIONES</h2>
                       <p className="text-xs font-mono text-muted-foreground mt-1 uppercase tracking-widest">Cierre de caja y reporte de ventas</p>
                     </div>
+                    {(userProfile?.role === 'ceo' || userProfile?.role === 'admin') && (
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
+                        <input
+                          type="date"
+                          value={consolidatedReportDate}
+                          onChange={(e) => setConsolidatedReportDate(e.target.value)}
+                          className="bg-black border border-border p-3 rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all"
+                        />
+                        <button
+                          onClick={generateConsolidatedReport}
+                          disabled={isGeneratingYesterdayReport || !consolidatedReportDate}
+                          className="bg-primary text-primary-foreground font-black uppercase tracking-widest px-4 py-3 rounded-xl hover:brightness-110 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                          {isGeneratingYesterdayReport ? 'Generando PDF...' : 'Descargar Consolidado'}
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -7619,10 +7968,3 @@ function App() {
     </>
   );
 }
-
-
-
-
-
-
-
