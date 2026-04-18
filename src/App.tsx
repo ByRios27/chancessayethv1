@@ -227,7 +227,7 @@ interface Injection {
 interface UserProfile {
   email: string;
   name: string;
-  role: 'ceo' | 'admin' | 'seller';
+  role: 'ceo' | 'admin' | 'seller' | 'programador';
   commissionRate: number;
   status: 'active' | 'inactive';
   canLiquidate?: boolean;
@@ -252,6 +252,22 @@ interface Settlement {
   newTotalDebt: number;
   liquidatedBy: string;
   timestamp: any;
+}
+
+interface RecoveryTicketRecord {
+  rowId: string;
+  source: 'tickets' | 'daily_archives';
+  archiveDate?: string;
+  id: string;
+  sellerId?: string;
+  sellerCode?: string;
+  sellerName?: string;
+  sellerEmail?: string;
+  timestamp: any;
+  status?: string;
+  totalAmount?: number;
+  bets: Bet[];
+  raw: Record<string, any>;
 }
 
 // --- Error Boundary ---
@@ -962,12 +978,21 @@ const TicketModal = ({ ticket, results, lotteries, globalSettings, users, onClos
             </div>
             
             <div className="space-y-2">
-              {Array.from(new Set((ticket.bets || []).map(b => cleanText(b?.lottery))))
-                .filter(lotName => showFullTicket || !selectedLotteryName || lotName === cleanText(selectedLotteryName))
-                .map(lotName => {
-                const betsForLot = (ticket.bets || []).filter(b => cleanText(b?.lottery) === lotName);
+              {Array.from(
+                (ticket.bets || []).reduce((map, bet) => {
+                  const rawLottery = (bet?.lottery || '').trim();
+                  const lotteryKey = normalizePlainText(rawLottery);
+                  if (!lotteryKey) return map;
+                  if (!map.has(lotteryKey)) map.set(lotteryKey, rawLottery);
+                  return map;
+                }, new Map<string, string>()).entries()
+              )
+                .filter(([lotteryKey]) => showFullTicket || !selectedLotteryName || lotteryKey === normalizePlainText(selectedLotteryName))
+                .map(([lotteryKey, lotName]) => {
+                const betsForLot = (ticket.bets || []).filter(b => normalizePlainText(b?.lottery || '') === lotteryKey);
+                const unifiedBetsForLot = unifyBets(betsForLot.map(b => ({ ...b, lottery: lotName })));
                 const ticketDate = getTicketDate(ticket);
-                const result = results.find(r => cleanText(r.lotteryName) === lotName && r.date === ticketDate);
+                const result = results.find(r => normalizePlainText(r.lotteryName) === lotteryKey && r.date === ticketDate);
 
                 return (
                   <div key={lotName} className="pt-1">
@@ -994,15 +1019,21 @@ const TicketModal = ({ ticket, results, lotteries, globalSettings, users, onClos
                       )}
                     </div>
                     <div className="space-y-0.5">
-                      {(ticket.bets || []).map((bet, originalIdx) => ({ bet, originalIdx }))
-                        .filter(({ bet }) => bet && bet.lottery === lotName)
-                        .map(({ bet, originalIdx }, idx) => {
-                          const betWinnings = winningBets.filter(wb => wb.idx === originalIdx);
+                      {unifiedBetsForLot.map((bet, idx) => {
+                          const betWinnings = winningBets.filter(wb => {
+                            const original = (ticket.bets || [])[wb.idx];
+                            return Boolean(
+                              original &&
+                              original.number === bet.number &&
+                              original.type === bet.type &&
+                              normalizePlainText(original.lottery || '') === lotteryKey
+                            );
+                          });
                           const hasWon = betWinnings.length > 0;
                           const betTotalPrize = betWinnings.reduce((sum, wb) => sum + wb.prize, 0);
                           
                           return (
-                            <div key={originalIdx} className={`flex justify-between items-center px-1 py-0.5 rounded transition-colors ${hasWon ? 'bg-yellow-50 border border-yellow-200' : 'hover:bg-gray-50'}`}>
+                            <div key={`${lotName}-${bet.type}-${bet.number}-${idx}`} className={`flex justify-between items-center px-1 py-0.5 rounded transition-colors ${hasWon ? 'bg-yellow-50 border border-yellow-200' : 'hover:bg-gray-50'}`}>
                               <div className="flex items-center gap-1.5">
                                 <span className={`text-sm font-bold tracking-tight ${hasWon ? 'text-yellow-700' : ''}`}>
                                   {bet?.type === 'PL' && bet?.number?.length === 4 
@@ -1281,7 +1312,7 @@ const Login = () => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-xl font-mono text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all placeholder:text-muted-foreground/30"
-                placeholder="â¬¢â¬¢â¬¢â¬¢â¬¢â¬¢â¬¢â¬¢"
+                placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
               />
             </div>
           </div>
@@ -2135,7 +2166,7 @@ const TransactionModal = ({ show, onClose, users, currentUser, userProfile, targ
               className="w-full bg-black border border-border p-3 rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all"
             >
               <option key="default" value="" className="bg-gray-900">Seleccionar usuario...</option>
-              {allUsers.filter(u => u.role === 'seller' || u.role === 'admin' || u.role === 'ceo').map((u, i) => {
+              {allUsers.filter(u => u.role === 'seller' || u.role === 'admin' || u.role === 'ceo' || u.role === 'programador').map((u, i) => {
                 const username = u.email?.split('@')[0] || '';
                 const displayName = `${u.name} (${username})`;
                 return (
@@ -2172,17 +2203,18 @@ const TransactionModal = ({ show, onClose, users, currentUser, userProfile, targ
   );
 };
 
-const UserModal = ({ show, userProfile, onSave, onClose, currentUserRole }: {
+const UserModal = ({ show, userProfile, onSave, onClose, currentUserRole, canCreateProgramador = false }: {
   show: boolean;
   userProfile: UserProfile | null;
   onSave: (user: UserProfile, password?: string) => void;
   onClose: () => void;
   currentUserRole: string | undefined;
+  canCreateProgramador?: boolean;
 }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [role, setRole] = useState<'admin' | 'seller' | 'ceo'>('seller');
+  const [role, setRole] = useState<'admin' | 'seller' | 'ceo' | 'programador'>('seller');
   const [commissionRate, setCommissionRate] = useState(10);
   const [status, setStatus] = useState<'active' | 'inactive'>('active');
   const [canLiquidate, setCanLiquidate] = useState(false);
@@ -2194,7 +2226,7 @@ const UserModal = ({ show, userProfile, onSave, onClose, currentUserRole }: {
       setEmail(userProfile.email);
       setPassword('');
       setName(userProfile.name);
-      setRole(userProfile?.role as 'admin' | 'seller' | 'ceo');
+      setRole(userProfile?.role as 'admin' | 'seller' | 'ceo' | 'programador');
       setCommissionRate(userProfile.commissionRate);
       setStatus(userProfile.status);
       setCanLiquidate(userProfile.canLiquidate || false);
@@ -2242,7 +2274,7 @@ const UserModal = ({ show, userProfile, onSave, onClose, currentUserRole }: {
 
           {!userProfile && (
             <div className="space-y-2">
-              <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">ContraseÃ±a</label>
+            <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">ContraseÃ±a (opcional si ya existe en Auth)</label>
               <input 
                 type="password" 
                 value={password}
@@ -2288,18 +2320,19 @@ const UserModal = ({ show, userProfile, onSave, onClose, currentUserRole }: {
             <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Rol</label>
             <select 
               value={role}
-              onChange={(e) => setRole(e.target.value as 'admin' | 'seller' | 'ceo')}
-              disabled={currentUserRole !== 'ceo' && currentUserRole !== 'admin'}
+              onChange={(e) => setRole(e.target.value as 'admin' | 'seller' | 'ceo' | 'programador')}
+              disabled={currentUserRole !== 'ceo' && currentUserRole !== 'admin' && currentUserRole !== 'programador'}
               className="w-full bg-black border border-border p-3 rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all disabled:opacity-50"
             >
               <option key="seller" value="seller" className="bg-gray-900">Vendedor</option>
               {(currentUserRole === 'ceo' || currentUserRole === 'admin') && <option key="admin" value="admin" className="bg-gray-900">Administrador</option>}
               {currentUserRole === 'ceo' && <option key="ceo" value="ceo" className="bg-gray-900">CEO</option>}
+              {canCreateProgramador && <option key="programador" value="programador" className="bg-gray-900">Programador</option>}
             </select>
           </div>
 
           <div className="space-y-2">
-            <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Comisión (%)</label>
+            <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">ComisiÃ³n (%)</label>
             <input 
               type="number" 
               value={Number.isNaN(commissionRate) ? '' : commissionRate}
@@ -2357,7 +2390,7 @@ const UserModal = ({ show, userProfile, onSave, onClose, currentUserRole }: {
                 toast.error('Usuario es requerido');
                 return;
               }
-              if (!userProfile && (!password || password.length < 6)) {
+              if (!userProfile && password && password.length < 6) {
                 toast.error('La contraseÃ±a debe tener al menos 6 caracteres');
                 return;
               }
@@ -2702,7 +2735,7 @@ const LotteryStatsCard: React.FC<LotteryStatsCardProps> = ({
             <h3 className="text-base font-medium text-[#E5E7EB] tracking-wide">{cleanText(lottery.name)}</h3>
             <div className="flex items-center gap-2 text-sm text-[#9CA3AF] mt-1 font-normal">
               <span>{lottery.drawTime}</span>
-              <span>â¬¢</span>
+              <span>â€¢</span>
               <span>{historyDate}</span>
             </div>
           </div>
@@ -2925,6 +2958,16 @@ const cleanText = (text: string) => {
     .trim();
 };
 
+const normalizePlainText = (text: string) => {
+  return (text || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+};
+
+const normalizeLotteryName = (name: string) => cleanText(name || '').trim().toLowerCase();
+
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null | undefined>(undefined);
@@ -2933,6 +2976,8 @@ function App() {
   const getStoredSessionDay = () => localStorage.getItem('sessionBusinessDay');
   const markSessionDay = () => localStorage.setItem('sessionBusinessDay', getCurrentOperationalSessionDay());
   const clearSessionDay = () => localStorage.removeItem('sessionBusinessDay');
+  const enforceSessionByOperationalDay = false;
+  const autoResetStateOnBusinessDayChange = false;
   const isSessionValid = () => {
     const storedDay = getStoredSessionDay();
     if (!storedDay) return true;
@@ -2946,7 +2991,7 @@ function App() {
   }, []);
 
   const businessDayKey = useMemo(() => format(getBusinessDate(), 'yyyy-MM-dd'), [tick]);
-  const canUseGlobalScope = userProfile?.role === 'ceo' || !!userProfile?.canLiquidate;
+  const canUseGlobalScope = userProfile?.role === 'ceo' || userProfile?.role === 'programador' || !!userProfile?.canLiquidate;
   const [showGlobalScope, setShowGlobalScope] = useState(false);
 
   const [loading, setLoading] = useState(true);
@@ -2960,17 +3005,33 @@ function App() {
   const [historyTickets, setHistoryTickets] = useState<LotteryTicket[]>([]);
   const [lotteries, setLotteries] = useState<Lottery[]>([]);
   const [results, setResults] = useState<LotteryResult[]>([]);
-  const [activeTab, setActiveTab] = useState<'sales' | 'history' | 'admin' | 'dashboard' | 'results' | 'users' | 'liquidaciones' | 'config' | 'archivo' | 'stats' | 'cierres'>('history');
-  const canAccessManagedUsersData = canUseGlobalScope && (activeTab === 'users' || activeTab === 'liquidaciones' || activeTab === 'archivo');
+  const [activeTab, setActiveTab] = useState<'sales' | 'history' | 'admin' | 'dashboard' | 'results' | 'users' | 'liquidaciones' | 'config' | 'archivo' | 'stats' | 'cierres' | 'recovery'>('history');
+  const canAccessManagedUsersData = canUseGlobalScope && (activeTab === 'users' || activeTab === 'liquidaciones' || activeTab === 'archivo' || activeTab === 'recovery');
   const canAccessAllUsers = canAccessManagedUsersData || (canUseGlobalScope && showGlobalScope && (activeTab === 'stats' || activeTab === 'cierres'));
   const [expandedStats, setExpandedStats] = useState<string[]>([]);
   const [cierreLottery, setCierreLottery] = useState<string>('');
   const cierreRef = useRef<HTMLDivElement>(null);
   const [archiveUserEmail, setArchiveUserEmail] = useState('');
-  const [archiveDate, setArchiveDate] = useState(format(getBusinessDate(), 'yyyy-MM-dd'));
+  const [archiveDate, setArchiveDate] = useState<string>(() => {
+    const d = getBusinessDate();
+    d.setDate(d.getDate() - 1);
+    return format(d, 'yyyy-MM-dd');
+  });
   const [archiveTickets, setArchiveTickets] = useState<LotteryTicket[]>([]);
   const [archiveInjections, setArchiveInjections] = useState<Injection[]>([]);
   const [isArchiveLoading, setIsArchiveLoading] = useState(false);
+  const [recoveryDate, setRecoveryDate] = useState(format(getBusinessDate(), 'yyyy-MM-dd'));
+  const [recoveryTickets, setRecoveryTickets] = useState<RecoveryTicketRecord[]>([]);
+  const [isRecoveryLoading, setIsRecoveryLoading] = useState(false);
+  const [recoverySavingRowId, setRecoverySavingRowId] = useState<string | null>(null);
+  const [recoveryDeletingRowId, setRecoveryDeletingRowId] = useState<string | null>(null);
+  const [recoverySellerFilter, setRecoverySellerFilter] = useState('');
+  const [recoveryLotteryFilter, setRecoveryLotteryFilter] = useState('');
+  const [recoveryTicketIdFilter, setRecoveryTicketIdFilter] = useState('');
+  const [recoveryStatusFilter, setRecoveryStatusFilter] = useState<'ALL' | 'active' | 'winner' | 'cancelled' | 'liquidated'>('ALL');
+  const [recoverySortOrder, setRecoverySortOrder] = useState<'asc' | 'desc'>('asc');
+  const [recoveryTargetLotteryByRow, setRecoveryTargetLotteryByRow] = useState<Record<string, string>>({});
+  const [recoveryTargetLotteryMapByRow, setRecoveryTargetLotteryMapByRow] = useState<Record<string, Record<string, string>>>({});
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
@@ -2978,7 +3039,7 @@ function App() {
 
   useEffect(() => {
     if (!userProfile) return;
-    if (userProfile?.role === 'ceo' || userProfile?.role === 'admin') {
+    if (userProfile?.role === 'ceo' || userProfile?.role === 'admin' || userProfile?.role === 'programador') {
       setActiveTab('dashboard');
     } else {
       setActiveTab('history');
@@ -3038,12 +3099,12 @@ function App() {
       const currentEmail = userProfile?.email?.toLowerCase();
       const targetEmail = u.email?.toLowerCase();
 
-      if (userProfile?.role === 'ceo') {
-        return ['ceo', 'admin', 'seller'].includes(u.role) && targetEmail !== currentEmail;
+      if (userProfile?.role === 'ceo' || userProfile?.role === 'programador') {
+        return ['ceo', 'admin', 'seller', 'programador'].includes(u.role) && targetEmail !== currentEmail;
       }
 
       if (userProfile?.role === 'admin') {
-        return ['ceo', 'admin', 'seller'].includes(u.role) && targetEmail !== currentEmail;
+        return ['ceo', 'admin', 'seller', 'programador'].includes(u.role) && targetEmail !== currentEmail;
       }
 
       return false;
@@ -3096,6 +3157,7 @@ function App() {
     settlements: Settlement[];
     results: LotteryResult[];
   }>>(new Map());
+  const autoCleanupRunningRef = useRef(false);
   const closedLotteryCardsCacheRef = useRef<Map<string, {
     sales: number;
     commissions: number;
@@ -3114,6 +3176,10 @@ function App() {
   const previousBusinessDayRef = useRef(businessDayKey);
 
   useEffect(() => {
+    if (!autoResetStateOnBusinessDayChange) {
+      previousBusinessDayRef.current = businessDayKey;
+      return;
+    }
     if (previousBusinessDayRef.current === businessDayKey) return;
 
     const previousBusinessDay = previousBusinessDayRef.current;
@@ -3137,6 +3203,7 @@ function App() {
     if (historyDate === previousBusinessDay) setHistoryDate(businessDayKey);
     if (archiveDate === previousBusinessDay) setArchiveDate(businessDayKey);
     if (liquidationDate === previousBusinessDay) setLiquidationDate(businessDayKey);
+    if (recoveryDate === previousBusinessDay) setRecoveryDate(businessDayKey);
 
     if (userProfile?.role === 'seller' && user?.email) {
       setArchiveUserEmail(user.email.toLowerCase());
@@ -3144,7 +3211,7 @@ function App() {
     }
 
     toast.info(`Nuevo dÃ­a operativo iniciado: ${businessDayKey}`);
-  }, [archiveDate, businessDayKey, historyDate, liquidationDate, user?.email, userProfile?.role]);
+  }, [archiveDate, autoResetStateOnBusinessDayChange, businessDayKey, historyDate, liquidationDate, recoveryDate, user?.email, userProfile?.role]);
 
   // Inactivity timeout logic
   useEffect(() => {
@@ -3176,7 +3243,7 @@ function App() {
   }, [user, userProfile?.sessionTimeoutMinutes, userProfile?.role]);
 
   useEffect(() => {
-    if (userProfile?.role === 'ceo' || userProfile?.role === 'admin') {
+    if (userProfile?.role === 'ceo' || userProfile?.role === 'admin' || userProfile?.role === 'programador') {
       console.log("Fetching all users for role:", userProfile.role);
       const q = query(collection(db, 'users'));
       const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -3372,19 +3439,33 @@ function App() {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
       setLoading(true);
       if (u) {
+        try {
+          // Force token refresh so latest custom claims (role) are available to Firestore rules.
+          await u.getIdToken(true);
+          const token = await u.getIdTokenResult();
+          if (!token.claims?.role) {
+            console.warn('Authenticated user without role claim. Firestore writes/reads by role may fail until claims are synced.');
+          }
+        } catch (tokenError) {
+          console.error('Error refreshing auth token/claims:', tokenError);
+        }
+
         const storedSessionDay = getStoredSessionDay();
         const currentSessionDay = getCurrentOperationalSessionDay();
 
         if (!storedSessionDay) {
           markSessionDay();
         } else if (storedSessionDay !== currentSessionDay) {
-          console.log('Session expired by operational day change. Signing out.');
-          handleLogout();
-          setUser(null);
-          setUserProfile(null);
-          setLoading(false);
-          toast.info('Debe iniciar sesiÃ³n nuevamente por cambio de dÃ­a operativo.');
-          return;
+          if (enforceSessionByOperationalDay) {
+            console.log('Session expired by operational day change. Signing out.');
+            handleLogout();
+            setUser(null);
+            setUserProfile(null);
+            setLoading(false);
+            toast.info('Debe iniciar sesiÃ³n nuevamente por cambio de dÃ­a operativo.');
+            return;
+          }
+          markSessionDay();
         }
       }
 
@@ -3451,7 +3532,7 @@ function App() {
 
   // Check session validity periodically to enforce one login per operational day.
   useEffect(() => {
-    if (!user) return;
+    if (!user || !enforceSessionByOperationalDay) return;
     
     const interval = setInterval(() => {
       if (!isSessionValid()) {
@@ -3462,7 +3543,7 @@ function App() {
     }, 60000); // Check every minute
     
     return () => clearInterval(interval);
-  }, [user]);
+  }, [enforceSessionByOperationalDay, user]);
 
   const getBusinessDayRange = useCallback((day: string) => {
     const start = new Date(`${day}T03:00:00`);
@@ -3532,6 +3613,129 @@ function App() {
   const applyOperationalQuickDate = useCallback((setter: (value: string) => void, offset: number) => {
     setter(getQuickOperationalDate(offset));
   }, [getQuickOperationalDate]);
+
+  const runOperationalArchiveAndCleanup = useCallback(async ({
+    targetBusinessDay,
+    trigger
+  }: {
+    targetBusinessDay: string;
+    trigger: 'manual' | 'automatic';
+  }) => {
+    const { start, end } = getBusinessDayRange(targetBusinessDay);
+    const archiveRef = doc(db, 'daily_archives', targetBusinessDay);
+
+    const [ticketsSnapshot, injectionsSnapshot, resultsSnapshot, settlementsSnapshot, archiveSnapshot] = await Promise.all([
+      getDocs(query(
+        collection(db, 'tickets'),
+        where('timestamp', '>=', start),
+        where('timestamp', '<', end)
+      )),
+      getDocs(query(
+        collection(db, 'injections'),
+        where('date', '==', targetBusinessDay)
+      )),
+      getDocs(query(
+        collection(db, 'results'),
+        where('date', '==', targetBusinessDay)
+      )),
+      getDocs(query(
+        collection(db, 'settlements'),
+        where('date', '==', targetBusinessDay)
+      )),
+      getDoc(archiveRef)
+    ]);
+
+    const ticketsToArchive = ticketsSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    const injectionsToArchive = injectionsSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    const resultsToArchive = resultsSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    const settlementsToArchive = settlementsSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    const archiveAlreadyExists = archiveSnapshot.exists();
+
+    if (!archiveAlreadyExists) {
+      await setDoc(archiveRef, {
+        date: targetBusinessDay,
+        tickets: ticketsToArchive,
+        results: resultsToArchive,
+        settlements: settlementsToArchive,
+        injections: injectionsToArchive,
+        createdAt: serverTimestamp(),
+        archivedBy: (userProfile?.email || user?.email || '').toLowerCase(),
+        archiveTrigger: trigger
+      });
+    }
+
+    const docsToDelete = [
+      ...ticketsSnapshot.docs,
+      ...resultsSnapshot.docs,
+      ...injectionsSnapshot.docs
+    ];
+
+    for (let i = 0; i < docsToDelete.length; i += 450) {
+      const batch = writeBatch(db);
+      const chunk = docsToDelete.slice(i, i + 450);
+      chunk.forEach(docSnap => batch.delete(docSnap.ref));
+      await batch.commit();
+    }
+
+    if (targetBusinessDay === businessDayKey) {
+      setTickets([]);
+      setResults([]);
+      setInjections([]);
+      setHistoryTickets([]);
+      setHistoryResults([]);
+      setHistoryInjections([]);
+      setLiquidationTicketsSnapshot([]);
+      setLiquidationResultsSnapshot([]);
+      setLiquidationInjectionsSnapshot([]);
+      setLiquidationSettlementsSnapshot([]);
+    }
+
+    return {
+      targetBusinessDay,
+      archiveAlreadyExists,
+      deletedCount: docsToDelete.length
+    };
+  }, [businessDayKey, getBusinessDayRange, user?.email, userProfile?.email]);
+
+  useEffect(() => {
+    if (!user?.uid || !userProfile?.role) return;
+    if (!['ceo', 'admin', 'programador'].includes(userProfile.role)) return;
+    if (autoCleanupRunningRef.current) return;
+
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const autoCleanupExecutionMinutes = 4 * 60 + 30;
+    if (currentMinutes < autoCleanupExecutionMinutes) return;
+
+    const todayKey = format(now, 'yyyy-MM-dd');
+    const autoCleanupStorageKey = 'autoCleanupLastRunDate';
+    if (localStorage.getItem(autoCleanupStorageKey) === todayKey) return;
+
+    autoCleanupRunningRef.current = true;
+
+    (async () => {
+      try {
+        const targetBusinessDay = getQuickOperationalDate(-1);
+        const result = await runOperationalArchiveAndCleanup({
+          targetBusinessDay,
+          trigger: 'automatic'
+        });
+
+        localStorage.setItem(autoCleanupStorageKey, todayKey);
+
+        if (result.deletedCount > 0 || !result.archiveAlreadyExists) {
+          toast.success(`Limpieza automática 4:30 AM completada (${targetBusinessDay})`);
+        } else {
+          toast.info(`Limpieza automática validada (${targetBusinessDay}, sin cambios pendientes)`);
+        }
+      } catch (error) {
+        console.error('Error en limpieza automática 4:30 AM:', error);
+        toast.error('Falló la limpieza automática de las 4:30 AM. Se reintentará automáticamente.');
+      } finally {
+        autoCleanupRunningRef.current = false;
+      }
+    })();
+  }, [getQuickOperationalDate, runOperationalArchiveAndCleanup, user?.uid, userProfile?.role, tick]);
 
   const needsRealtimeOperationalData = useMemo(() => {
     if (!userProfile?.role) return false;
@@ -4032,20 +4236,20 @@ function App() {
     const lotteriesToBuy = new Set<string>();
     if (isMultipleMode) {
       multiLottery.forEach(l => {
-        const lottery = activeLotteries.find(al => al.name === l);
+        const lottery = findActiveLotteryByName(l);
         if (betType === 'BL' && !lottery?.isFourDigits) {
           toast.error(`Sorteo ${l} no admite Billetes (4 cifras)`);
           return;
         }
-        lotteriesToBuy.add(l);
+        lotteriesToBuy.add((lottery?.name || l).trim());
       });
     } else if (selectedLottery) {
-      const lottery = activeLotteries.find(al => al.name === selectedLottery);
+      const lottery = findActiveLotteryByName(selectedLottery);
       if (betType === 'BL' && !lottery?.isFourDigits) {
         toast.error('Este sorteo no admite Billetes (4 cifras)');
         return;
       }
-      lotteriesToBuy.add(selectedLottery);
+      lotteriesToBuy.add((lottery?.name || selectedLottery).trim());
     }
     
     if (lotteriesToBuy.size === 0) {
@@ -4721,9 +4925,23 @@ function App() {
   const sortedLotteries = [...lotteries].sort((a, b) => {
     return getOperationalTimeSortValue(a.drawTime || '00:00') - getOperationalTimeSortValue(b.drawTime || '00:00');
   });
-  const activeLotteries = sortedLotteries.filter(l => isLotteryOpenForSales(l));
-  const canManageResults = userProfile?.role === 'ceo' || userProfile?.role === 'admin';
-  const isCeoUser = userProfile?.role === 'ceo';
+  const activeLotteries = useMemo(() => {
+    const seenNames = new Set<string>();
+    return sortedLotteries
+      .filter(l => isLotteryOpenForSales(l))
+      .filter(lottery => {
+        const key = normalizeLotteryName(lottery.name);
+        if (!key || seenNames.has(key)) return false;
+        seenNames.add(key);
+        return true;
+      });
+  }, [sortedLotteries]);
+  const findActiveLotteryByName = useCallback((name: string) => {
+    const key = normalizeLotteryName(name);
+    return activeLotteries.find(l => normalizeLotteryName(l.name) === key);
+  }, [activeLotteries]);
+  const canManageResults = userProfile?.role === 'ceo' || userProfile?.role === 'admin' || userProfile?.role === 'programador';
+  const isCeoUser = userProfile?.role === 'ceo' || userProfile?.role === 'programador';
   const sortedResults = useMemo(() => sortResultsByRecency(results), [results, sortResultsByRecency]);
   const operationalResults = useMemo(() => {
     return sortedResults.filter(result => result.date === businessDayKey);
@@ -4800,12 +5018,12 @@ function App() {
   useEffect(() => {
     if (activeLotteries.length > 0) {
       if (!isMultipleMode) {
-        if (!selectedLottery || !activeLotteries.some(l => l.name === selectedLottery)) {
+        if (!selectedLottery || !findActiveLotteryByName(selectedLottery)) {
           setSelectedLottery(activeLotteries[0].name);
         }
       } else {
         // Filter closed lotteries from multiLottery
-        const validMulti = multiLottery.filter(name => activeLotteries.some(l => l.name === name));
+        const validMulti = multiLottery.filter(name => !!findActiveLotteryByName(name));
         if (validMulti.length !== multiLottery.length) {
           setMultiLottery(validMulti);
         }
@@ -4814,20 +5032,20 @@ function App() {
       if (selectedLottery !== '') setSelectedLottery('');
       if (multiLottery.length > 0) setMultiLottery([]);
     }
-  }, [activeLotteries, isMultipleMode, selectedLottery, multiLottery]);
+  }, [activeLotteries, findActiveLotteryByName, isMultipleMode, selectedLottery, multiLottery]);
 
   useEffect(() => {
     if (betType === 'BL') {
       const supportsBL = isMultipleMode 
-        ? multiLottery.some(name => activeLotteries.find(l => l.name === name)?.isFourDigits)
-        : activeLotteries.find(l => l.name === selectedLottery)?.isFourDigits;
+        ? multiLottery.some(name => findActiveLotteryByName(name)?.isFourDigits)
+        : findActiveLotteryByName(selectedLottery)?.isFourDigits;
       
       if (!supportsBL) {
         setBetType('CH');
         setNumber('');
       }
     }
-  }, [betType, isMultipleMode, multiLottery, selectedLottery, activeLotteries]);
+  }, [betType, findActiveLotteryByName, isMultipleMode, multiLottery, selectedLottery]);
 
   const cancelTicket = async (id: string) => {
     const ticket = tickets.find(t => t.id === id);
@@ -5027,7 +5245,7 @@ function App() {
   const saveUser = async (userProfileData: UserProfile, password?: string) => {
     const rawEmail = userProfileData.email.toLowerCase();
     const authEmail = rawEmail.includes('@') ? rawEmail : `${rawEmail}@chancepro.local`;
-    
+
     if (userProfileData.role === 'admin') {
       const adminCount = users.filter(u => u.role === 'admin' && u.email !== authEmail).length;
       if (adminCount >= 5) {
@@ -5052,7 +5270,14 @@ function App() {
           if (!settingsDoc.exists()) throw new Error("ConfiguraciÃ³n global no encontrada");
           
           const nextNum = settingsDoc.data().nextSellerNumber || 2;
-          const rolePrefix = userProfileData.role === 'ceo' ? 'CEO' : userProfileData.role === 'admin' ? 'ADM' : 'VEND';
+          const rolePrefix =
+            userProfileData.role === 'ceo'
+              ? 'CEO'
+              : userProfileData.role === 'admin'
+                ? 'ADM'
+                : userProfileData.role === 'programador'
+                  ? 'DEV'
+                  : 'VEND';
           const newSellerId = `${rolePrefix}${nextNum.toString().padStart(2, '0')}`;
           
           userProfileData.sellerId = newSellerId;
@@ -5162,11 +5387,26 @@ function App() {
       title: 'Editar Venta',
       message: 'Se cargarÃ¡n las apuestas al carrito para modificarlas. El ticket original se mantendrÃ¡ hasta que confirmes los cambios. Â¿Continuar?',
       onConfirm: () => {
+        const uniqueTicketLotteries = Array.from(new Set(
+          (ticket.bets || [])
+            .map(b => (b?.lottery || '').trim())
+            .filter(Boolean)
+        ));
+
         setCart(ticket.bets);
         setEditingTicketId(ticket.id);
         setCustomerName(ticket.customerName || '');
+        if (uniqueTicketLotteries.length > 1) {
+          setIsMultipleMode(true);
+          setMultiLottery(uniqueTicketLotteries);
+          setSelectedLottery('');
+        } else {
+          setIsMultipleMode(false);
+          setMultiLottery([]);
+          setSelectedLottery(uniqueTicketLotteries[0] || '');
+        }
         setActiveTab('sales');
-        toast.info('Modo ediciÃ³n activado. Realice los cambios y genere el ticket para actualizar.');
+        toast.info('Modo edición activado. Realice los cambios y genere el ticket para actualizar.');
       }
     });
   };
@@ -5196,6 +5436,22 @@ function App() {
 
   const saveLottery = async (lotteryData: Partial<Lottery>) => {
     try {
+      const normalizedName = normalizeLotteryName(lotteryData.name || '');
+      if (!normalizedName) {
+        toast.error('Ingrese un nombre de sorteo vÃ¡lido');
+        return;
+      }
+
+      const hasDuplicateName = lotteries.some(lottery => {
+        if (editingLottery && lottery.id === editingLottery.id) return false;
+        return normalizeLotteryName(lottery.name) === normalizedName;
+      });
+
+      if (hasDuplicateName) {
+        toast.error('Ya existe un sorteo con ese nombre. Use un nombre Ãºnico.');
+        return;
+      }
+
       if (editingLottery) {
         await updateDoc(doc(db, 'lotteries', editingLottery.id), lotteryData);
         toast.success('LoterÃ­a actualizada');
@@ -5407,12 +5663,12 @@ function App() {
 
   const handleLiquidate = async () => {
     if (!selectedUserToLiquidate) return;
-    if (!userProfile || !['ceo', 'admin'].includes(userProfile.role)) {
+    if (!userProfile || !['ceo', 'admin', 'programador'].includes(userProfile.role)) {
       alert('No tienes permisos para liquidar');
       return;
     }
     if (liquidationDate !== businessDayKey && isLiquidationDataLoading) {
-      toast.error('Espera a que termine la carga de datos históricos');
+      toast.error('Espera a que termine la carga de datos histÃ³ricos');
       return;
     }
 
@@ -5456,12 +5712,12 @@ function App() {
 
     setConfirmModal({
       show: true,
-      title: selectedLiquidationSettlement ? 'Actualizar Liquidación' : 'Confirmar Liquidación Diaria',
-      message: `¿Está seguro de ${actionLabel} a ${userToLiquidate.name} para el día ${liquidationDate}? \
+      title: selectedLiquidationSettlement ? 'Actualizar LiquidaciÃ³n' : 'Confirmar LiquidaciÃ³n Diaria',
+      message: `Â¿EstÃ¡ seguro de ${actionLabel} a ${userToLiquidate.name} para el dÃ­a ${liquidationDate}? \
 \
 Utilidad Neta: USD ${netProfit.toFixed(2)}\
 Monto Entregado: USD ${paid.toFixed(2)}\
-Deuda Añadida: USD ${debtAdded.toFixed(2)}\
+Deuda AÃ±adida: USD ${debtAdded.toFixed(2)}\
 Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
       onConfirm: async () => {
         try {
@@ -5477,7 +5733,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
             ));
             const lowerMatches = settlementQueryByLower.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Settlement));
             if (lowerMatches.length > 1) {
-              console.warn('Se encontraron múltiples settlements para el mismo usuario+fecha. Se actualizará el más reciente.', lowerMatches.map(item => item.id));
+              console.warn('Se encontraron mÃºltiples settlements para el mismo usuario+fecha. Se actualizarÃ¡ el mÃ¡s reciente.', lowerMatches.map(item => item.id));
             }
             existingSettlement = lowerMatches.sort((a, b) => {
               const aTime = a.timestamp?.toDate?.()?.getTime?.() ?? (a.timestamp?.seconds ? a.timestamp.seconds * 1000 : 0);
@@ -5523,7 +5779,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
 
           const effectiveSettlementId = settlementId || existingSettlement?.id || '';
           console.log('Settlement guardado:', effectiveSettlementId);
-          console.log('Tickets a liquidar (solo día actual):', ticketsToLiquidate.length);
+          console.log('Tickets a liquidar (solo dÃ­a actual):', ticketsToLiquidate.length);
 
           const userRef = doc(db, 'users', userToLiquidate.email);
           await updateDoc(userRef, { currentDebt: finalNewTotalDebt });
@@ -5627,15 +5883,15 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
           }
 
           if (secondaryWarnings.length > 0 && isCurrentOperationalDate) {
-            toast.warning(`Liquidación guardada. Hubo incidencias secundarias en: ${secondaryWarnings.join(', ')}`);
+            toast.warning(`LiquidaciÃ³n guardada. Hubo incidencias secundarias en: ${secondaryWarnings.join(', ')}`);
           } else {
-            toast.success(existingSettlement ? 'Liquidación actualizada correctamente' : 'Liquidación guardada correctamente');
+            toast.success(existingSettlement ? 'LiquidaciÃ³n actualizada correctamente' : 'LiquidaciÃ³n guardada correctamente');
           }
 
           setAmountPaid(String(paid));
         } catch (error) {
           console.error('ERROR LIQUIDACION:', error);
-          alert('Error al guardar la liquidación. Revisa conexión o permisos.');
+          alert('Error al guardar la liquidaciÃ³n. Revisa conexiÃ³n o permisos.');
           handleFirestoreError(error, OperationType.WRITE, 'settlements');
         }
       }
@@ -5706,6 +5962,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
         name: string;
         sellerId?: string;
         summary: ReturnType<typeof buildFinancialSummary>;
+        tickets: LotteryTicket[];
       };
       const reportUsersMap = new Map<string, ReportUserData>();
       const findUserProfile = (email: string) => users.find(u => u.email?.toLowerCase() === email.toLowerCase());
@@ -5724,7 +5981,8 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
             email,
             name: profile?.name || fallbackName || email,
             sellerId: profile?.sellerId || fallbackSellerId,
-            summary
+            summary,
+            tickets: []
           });
         }
         return reportUsersMap.get(email)!;
@@ -5741,6 +5999,17 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
       reportSettlements.forEach(settlement => {
         const email = settlement.userEmail?.toLowerCase() || '';
         ensureReportUser(email);
+      });
+
+      reportUsersMap.forEach((userData) => {
+        const userTickets = reportTickets
+          .filter(ticket => (ticket.sellerEmail || '').toLowerCase() === userData.email)
+          .sort((a, b) => {
+            const aTime = (a.timestamp as any)?.toDate?.()?.getTime?.() ?? 0;
+            const bTime = (b.timestamp as any)?.toDate?.()?.getTime?.() ?? 0;
+            return aTime - bTime;
+          });
+        userData.tickets = userTickets;
       });
 
       const reportUsers = Array.from(reportUsersMap.values())
@@ -5817,6 +6086,27 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
         writeLine(`Total inyecciones: USD ${ru.summary.totalInjections.toFixed(2)}`);
         writeLine(`Total liquidaciones (monto pagado): USD ${ru.summary.totalLiquidations.toFixed(2)}`);
         writeLine(`Neto estimado/final: USD ${ru.summary.netProfit.toFixed(2)}`, 'bold', 10);
+        writeLine(`Tickets vendidos: ${ru.tickets.length}`);
+        if (ru.tickets.length > 0) {
+          writeLine('DETALLE DE TICKETS', 'bold', 10);
+          ru.tickets.forEach((ticket, index) => {
+            const ticketDate = (ticket.timestamp as any)?.toDate?.()
+              ? format((ticket.timestamp as any).toDate(), 'dd/MM/yyyy hh:mm a')
+              : '-';
+            const statusLabel = ticket.status === 'winner' ? 'GANADOR' : (ticket.status || 'active').toUpperCase();
+            const isWinner = ticket.status === 'winner';
+            writeLine(
+              `${index + 1}. Ticket ${ticket.id?.slice(0, 8) || '-'} | Fecha: ${ticketDate} | Estado: ${statusLabel}${isWinner ? ' *' : ''}`
+            );
+            const betsSummary = (ticket.bets || [])
+              .map((bet) => `${bet.number}-${bet.lottery} x${bet.amount}`)
+              .join(' | ');
+            if (betsSummary) {
+              writeLine(`   Jugadas: ${betsSummary}`);
+            }
+            writeLine(`   Total ticket: USD ${(ticket.totalAmount || 0).toFixed(2)}`);
+          });
+        }
         separator();
       });
 
@@ -5831,7 +6121,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
   };
 
   const handleDeleteAllSalesData = () => {
-    if (!userProfile || !['ceo', 'admin'].includes(userProfile.role)) {
+    if (!userProfile || !['ceo', 'admin', 'programador'].includes(userProfile.role)) {
       alert('No tienes permisos para ejecutar limpieza operativa');
       return;
     }
@@ -5842,73 +6132,16 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
       message: 'Se archivarÃ¡n los datos del dÃ­a operativo actual y luego se limpiarÃ¡n tickets, resultados e inyecciones operativas. Â¿Deseas continuar?',
       onConfirm: async () => {
         try {
-          const { start, end } = getBusinessDayRange(businessDayKey);
-
-          const [ticketsSnapshot, injectionsSnapshot, resultsSnapshot, settlementsSnapshot] = await Promise.all([
-            getDocs(query(
-              collection(db, 'tickets'),
-              where('timestamp', '>=', start),
-              where('timestamp', '<', end)
-            )),
-            getDocs(query(
-              collection(db, 'injections'),
-              where('date', '==', businessDayKey)
-            )),
-            getDocs(query(
-              collection(db, 'results'),
-              where('date', '==', businessDayKey)
-            )),
-            getDocs(query(
-              collection(db, 'settlements'),
-              where('date', '==', businessDayKey)
-            ))
-          ]);
-
-          const ticketsToArchive = ticketsSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-          const injectionsToArchive = injectionsSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-          const resultsToArchive = resultsSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-          const settlementsToArchive = settlementsSnapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-
-          await setDoc(doc(db, 'daily_archives', businessDayKey), {
-            date: businessDayKey,
-            tickets: ticketsToArchive,
-            results: resultsToArchive,
-            settlements: settlementsToArchive,
-            injections: injectionsToArchive,
-            createdAt: serverTimestamp()
+          const result = await runOperationalArchiveAndCleanup({
+            targetBusinessDay: businessDayKey,
+            trigger: 'manual'
           });
 
-          try {
-            const docsToDelete = [
-              ...ticketsSnapshot.docs,
-              ...resultsSnapshot.docs,
-              ...injectionsSnapshot.docs
-            ];
-
-            for (let i = 0; i < docsToDelete.length; i += 450) {
-              const batch = writeBatch(db);
-              const chunk = docsToDelete.slice(i, i + 450);
-              chunk.forEach(docSnap => batch.delete(docSnap.ref));
-              await batch.commit();
-            }
-          } catch (cleanupError) {
-            console.error('Error en limpieza operativa:', cleanupError);
-            toast.error('Archivo diario creado, pero fall? la limpieza operativa');
-            return;
+          if (result.deletedCount > 0 || !result.archiveAlreadyExists) {
+            toast.success('Archivo diario creado y limpieza operativa completada');
+          } else {
+            toast.info('El archivo diario ya existía y no había datos pendientes por limpiar');
           }
-
-          setTickets([]);
-          setResults([]);
-          setInjections([]);
-          setHistoryTickets([]);
-          setHistoryResults([]);
-          setHistoryInjections([]);
-          setLiquidationTicketsSnapshot([]);
-          setLiquidationResultsSnapshot([]);
-          setLiquidationInjectionsSnapshot([]);
-          setLiquidationSettlementsSnapshot([]);
-
-          toast.success('Archivo diario creado y limpieza operativa completada');
         } catch (error) {
           console.error('Error archivando datos operativos:', error);
           toast.error('No se pudo crear el archivo diario. No se realiz? limpieza.');
@@ -5923,11 +6156,86 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
     toast.success(`LoterÃ­a ${cleanText(lotteryName)} aplicada a todo el pedido`);
   };
 
+  const downloadDataUrlFile = (dataUrl: string, fileName: string) => {
+    const link = document.createElement('a');
+    link.href = dataUrl;
+    link.download = fileName;
+    link.click();
+  };
+
+  const shareImageDataUrl = async ({
+    dataUrl,
+    fileName,
+    title,
+    text,
+    dialogTitle
+  }: {
+    dataUrl: string;
+    fileName: string;
+    title: string;
+    text: string;
+    dialogTitle: string;
+  }) => {
+    let shared = false;
+
+    if (Capacitor.isNativePlatform()) {
+      try {
+        const imageBase64 = dataUrl.split(',')[1];
+        const savedFile = await Filesystem.writeFile({
+          path: fileName,
+          data: imageBase64,
+          directory: Directory.Cache
+        });
+
+        try {
+          await Share.share({
+            title,
+            text,
+            files: [savedFile.uri],
+            dialogTitle
+          });
+          shared = true;
+        } catch (shareWithFilesErr) {
+          console.log('Native share with files failed, trying url fallback', shareWithFilesErr);
+          await Share.share({
+            title,
+            text,
+            url: savedFile.uri,
+            dialogTitle
+          });
+          shared = true;
+        }
+      } catch (nativeErr) {
+        console.log('Native image share unavailable', nativeErr);
+      }
+    }
+
+    if (!shared && typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+      try {
+        const response = await fetch(dataUrl);
+        const blob = await response.blob();
+        const mimeType = blob.type || (fileName.toLowerCase().endsWith('.jpg') || fileName.toLowerCase().endsWith('.jpeg') ? 'image/jpeg' : 'image/png');
+        const extension = mimeType === 'image/jpeg' ? 'jpg' : 'png';
+        const normalizedName = fileName.toLowerCase().endsWith(`.${extension}`) ? fileName : `${fileName}.${extension}`;
+        const file = new File([blob], normalizedName, { type: mimeType });
+        const payload = { title, text, files: [file] };
+
+        if (!navigator.canShare || navigator.canShare(payload)) {
+          await navigator.share(payload);
+          shared = true;
+        }
+      } catch (webErr) {
+        console.log('Web share with files unavailable', webErr);
+      }
+    }
+
+    return shared;
+  };
+
   const handleDownloadCierre = async () => {
     if (!cierreRef.current || !cierreLottery) return;
     const toastId = toast.loading('Generando imagen...');
     const cierreNode = cierreRef.current;
-    const isNativePlatform = Capacitor.isNativePlatform();
     const isAndroid = Capacitor.getPlatform() === 'android';
     const originalWidth = cierreNode.style.width;
     const originalMaxWidth = cierreNode.style.maxWidth;
@@ -5968,37 +6276,19 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
         ...exportOptions,
         quality: imageQuality
       });
-      const imageBase64 = dataUrl.split(',')[1];
+      const shared = await shareImageDataUrl({
+        dataUrl,
+        fileName,
+        title: `Cierre ${cleanText(cierreLottery)}`,
+        text: `Reporte de cierre de ${cleanText(cierreLottery)} para el dÃ­a ${historyDate}`,
+        dialogTitle: 'Compartir Cierre'
+      });
 
-      try {
-        if (isNativePlatform) {
-          const savedFile = await Filesystem.writeFile({
-            path: fileName,
-            data: imageBase64,
-            directory: Directory.Cache
-          });
-          
-          toast.dismiss(toastId);
-          await Share.share({
-            title: `Cierre ${cleanText(cierreLottery)}`,
-            text: `Reporte de cierre de ${cleanText(cierreLottery)} para el dÃ­a ${historyDate}`,
-            files: [savedFile.uri],
-            dialogTitle: 'Compartir Cierre'
-          });
-        } else {
-          const link = document.createElement('a');
-          link.href = dataUrl;
-          link.download = fileName;
-          link.click();
-          toast.success('Imagen descargada', { id: toastId });
-        }
-      } catch (capErr) {
-        console.log('Capacitor share failed or not available, falling back to web', capErr);
-        const link = document.createElement('a');
-        link.href = dataUrl;
-        link.download = fileName;
-        link.click();
-        toast.success('Imagen descargada', { id: toastId });
+      if (shared) {
+        toast.success('Cierre compartido', { id: toastId });
+      } else {
+        downloadDataUrlFile(dataUrl, fileName);
+        toast.info('Tu dispositivo no permite compartir imÃ¡genes adjuntas. Se descargÃ³ para envÃ­o manual.', { id: toastId });
       }
     } catch (err) {
       console.error('Error generating cierre image', err);
@@ -6178,7 +6468,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
         sales: cachedCard.sales,
         prizes: cachedCard.prizes,
         netProfit: cachedCard.netProfit,
-        isLoss: cachedCard.prizes > cachedCard.sales,
+        isLoss: cachedCard.netProfit < 0,
         sortedTicketsForLot: cachedCard.sortedTicketsForLot,
         currentPage,
         totalPages,
@@ -6324,6 +6614,377 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
     }
   }, [archiveUserEmail, archiveDate, buildFinancialSummary, businessDayKey, fetchUserOperationalDataByDate, injections, settlements, tickets]);
 
+  const parseTicketTimestampMs = useCallback((value: any) => {
+    if (!value) return 0;
+    if (value?.toDate) return value.toDate().getTime();
+    if (value?.seconds) return value.seconds * 1000;
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime();
+  }, []);
+
+  const getRecoveryTicketLotteryLabel = useCallback((ticket: RecoveryTicketRecord) => {
+    const names = Array.from(new Set((ticket.bets || []).map(b => cleanText(b.lottery || '').trim()).filter(Boolean)));
+    if (names.length > 0) return names.join(' | ');
+    const raw = ticket.raw || {};
+    return cleanText(raw.lotteryName || raw.drawName || raw.lottery || raw.draw || '-');
+  }, []);
+
+  const getRecoveryTicketLotteryNames = useCallback((ticket: RecoveryTicketRecord) => {
+    const seen = new Set<string>();
+    const names: string[] = [];
+    (ticket.bets || []).forEach(bet => {
+      const rawName = (bet?.lottery || '').trim();
+      const key = normalizePlainText(rawName);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      names.push(rawName);
+    });
+    return names;
+  }, []);
+
+  const recoveryAvailableLotteries = useMemo(() => {
+    return [...lotteries]
+      .sort((a, b) => {
+        const at = getOperationalTimeSortValue(a.drawTime || '00:00');
+        const bt = getOperationalTimeSortValue(b.drawTime || '00:00');
+        return at - bt;
+      });
+  }, [getOperationalTimeSortValue, lotteries]);
+
+  const fetchRecoveryData = useCallback(async () => {
+    if (userProfile?.role !== 'programador' || !recoveryDate) return;
+    setIsRecoveryLoading(true);
+    try {
+      const { start, end } = getBusinessDayRange(recoveryDate);
+      const [ticketsSnapshot, archiveSnapshot] = await Promise.all([
+        getDocs(query(
+          collection(db, 'tickets'),
+          where('timestamp', '>=', start),
+          where('timestamp', '<', end),
+          limit(5000)
+        )),
+        getDoc(doc(db, 'daily_archives', recoveryDate))
+      ]);
+
+      const liveRows: RecoveryTicketRecord[] = ticketsSnapshot.docs.map(docSnap => {
+        const data = docSnap.data() as Record<string, any>;
+        return {
+          rowId: `tickets:${docSnap.id}`,
+          source: 'tickets',
+          id: docSnap.id,
+          sellerId: data.sellerId || '',
+          sellerCode: data.sellerCode || '',
+          sellerName: data.sellerName || '',
+          sellerEmail: data.sellerEmail || '',
+          timestamp: data.timestamp || null,
+          status: data.status || '',
+          totalAmount: Number(data.totalAmount || 0),
+          bets: Array.isArray(data.bets) ? data.bets : [],
+          raw: data
+        };
+      });
+
+      const archiveRows: RecoveryTicketRecord[] = archiveSnapshot.exists()
+        ? (((archiveSnapshot.data()?.tickets || []) as any[]).map((ticket: any) => ({
+            rowId: `daily_archives:${recoveryDate}:${ticket.id}`,
+            source: 'daily_archives' as const,
+            archiveDate: recoveryDate,
+            id: ticket.id,
+            sellerId: ticket.sellerId || '',
+            sellerCode: ticket.sellerCode || '',
+            sellerName: ticket.sellerName || '',
+            sellerEmail: ticket.sellerEmail || '',
+            timestamp: ticket.timestamp || null,
+            status: ticket.status || '',
+            totalAmount: Number(ticket.totalAmount || 0),
+            bets: Array.isArray(ticket.bets) ? ticket.bets : [],
+            raw: ticket
+          })))
+        : [];
+
+      const merged = [...liveRows, ...archiveRows].sort((a, b) => parseTicketTimestampMs(a.timestamp) - parseTicketTimestampMs(b.timestamp));
+      setRecoveryTickets(merged);
+
+      const nextSelection: Record<string, string> = {};
+      const nextMultiSelection: Record<string, Record<string, string>> = {};
+      merged.forEach(row => {
+        const ticketLotteries = getRecoveryTicketLotteryNames(row);
+        if (ticketLotteries.length <= 1) {
+          const guessedLotteryName = ticketLotteries[0] || ((row.bets || [])[0]?.lottery || '').trim();
+          const match = recoveryAvailableLotteries.find(l => normalizePlainText(l.name) === normalizePlainText(guessedLotteryName));
+          if (match) nextSelection[row.rowId] = match.id;
+          return;
+        }
+
+        const rowSelection: Record<string, string> = {};
+        ticketLotteries.forEach(sourceLottery => {
+          const match = recoveryAvailableLotteries.find(l => normalizePlainText(l.name) === normalizePlainText(sourceLottery));
+          if (match) rowSelection[sourceLottery] = match.id;
+        });
+        nextMultiSelection[row.rowId] = rowSelection;
+      });
+      setRecoveryTargetLotteryByRow(nextSelection);
+      setRecoveryTargetLotteryMapByRow(nextMultiSelection);
+    } catch (error) {
+      console.error('Error fetching recovery data:', error);
+      toast.error('No se pudieron cargar tickets para recuperaciÃ³n');
+    } finally {
+      setIsRecoveryLoading(false);
+    }
+  }, [getBusinessDayRange, getRecoveryTicketLotteryNames, parseTicketTimestampMs, recoveryAvailableLotteries, recoveryDate, userProfile?.role]);
+
+  const filteredRecoveryTickets = useMemo(() => {
+    const sellerFilter = recoverySellerFilter.trim().toLowerCase();
+    const lotteryFilter = recoveryLotteryFilter.trim().toLowerCase();
+    const ticketIdFilter = recoveryTicketIdFilter.trim().toLowerCase();
+
+    const filtered = recoveryTickets.filter(ticket => {
+      const sellerText = `${ticket.sellerName || ''} ${ticket.sellerId || ''} ${ticket.sellerCode || ''} ${ticket.sellerEmail || ''}`.toLowerCase();
+      const lotteryText = getRecoveryTicketLotteryLabel(ticket).toLowerCase();
+      const ticketIdText = (ticket.id || '').toLowerCase();
+      const statusText = (ticket.status || '').toLowerCase();
+
+      if (sellerFilter && !sellerText.includes(sellerFilter)) return false;
+      if (lotteryFilter && !lotteryText.includes(lotteryFilter)) return false;
+      if (ticketIdFilter && !ticketIdText.includes(ticketIdFilter)) return false;
+      if (recoveryStatusFilter !== 'ALL' && statusText !== recoveryStatusFilter) return false;
+      return true;
+    });
+
+    return filtered.sort((a, b) => {
+      const diff = parseTicketTimestampMs(a.timestamp) - parseTicketTimestampMs(b.timestamp);
+      return recoverySortOrder === 'asc' ? diff : -diff;
+    });
+  }, [
+    getRecoveryTicketLotteryLabel,
+    parseTicketTimestampMs,
+    recoveryLotteryFilter,
+    recoverySellerFilter,
+    recoverySortOrder,
+    recoveryStatusFilter,
+    recoveryTicketIdFilter,
+    recoveryTickets
+  ]);
+
+  const saveRecoveryLotteryChange = useCallback(async (ticket: RecoveryTicketRecord) => {
+    if (userProfile?.role !== 'programador') {
+      toast.error('Acceso restringido a rol programador');
+      return;
+    }
+
+    const ticketLotteries = getRecoveryTicketLotteryNames(ticket);
+    const isMultipleTicket = ticketLotteries.length > 1;
+
+    const targetBySource = new Map<string, Lottery>();
+    if (isMultipleTicket) {
+      const selectedMap = recoveryTargetLotteryMapByRow[ticket.rowId] || {};
+      for (const sourceLottery of ticketLotteries) {
+        const selectedLotteryId = selectedMap[sourceLottery];
+        if (!selectedLotteryId) {
+          toast.error('Debes seleccionar destino para cada sorteo del ticket multiple');
+          return;
+        }
+        const selectedLottery = recoveryAvailableLotteries.find(l => l.id === selectedLotteryId);
+        if (!selectedLottery) {
+          toast.error(`Sorteo destino invalido para ${sourceLottery}`);
+          return;
+        }
+        targetBySource.set(sourceLottery, selectedLottery);
+      }
+    } else {
+      const targetLotteryId = recoveryTargetLotteryByRow[ticket.rowId];
+      if (!targetLotteryId) {
+        toast.error('Selecciona un sorteo destino');
+        return;
+      }
+      const targetLottery = recoveryAvailableLotteries.find(l => l.id === targetLotteryId);
+      if (!targetLottery) {
+        toast.error('El sorteo destino no existe');
+        return;
+      }
+      const sourceLottery = ticketLotteries[0] || ((ticket.bets || [])[0]?.lottery || '').trim();
+      targetBySource.set(sourceLottery, targetLottery);
+    }
+
+    setRecoverySavingRowId(ticket.rowId);
+    try {
+      const targetBySourceKey = new Map<string, Lottery>();
+      targetBySource.forEach((targetLottery, sourceLottery) => {
+        targetBySourceKey.set(normalizePlainText(sourceLottery), targetLottery);
+      });
+
+      const updatedBets = (ticket.bets || []).map(bet => {
+        const sourceLotteryKey = normalizePlainText(bet.lottery || '');
+        const mappedLottery = targetBySourceKey.get(sourceLotteryKey);
+        if (!mappedLottery) return bet;
+        return { ...bet, lottery: mappedLottery.name };
+      });
+
+      const uniqueTargetIds = Array.from(new Set(Array.from(targetBySource.values()).map(lottery => lottery.id)));
+      const singleTargetLottery = uniqueTargetIds.length === 1
+        ? recoveryAvailableLotteries.find(l => l.id === uniqueTargetIds[0]) || null
+        : null;
+
+      const optionalFields: Record<string, any> = {};
+      const textFields = ['lotteryName', 'drawName', 'lottery', 'draw', 'selectedLottery', 'lotteryLabel', 'drawLabel'];
+      const idFields = ['lotteryId', 'drawId', 'selectedLotteryId'];
+      const timeFields = ['lotteryTime', 'drawTime'];
+
+      if (singleTargetLottery) {
+        textFields.forEach(field => {
+          if (Object.prototype.hasOwnProperty.call(ticket.raw, field)) optionalFields[field] = singleTargetLottery.name;
+        });
+        idFields.forEach(field => {
+          if (Object.prototype.hasOwnProperty.call(ticket.raw, field)) optionalFields[field] = singleTargetLottery.id;
+        });
+        timeFields.forEach(field => {
+          if (Object.prototype.hasOwnProperty.call(ticket.raw, field)) optionalFields[field] = singleTargetLottery.drawTime || '';
+        });
+      }
+
+      const updatePayload = {
+        bets: updatedBets,
+        ...optionalFields,
+        recoveryUpdatedAt: serverTimestamp(),
+        recoveryUpdatedBy: userProfile.email || ''
+      };
+
+      if (ticket.source === 'tickets') {
+        await updateDoc(doc(db, 'tickets', ticket.id), updatePayload);
+      } else {
+        if (!ticket.archiveDate) throw new Error('archiveDate requerido para editar ticket archivado');
+        const archiveRef = doc(db, 'daily_archives', ticket.archiveDate);
+        const archiveSnap = await getDoc(archiveRef);
+        if (!archiveSnap.exists()) throw new Error('Archivo diario no encontrado');
+        const archiveData = archiveSnap.data() as Record<string, any>;
+        const archiveTickets: any[] = Array.isArray(archiveData.tickets) ? archiveData.tickets : [];
+        const archiveTicketPayload = {
+          bets: updatedBets,
+          ...optionalFields,
+          recoveryUpdatedAt: new Date().toISOString(),
+          recoveryUpdatedBy: userProfile.email || ''
+        };
+        const nextArchiveTickets = archiveTickets.map(archiveTicket =>
+          archiveTicket.id === ticket.id
+            ? { ...archiveTicket, ...archiveTicketPayload }
+            : archiveTicket
+        );
+        await updateDoc(archiveRef, {
+          tickets: nextArchiveTickets,
+          recoveryUpdatedAt: serverTimestamp(),
+          recoveryUpdatedBy: userProfile.email || ''
+        });
+      }
+
+      setRecoveryTickets(prev => prev.map(item => (
+        item.rowId === ticket.rowId
+          ? {
+              ...item,
+              bets: updatedBets,
+              raw: { ...item.raw, ...optionalFields, bets: updatedBets }
+            }
+          : item
+      )));
+
+      const applyTicketUpdate = (row: LotteryTicket): LotteryTicket => (
+        row.id === ticket.id
+          ? { ...row, bets: updatedBets, ...optionalFields }
+          : row
+      );
+      setTickets(prev => prev.map(applyTicketUpdate));
+      setHistoryTickets(prev => prev.map(applyTicketUpdate));
+      setArchiveTickets(prev => prev.map(applyTicketUpdate));
+      setLiquidationTicketsSnapshot(prev => prev.map(applyTicketUpdate));
+
+      historyDataCacheRef.current.clear();
+      closedLotteryCardsCacheRef.current.clear();
+      await fetchRecoveryData();
+
+      if (singleTargetLottery) {
+        toast.success(`Ticket ${ticket.id.slice(0, 8)} movido a ${cleanText(singleTargetLottery.name)}`);
+      } else {
+        toast.success(`Ticket ${ticket.id.slice(0, 8)} actualizado (multi-sorteo) y sistema recalculado`);
+      }
+    } catch (error) {
+      console.error('Error updating recovery ticket:', error);
+      toast.error('No se pudo guardar el cambio de sorteo');
+    } finally {
+      setRecoverySavingRowId(null);
+    }
+  }, [fetchRecoveryData, getRecoveryTicketLotteryNames, recoveryAvailableLotteries, recoveryTargetLotteryByRow, recoveryTargetLotteryMapByRow, userProfile?.email, userProfile?.role]);
+
+  const deleteRecoveryTicket = useCallback((ticket: RecoveryTicketRecord) => {
+    if (userProfile?.role !== 'programador') {
+      toast.error('Acceso restringido a rol programador');
+      return;
+    }
+
+    setConfirmModal({
+      show: true,
+      title: 'Eliminar Ticket',
+      message: `Se eliminará el ticket ${ticket.id.slice(0, 8)} de ${ticket.source === 'tickets' ? 'LIVE' : `ARCHIVO ${ticket.archiveDate}`}. ¿Deseas continuar?`,
+      onConfirm: async () => {
+        setRecoveryDeletingRowId(ticket.rowId);
+        try {
+          if (ticket.source === 'tickets') {
+            await deleteDoc(doc(db, 'tickets', ticket.id));
+          } else {
+            if (!ticket.archiveDate) throw new Error('archiveDate requerido para eliminar ticket archivado');
+            const archiveRef = doc(db, 'daily_archives', ticket.archiveDate);
+            const archiveSnap = await getDoc(archiveRef);
+            if (!archiveSnap.exists()) throw new Error('Archivo diario no encontrado');
+
+            const archiveData = archiveSnap.data() as Record<string, any>;
+            const archiveTickets: any[] = Array.isArray(archiveData.tickets) ? archiveData.tickets : [];
+            const nextArchiveTickets = archiveTickets.filter(archiveTicket => archiveTicket.id !== ticket.id);
+
+            await updateDoc(archiveRef, {
+              tickets: nextArchiveTickets,
+              recoveryUpdatedAt: serverTimestamp(),
+              recoveryUpdatedBy: userProfile.email || ''
+            });
+          }
+
+          setRecoveryTickets(prev => prev.filter(item => item.rowId !== ticket.rowId));
+          setRecoveryTargetLotteryByRow(prev => {
+            const next = { ...prev };
+            delete next[ticket.rowId];
+            return next;
+          });
+          setRecoveryTargetLotteryMapByRow(prev => {
+            const next = { ...prev };
+            delete next[ticket.rowId];
+            return next;
+          });
+
+          if (ticket.source === 'tickets') {
+            setTickets(prev => prev.filter(item => item.id !== ticket.id));
+            setHistoryTickets(prev => prev.filter(item => item.id !== ticket.id));
+            setLiquidationTicketsSnapshot(prev => prev.filter(item => item.id !== ticket.id));
+          } else {
+            setArchiveTickets(prev => prev.filter(item => item.id !== ticket.id));
+          }
+
+          historyDataCacheRef.current.clear();
+          closedLotteryCardsCacheRef.current.clear();
+          await fetchRecoveryData();
+
+          toast.success(`Ticket ${ticket.id.slice(0, 8)} eliminado correctamente`);
+        } catch (error) {
+          console.error('Error deleting recovery ticket:', error);
+          toast.error('No se pudo eliminar el ticket');
+        } finally {
+          setRecoveryDeletingRowId(null);
+        }
+      }
+    });
+  }, [fetchRecoveryData, userProfile?.email, userProfile?.role]);
+
+  useEffect(() => {
+    if (activeTab !== 'recovery' || userProfile?.role !== 'programador') return;
+    fetchRecoveryData();
+  }, [activeTab, fetchRecoveryData, userProfile?.role]);
+
   useEffect(() => {
     if (activeTab !== 'liquidaciones' || !selectedUserToLiquidate || !liquidationDate) {
       setLiquidationTicketsSnapshot([]);
@@ -6355,7 +7016,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
       .catch(error => {
         if (cancelled) return;
         console.error('Error loading liquidation source data:', error);
-        toast.error('No se pudieron cargar los datos históricos para liquidación');
+        toast.error('No se pudieron cargar los datos histÃ³ricos para liquidaciÃ³n');
       })
       .finally(() => {
         if (!cancelled) setIsLiquidationDataLoading(false);
@@ -6434,7 +7095,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
               onClick={handleLogout}
               className="w-full bg-white/10 text-white py-3 rounded-xl font-bold uppercase tracking-widest hover:bg-white/20 transition-all flex items-center justify-center gap-2"
             >
-              <LogOut className="w-4 h-4" /> Cerrar Sesión
+              <LogOut className="w-4 h-4" /> Cerrar SesiÃ³n
             </button>
           </div>
         </div>
@@ -6520,6 +7181,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
         onSave={saveUser}
         onClose={() => { setShowUserModal(false); setEditingUser(null); }}
         currentUserRole={userProfile?.role}
+        canCreateProgramador={isPrimaryCeoUser}
       />
 
       <TransactionModal
@@ -6579,25 +7241,26 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
 
         <nav className="flex-1 px-4 space-y-2 mt-4">
           {[
-            { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, role: ['ceo', 'admin', 'seller'] },
+            { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, role: ['ceo', 'admin', 'seller', 'programador'] },
             { id: 'sales', label: 'Nueva Venta', icon: Plus },
             { id: 'history', label: 'Resumen de ventas', icon: History },
-            { id: 'stats', label: 'EstadÃ­sticas', icon: BarChart3, role: ['ceo', 'admin', 'seller'] },
-            { id: 'cierres', label: 'Cierres', icon: Printer, role: ['ceo', 'admin', 'seller'] },
-            { id: 'results', label: 'Resultados', icon: CheckCircle2, role: ['ceo', 'admin', 'seller'] },
-            { id: 'users', label: 'Usuarios', icon: Users, role: ['ceo', 'canLiquidate'] },
-            { id: 'archivo', label: 'Archivo', icon: Archive, role: ['ceo', 'admin'] },
-            { id: 'admin', label: 'LoterÃ­as', icon: ShieldCheck, role: ['ceo'] },
-            { id: 'liquidaciones', label: 'Liquidaciones', icon: DollarSign, role: ['ceo', 'admin', 'seller'], permission: 'canLiquidate' },
-            { id: 'config', label: 'ConfiguraciÃ³n', icon: Settings, role: ['ceo', 'admin', 'seller'] }
+            { id: 'stats', label: 'EstadÃ­sticas', icon: BarChart3, role: ['ceo', 'admin', 'seller', 'programador'] },
+            { id: 'cierres', label: 'Cierres', icon: Printer, role: ['ceo', 'admin', 'seller', 'programador'] },
+            { id: 'results', label: 'Resultados', icon: CheckCircle2, role: ['ceo', 'admin', 'seller', 'programador'] },
+            { id: 'users', label: 'Usuarios', icon: Users, role: ['ceo', 'programador', 'canLiquidate'] },
+            { id: 'archivo', label: 'Archivo', icon: Archive, role: ['ceo', 'admin', 'programador'] },
+            { id: 'admin', label: 'LoterÃ­as', icon: ShieldCheck, role: ['ceo', 'programador'] },
+            { id: 'liquidaciones', label: 'Liquidaciones', icon: DollarSign, role: ['ceo', 'admin', 'seller', 'programador'], permission: 'canLiquidate' },
+            { id: 'recovery', label: 'RecuperaciÃ³n', icon: Database, role: ['programador'] },
+            { id: 'config', label: 'ConfiguraciÃ³n', icon: Settings, role: ['ceo', 'admin', 'seller', 'programador'] }
           ].filter(item => {
             if (!item.role) return true;
             if (item.permission === 'canLiquidate') {
-              if (userProfile?.role === 'ceo' || userProfile?.role === 'seller') return true;
+              if (userProfile?.role === 'ceo' || userProfile?.role === 'seller' || userProfile?.role === 'programador') return true;
               return userProfile?.canLiquidate;
             }
             if (item.id === 'users' && item.role.includes('canLiquidate')) {
-              return userProfile?.role === 'ceo' || userProfile?.canLiquidate;
+              return userProfile?.role === 'ceo' || userProfile?.role === 'programador' || userProfile?.canLiquidate;
             }
             return item.role.includes(userProfile?.role || '');
           }).map((item) => (
@@ -6635,7 +7298,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-400 hover:bg-red-400/10 transition-all"
           >
             <LogOut className="w-5 h-5 flex-shrink-0" />
-            {isSidebarOpen && <span className="text-sm font-bold uppercase tracking-wider">Cerrar Sesión</span>}
+            {isSidebarOpen && <span className="text-sm font-bold uppercase tracking-wider">Cerrar SesiÃ³n</span>}
           </button>
         </div>
       </motion.aside>
@@ -6658,7 +7321,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
             </div>
             <div className="w-px h-6 bg-white/10 hidden sm:block"></div>
             <div className="flex flex-col items-center">
-              <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider">Comisión</span>
+              <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider">ComisiÃ³n</span>
               <span className="text-xs font-black text-primary">${todayStats.commissions.toFixed(2)}</span>
             </div>
             <div className="w-px h-6 bg-white/10 hidden sm:block"></div>
@@ -6679,7 +7342,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
             <button 
               onClick={handleLogout}
               className="p-2 hover:bg-red-500/10 rounded-lg text-red-400"
-              title="Cerrar Sesión"
+              title="Cerrar SesiÃ³n"
             >
               <LogOut className="w-4 h-4" />
             </button>
@@ -6794,7 +7457,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                                     className="fixed inset-0 z-40" 
                                     onClick={() => setShowMultiSelect(false)}
                                   />
-                                  <div className="absolute top-full left-0 mt-2 w-full sm:min-w-[240px] bg-background border border-border rounded-xl shadow-2xl z-50 p-2 space-y-1 max-h-80 overflow-y-auto">
+                                  <div className="fixed inset-x-3 bottom-24 bg-background border border-border rounded-xl shadow-2xl z-50 p-2 space-y-1 max-h-[60vh] overflow-y-auto sm:absolute sm:top-full sm:left-0 sm:bottom-auto sm:inset-x-auto sm:mt-2 sm:w-full sm:min-w-[240px] sm:max-h-80">
                                     {activeLotteries.length > 0 ? (
                                       <>
                                         <div className="flex items-center justify-between p-2 border-b border-white/10 mb-1">
@@ -6901,7 +7564,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                       PalÃ©
                     </button>
                   )}
-                  {globalSettings.billetesEnabled && (isMultipleMode ? multiLottery.some(name => activeLotteries.find(l => l.name === name)?.isFourDigits) : activeLotteries.find(l => l.name === selectedLottery)?.isFourDigits) && (
+                  {globalSettings.billetesEnabled && (isMultipleMode ? multiLottery.some(name => findActiveLotteryByName(name)?.isFourDigits) : findActiveLotteryByName(selectedLottery)?.isFourDigits) && (
                     <button
                       onClick={() => {
                         setBetType('BL');
@@ -7376,21 +8039,35 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
 
                                         {/* Bets Grid */}
                                         <div className="grid grid-cols-3 md:grid-cols-4 gap-1 mt-1">
-                                          {(ticket.bets || [])
-                                            .map((b, originalIdx) => ({ b, originalIdx }))
-                                            .filter(({ b }) => b && b.lottery === lot.name && (!historyTypeFilterCode || b.type === historyTypeFilterCode))
-                                            .map(({ b, originalIdx }, i) => {
-                                              const winningBet = winningBets.find(wb => wb.idx === originalIdx);
-                                              
+                                          {(() => {
+                                            const lotKey = normalizePlainText(lot.name || '');
+                                            return unifyBets(
+                                              (ticket.bets || []).filter(b => (
+                                                b &&
+                                                normalizePlainText(b.lottery || '') === lotKey &&
+                                                (!historyTypeFilterCode || b.type === historyTypeFilterCode)
+                                              ))
+                                            ).map((b, i) => {
+                                              const hasWinningBet = winningBets.some(wb => {
+                                                const original = (ticket.bets || [])[wb.idx];
+                                                return Boolean(
+                                                  original &&
+                                                  original.number === b.number &&
+                                                  original.type === b.type &&
+                                                  normalizePlainText(original.lottery || '') === lotKey
+                                                );
+                                              });
+
                                               return (
-                                                <div key={originalIdx} className={`flex justify-center items-center px-1.5 py-1 rounded border transition-all ${winningBet ? 'border-green-500/50 bg-green-500/20' : 'border-white/5 bg-black/40'}`}>
+                                                <div key={`${ticket.id}-${lot.id}-${b.type}-${b.number}-${i}`} className={`flex justify-center items-center px-1.5 py-1 rounded border transition-all ${hasWinningBet ? 'border-green-500/50 bg-green-500/20' : 'border-white/5 bg-black/40'}`}>
                                                   <div className="flex items-center gap-1">
                                                     <span className="text-xs font-black text-white">{b.number}</span>
                                                     <span className="text-[9px] font-bold text-muted-foreground">x{b.quantity}</span>
                                                   </div>
                                                 </div>
                                               );
-                                            })}
+                                            });
+                                          })()}
                                         </div>
                                       </div>
                                     );
@@ -8087,7 +8764,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                       <p className="text-xs font-mono text-muted-foreground mt-1 uppercase tracking-widest">GestiÃ³n de LoterÃ­as y ParÃ¡metros</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
-                      {userProfile?.role === 'ceo' && (
+                      {(userProfile?.role === 'ceo' || userProfile?.role === 'programador') && (
                         <>
                           <button 
                             onClick={() => setShowSettingsModal(true)}
@@ -8129,7 +8806,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                               </div>
                             </div>
                           </div>
-                        {userProfile?.role === 'ceo' && (
+                        {(userProfile?.role === 'ceo' || userProfile?.role === 'programador') && (
                           <div className="flex items-center gap-2 w-full md:w-auto mt-4 md:mt-0">
                             <button 
                               onClick={() => {
@@ -8163,7 +8840,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                     </div>
                   </div>
                     
-                    {lotteries.length === 0 && userProfile?.role === 'ceo' && (
+                    {lotteries.length === 0 && (userProfile?.role === 'ceo' || userProfile?.role === 'programador') && (
                       <button 
                         onClick={async () => {
                           const defaults = [
@@ -8189,7 +8866,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                       </button>
                     )}
 
-                    {userProfile?.role === 'ceo' && (
+                    {(userProfile?.role === 'ceo' || userProfile?.role === 'programador') && (
                       <button 
                         onClick={async () => {
                           const q = query(collection(db, 'lotteries'));
@@ -8197,7 +8874,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                           let fixedCount = 0;
                           for (const docSnap of snap.docs) {
                             const data = docSnap.data();
-                            if (data.name && (data.name.includes('?') || data.name.includes('<') || data.name.includes('Ã'))) {
+                            if (data.name && (data.name.includes('Ã˜') || data.name.includes('<') || data.name.includes('Ã'))) {
                               const newName = cleanText(data.name);
                               await updateDoc(doc(db, 'lotteries', docSnap.id), { name: newName });
                               fixedCount++;
@@ -8216,7 +8893,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                   </div>
 
                   {/* Zona de Peligro - CEO */}
-                  {userProfile?.role === 'ceo' && (
+                  {(userProfile?.role === 'ceo' || userProfile?.role === 'programador') && (
                     <div className="mt-12 pt-8 border-t border-red-500/20">
                       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-red-500/5 p-8 rounded-2xl border border-red-500/10">
                         <div>
@@ -8264,7 +8941,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                         <option key="default" value="" className="bg-gray-900">Seleccionar usuario...</option>
                         {(() => {
                           const validUsers = users.filter(u => u && u.email && u.name && u.name.trim() !== '');
-                          if (userProfile?.role === 'ceo' && !validUsers.some(u => u.email === userProfile.email)) {
+                          if ((userProfile?.role === 'ceo' || userProfile?.role === 'programador') && !validUsers.some(u => u.email === userProfile.email)) {
                             validUsers.unshift(userProfile);
                           }
                           return validUsers.map((u, i) => {
@@ -8282,7 +8959,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                           });
                         })()}
                       </select>
-                      {userProfile?.role === 'ceo' && (
+                      {(userProfile?.role === 'ceo' || userProfile?.role === 'programador') && (
                         <button 
                           onClick={() => {
                             setEditingUser(null);
@@ -8298,7 +8975,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                   
                   {selectedManageUserEmail ? (() => {
                     const validUsers = users.filter(u => u && u.email && u.name && u.name.trim() !== '');
-                    if (userProfile?.role === 'ceo' && !validUsers.some(u => u.email === userProfile.email)) {
+                    if ((userProfile?.role === 'ceo' || userProfile?.role === 'programador') && !validUsers.some(u => u.email === userProfile.email)) {
                       validUsers.unshift(userProfile);
                     }
                     const u = validUsers.find(user => user.email === selectedManageUserEmail);
@@ -8315,7 +8992,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                               <p className="font-black text-sm uppercase tracking-tight text-white/90">{u.name}</p>
                               <div className="flex items-center gap-2 mt-1">
                                 <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">{u.role}</p>
-                                <span className="text-muted-foreground">â¬¢</span>
+                                <span className="text-muted-foreground">â€¢</span>
                                 <p className="text-[10px] font-mono text-muted-foreground">{u.email}</p>
                               </div>
                             </div>
@@ -8358,7 +9035,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                           <div className="bg-black/40 p-4 rounded-xl border border-white/5">
-                            <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mb-1">Comisión Asignada</p>
+                            <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mb-1">ComisiÃ³n Asignada</p>
                             <p className="text-xl font-black text-white">{u.commissionRate}%</p>
                           </div>
                           <div className="bg-black/40 p-4 rounded-xl border border-white/5">
@@ -8370,20 +9047,20 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                         </div>
 
                         <div className="flex flex-wrap items-center gap-3">
-                          {userProfile?.role === 'ceo' && (
+                          {(userProfile?.role === 'ceo' || userProfile?.role === 'programador') && (
                             <button 
                               onClick={() => {
                                 setEditingUser(u);
                                 setShowUserModal(true);
                               }}
-                              disabled={u.role === 'ceo' && userProfile?.role !== 'ceo'}
+                              disabled={u.role === 'ceo' && userProfile?.role !== 'ceo' && userProfile?.role !== 'programador'}
                               className="flex-1 min-w-0 bg-white/5 hover:bg-white/10 text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                             >
                               <Settings className="w-4 h-4" /> Configurar
                             </button>
                           )}
                           
-                          {(userProfile?.role === 'ceo' || userProfile?.canLiquidate) && (
+                          {(userProfile?.role === 'ceo' || userProfile?.role === 'programador' || userProfile?.canLiquidate) && (
                             <button 
                               onClick={() => {
                                 setInjectionTargetUserEmail(u.email);
@@ -8397,7 +9074,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                             </button>
                           )}
 
-                          {userProfile?.role === 'ceo' && u.role !== 'ceo' && (
+                          {(userProfile?.role === 'ceo' || userProfile?.role === 'programador') && u.role !== 'ceo' && u.role !== 'programador' && (
                             <button 
                               onClick={() => deleteUser(u.email)}
                               className="p-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl transition-all"
@@ -8439,7 +9116,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                             onClick={() => setConsolidatedMode('day')}
                             className={`px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${consolidatedMode === 'day' ? 'bg-primary text-primary-foreground' : 'bg-white/5 text-muted-foreground'}`}
                           >
-                            Un Día
+                            Un DÃ­a
                           </button>
                           <button
                             onClick={() => setConsolidatedMode('range')}
@@ -8508,7 +9185,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     <div className="lg:col-span-1 space-y-6">
                       <div className="space-y-2">
-                        <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Fecha de Liquidación</label>
+                        <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Fecha de LiquidaciÃ³n</label>
                         <input 
                           type="date"
                           value={liquidationDate}
@@ -8541,7 +9218,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                           ))}
                         </select>
                         {liquidationDate !== businessDayKey && isLiquidationDataLoading && (
-                          <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Cargando datos históricos...</p>
+                          <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Cargando datos histÃ³ricos...</p>
                         )}
                       </div>
 
@@ -8556,7 +9233,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                             <option key="default" value="" className="bg-gray-900">Seleccionar...</option>
                             {users.filter(u => {
                               if (!u || !u.email || !u.name || u.name.trim() === '') return false;
-                              if (userProfile?.role === 'ceo' || userProfile?.role === 'admin') return true;
+                              if (userProfile?.role === 'ceo' || userProfile?.role === 'admin' || userProfile?.role === 'programador') return true;
                               return u.email === userProfile?.email;
                             }).map((u, i) => (
                               <option key={u.email || `liq-${i}`} value={u.email} className="bg-gray-900">{u.name} ({u.email?.split('@')[0] || ''})</option>
@@ -8597,7 +9274,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                             onClick={handleLiquidate}
                             className="w-full bg-primary text-primary-foreground font-black uppercase tracking-widest py-4 rounded-xl hover:brightness-110 transition-all mt-6 shadow-lg shadow-primary/20"
                           >
-                            {selectedLiquidationSettlement ? `Actualizar liquidación ${liquidationDate}` : `Liquidar día ${liquidationDate}`}
+                            {selectedLiquidationSettlement ? `Actualizar liquidaciÃ³n ${liquidationDate}` : `Liquidar dÃ­a ${liquidationDate}`}
                           </button>
                         </>
                       )}
@@ -8663,7 +9340,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                               
                               <div className="bg-primary/5 p-6 rounded-2xl border border-primary/20 flex justify-between items-center">
                                 <div>
-                                  <p className="text-[10px] font-mono text-primary uppercase tracking-widest mb-1">Balance Neto del Día</p>
+                                  <p className="text-[10px] font-mono text-primary uppercase tracking-widest mb-1">Balance Neto del DÃ­a</p>
                                   <p className="text-xs text-muted-foreground uppercase tracking-tighter">Monto a entregar a la casa</p>
                                 </div>
                                 <p className="text-3xl font-black text-primary">USD {summary.netProfit.toFixed(2)}</p>
@@ -8700,32 +9377,22 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                                     });
                                     
                                     const fileName = `Reporte-${userToLiquidate?.name || 'Usuario'}-${liquidationDate}.png`;
-                                    
-                                    try {
-                                      // Capacitor flow
-                                      const base64Data = dataUrl.split(',')[1];
-                                      const savedFile = await Filesystem.writeFile({
-                                        path: fileName,
-                                        data: base64Data,
-                                        directory: Directory.Cache
-                                      });
-                                      
-                                      toast.dismiss(toastId);
-                                      await Share.share({
-                                        title: 'Reporte de Liquidación',
-                                        text: `Reporte de ventas de ${userToLiquidate?.name || 'Usuario'} para el día ${liquidationDate}`,
-                                        files: [savedFile.uri],
-                                        dialogTitle: 'Compartir Reporte'
-                                      });
-                                    } catch (capErr) {
-                                      console.log('Capacitor share failed or not available, falling back to web', capErr);
-                                      // Web fallback
-                                      const link = document.createElement('a');
-                                      link.download = fileName;
-                                      link.href = dataUrl;
-                                      link.click();
-                                      toast.success('Reporte descargado', { id: toastId });
+
+                                    const shared = await shareImageDataUrl({
+                                      dataUrl,
+                                      fileName,
+                                      title: 'Reporte de LiquidaciÃ³n',
+                                      text: `Reporte de ventas de ${userToLiquidate?.name || 'Usuario'} para el dÃ­a ${liquidationDate}`,
+                                      dialogTitle: 'Compartir Reporte'
+                                    });
+
+                                    if (shared) {
+                                      toast.success('Reporte compartido', { id: toastId });
+                                    } else {
+                                      downloadDataUrlFile(dataUrl, fileName);
+                                      toast.info('Tu dispositivo no permite compartir imÃ¡genes adjuntas. Se descargÃ³ para envÃ­o manual.', { id: toastId });
                                     }
+
                                   } catch (error) {
                                     console.error('Error generating report:', error);
                                     toast.error('Error al generar el reporte', { id: toastId });
@@ -8760,7 +9427,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                 <div className="glass-card p-4 sm:p-6 md:p-10">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-10 gap-6">
                     <div>
-                      <h2 className="text-2xl font-black italic tracking-tighter neon-text uppercase">ARCHIVO HISTÓRICO</h2>
+                      <h2 className="text-2xl font-black italic tracking-tighter neon-text uppercase">ARCHIVO HISTÃ“RICO</h2>
                       <p className="text-xs font-mono text-muted-foreground mt-1 uppercase tracking-widest">Consulta de Datos y Liquidaciones Pasadas</p>
                     </div>
                   </div>
@@ -8768,7 +9435,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     <div className="lg:col-span-1 space-y-6">
                       <div className="space-y-2">
-                        <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Fecha a Consultar</label>
+                        <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Fecha a Consultar (por defecto: día anterior)</label>
                         <input 
                           type="date"
                           value={archiveDate}
@@ -8813,7 +9480,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                             <option key="default" value="" className="bg-gray-900">Seleccionar...</option>
                             {users.filter(u => {
                               if (!u || !u.email || !u.name || u.name.trim() === '') return false;
-                              if (userProfile?.role === 'ceo' || userProfile?.role === 'admin') return true;
+                              if (userProfile?.role === 'ceo' || userProfile?.role === 'admin' || userProfile?.role === 'programador') return true;
                               return u.email === userProfile?.email;
                             }).map((u, i) => (
                               <option key={u.email || `arch-${i}`} value={u.email} className="bg-gray-900">{u.name} ({u.email?.split('@')[0] || ''})</option>
@@ -8850,7 +9517,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                           <div className="glass-card p-8 space-y-8 bg-black border-white/10 relative overflow-hidden">
                             <div className="flex justify-between items-start border-b border-white/10 pb-6">
                               <div>
-                                <h3 className="text-xl font-black uppercase tracking-tighter text-primary">REPORTE HISTÓRICO</h3>
+                                <h3 className="text-xl font-black uppercase tracking-tighter text-primary">REPORTE HISTÃ“RICO</h3>
                                 <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">{archiveDate}</p>
                               </div>
                               <div className="text-right">
@@ -8912,6 +9579,210 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
               </motion.div>
             )}
 
+            {activeTab === 'recovery' && userProfile?.role === 'programador' && (
+              <motion.div
+                key="recovery"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                className="space-y-8"
+              >
+                <div className="glass-card p-4 sm:p-6 md:p-8">
+                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+                    <div>
+                      <h2 className="text-2xl font-black italic tracking-tighter neon-text uppercase">RECUPERACIÃ“N</h2>
+                      <p className="text-xs font-mono text-muted-foreground mt-1 uppercase tracking-widest">
+                        CorrecciÃ³n manual de sorteo por ticket (live + archivo diario)
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={fetchRecoveryData}
+                        disabled={isRecoveryLoading}
+                        className="bg-primary text-primary-foreground px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest disabled:opacity-60"
+                      >
+                        {isRecoveryLoading ? 'Cargando...' : 'Recargar'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3 mb-6">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Fecha operativa</label>
+                      <input
+                        type="date"
+                        value={recoveryDate}
+                        onChange={(e) => setRecoveryDate(e.target.value)}
+                        className="w-full bg-black border border-border p-2 rounded-lg font-mono text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Usuario / Seller</label>
+                      <input
+                        type="text"
+                        value={recoverySellerFilter}
+                        onChange={(e) => setRecoverySellerFilter(e.target.value)}
+                        placeholder="nombre, correo, sellerId"
+                        className="w-full bg-black border border-border p-2 rounded-lg font-mono text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Sorteo guardado</label>
+                      <input
+                        type="text"
+                        value={recoveryLotteryFilter}
+                        onChange={(e) => setRecoveryLotteryFilter(e.target.value)}
+                        placeholder="texto libre"
+                        className="w-full bg-black border border-border p-2 rounded-lg font-mono text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Ticket ID</label>
+                      <input
+                        type="text"
+                        value={recoveryTicketIdFilter}
+                        onChange={(e) => setRecoveryTicketIdFilter(e.target.value)}
+                        placeholder="id ticket"
+                        className="w-full bg-black border border-border p-2 rounded-lg font-mono text-xs"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Estado</label>
+                      <select
+                        value={recoveryStatusFilter}
+                        onChange={(e) => setRecoveryStatusFilter(e.target.value as 'ALL' | 'active' | 'winner' | 'cancelled' | 'liquidated')}
+                        className="w-full bg-black border border-border p-2 rounded-lg font-mono text-xs"
+                      >
+                        <option value="ALL">Todos</option>
+                        <option value="active">active</option>
+                        <option value="winner">winner</option>
+                        <option value="cancelled">cancelled</option>
+                        <option value="liquidated">liquidated</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Orden creaciÃ³n</label>
+                      <select
+                        value={recoverySortOrder}
+                        onChange={(e) => setRecoverySortOrder(e.target.value as 'asc' | 'desc')}
+                        className="w-full bg-black border border-border p-2 rounded-lg font-mono text-xs"
+                      >
+                        <option value="asc">Ascendente</option>
+                        <option value="desc">Descendente</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="mb-4 text-xs font-mono text-muted-foreground uppercase tracking-widest">
+                    Tickets mostrados: {filteredRecoveryTickets.length} / {recoveryTickets.length}
+                  </div>
+
+                  <div className="space-y-3">
+                    {filteredRecoveryTickets.map((ticket) => {
+                      const timestampMs = parseTicketTimestampMs(ticket.timestamp);
+                      const createdAt = timestampMs ? format(new Date(timestampMs), 'yyyy-MM-dd hh:mm:ss a') : '-';
+                      const ticketLotteryNames = getRecoveryTicketLotteryNames(ticket);
+                      const isMultipleTicket = ticketLotteryNames.length > 1;
+                      const selectedMultiMap = recoveryTargetLotteryMapByRow[ticket.rowId] || {};
+                      const canSaveTicket = isMultipleTicket
+                        ? ticketLotteryNames.every(sourceLottery => Boolean(selectedMultiMap[sourceLottery]))
+                        : Boolean(recoveryTargetLotteryByRow[ticket.rowId]);
+                      return (
+                        <div key={ticket.rowId} className="rounded-xl border border-white/10 bg-black/40 p-3">
+                          <div className="grid grid-cols-1 xl:grid-cols-12 gap-3 items-end">
+                            <div className="xl:col-span-3">
+                              <p className="text-[10px] font-mono uppercase text-muted-foreground">Ticket</p>
+                              <p className="text-xs font-black break-all">{ticket.id}</p>
+                              <p className="text-[10px] font-mono text-muted-foreground mt-1">{ticket.source === 'tickets' ? 'LIVE' : `ARCHIVO ${ticket.archiveDate}`}</p>
+                            </div>
+                            <div className="xl:col-span-2">
+                              <p className="text-[10px] font-mono uppercase text-muted-foreground">Usuario</p>
+                              <p className="text-xs font-bold">{ticket.sellerName || ticket.sellerId || '-'}</p>
+                              <p className="text-[10px] font-mono text-muted-foreground break-all">{ticket.sellerEmail || '-'}</p>
+                            </div>
+                            <div className="xl:col-span-2">
+                              <p className="text-[10px] font-mono uppercase text-muted-foreground">CreaciÃ³n</p>
+                              <p className="text-xs font-mono">{createdAt}</p>
+                              <p className="text-[10px] font-mono text-muted-foreground">Estado: {ticket.status || '-'}</p>
+                            </div>
+                            <div className="xl:col-span-2">
+                              <p className="text-[10px] font-mono uppercase text-muted-foreground">Sorteo actual</p>
+                              <p className="text-xs font-bold">{getRecoveryTicketLotteryLabel(ticket)}</p>
+                              <p className="text-[10px] font-mono text-muted-foreground">Total: USD {(ticket.totalAmount || 0).toFixed(2)}</p>
+                            </div>
+                            <div className="xl:col-span-2">
+                              <p className="text-[10px] font-mono uppercase text-muted-foreground">Nuevo sorteo</p>
+                              {isMultipleTicket ? (
+                                <div className="space-y-1.5">
+                                  {ticketLotteryNames.map(sourceLottery => (
+                                    <div key={`${ticket.rowId}-${sourceLottery}`} className="space-y-1">
+                                      <p className="text-[9px] font-mono text-muted-foreground">De: {sourceLottery}</p>
+                                      <select
+                                        value={selectedMultiMap[sourceLottery] || ''}
+                                        onChange={(e) => setRecoveryTargetLotteryMapByRow(prev => ({
+                                          ...prev,
+                                          [ticket.rowId]: {
+                                            ...(prev[ticket.rowId] || {}),
+                                            [sourceLottery]: e.target.value
+                                          }
+                                        }))}
+                                        className="w-full bg-black border border-border p-2 rounded-lg font-mono text-xs"
+                                      >
+                                        <option value="">Seleccionar...</option>
+                                        {recoveryAvailableLotteries.map(lot => (
+                                          <option key={`${ticket.rowId}-${sourceLottery}-${lot.id}`} value={lot.id}>
+                                            {cleanText(lot.name)} ({formatTime12h(lot.drawTime)}) {lot.active ? '' : '[INACTIVO]'}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <select
+                                  value={recoveryTargetLotteryByRow[ticket.rowId] || ''}
+                                  onChange={(e) => setRecoveryTargetLotteryByRow(prev => ({ ...prev, [ticket.rowId]: e.target.value }))}
+                                  className="w-full bg-black border border-border p-2 rounded-lg font-mono text-xs"
+                                >
+                                  <option value="">Seleccionar...</option>
+                                  {recoveryAvailableLotteries.map(lot => (
+                                    <option key={`${ticket.rowId}-${lot.id}`} value={lot.id}>
+                                      {cleanText(lot.name)} ({formatTime12h(lot.drawTime)}) {lot.active ? '' : '[INACTIVO]'}
+                                    </option>
+                                  ))}
+                                </select>
+                              )}
+                            </div>
+                            <div className="xl:col-span-1 space-y-1">
+                              <button
+                                onClick={() => saveRecoveryLotteryChange(ticket)}
+                                disabled={recoverySavingRowId === ticket.rowId || recoveryDeletingRowId === ticket.rowId || !canSaveTicket}
+                                className="w-full bg-primary text-primary-foreground p-2 rounded-lg text-[10px] font-black uppercase tracking-widest disabled:opacity-60"
+                              >
+                                {recoverySavingRowId === ticket.rowId ? 'Guardando' : 'Guardar'}
+                              </button>
+                              <button
+                                onClick={() => deleteRecoveryTicket(ticket)}
+                                disabled={recoverySavingRowId === ticket.rowId || recoveryDeletingRowId === ticket.rowId}
+                                className="w-full bg-red-500/20 text-red-400 border border-red-500/30 p-2 rounded-lg text-[10px] font-black uppercase tracking-widest disabled:opacity-60"
+                              >
+                                {recoveryDeletingRowId === ticket.rowId ? 'Eliminando' : 'Eliminar'}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {filteredRecoveryTickets.length === 0 && (
+                      <div className="h-40 flex items-center justify-center text-muted-foreground font-mono text-xs uppercase tracking-widest border-2 border-dashed border-border rounded-xl">
+                        No hay tickets con esos filtros
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
             {activeTab === 'config' && (
               <motion.div
                 key="config"
@@ -8923,7 +9794,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                 <div className="glass-card p-4 sm:p-6 md:p-10">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-10 gap-6">
                     <div>
-                      <h2 className="text-2xl font-black italic tracking-tighter neon-text uppercase">CONFIGURACIÓN</h2>
+                      <h2 className="text-2xl font-black italic tracking-tighter neon-text uppercase">CONFIGURACIÃ“N</h2>
                       <p className="text-xs font-mono text-muted-foreground mt-1 uppercase tracking-widest">Ajustes Personales y del Sistema</p>
                     </div>
                   </div>
@@ -9020,7 +9891,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
 
         {/* Footer */}
         <footer className="h-auto min-h-12 glass border-t border-border px-3 sm:px-8 py-2 flex items-center justify-between gap-2 shrink-0 text-[8px] sm:text-[9px] font-mono text-muted-foreground uppercase tracking-[0.12em] sm:tracking-[0.2em]">
-          <p>Â© 2026 CHANCE PRO SYSTEMS â¬¢ TERMINAL {user.uid.slice(0, 8)}</p>
+          <p>Â© 2026 CHANCE PRO SYSTEMS â€¢ TERMINAL {user.uid.slice(0, 8)}</p>
           <div className="flex gap-3 sm:gap-8 flex-wrap justify-end">
             <span className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-green-500" /> SERVER: OK</span>
             <span>V1.2.0-STABLE</span>
@@ -9032,6 +9903,8 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
     </>
   );
 }
+
+
 
 
 

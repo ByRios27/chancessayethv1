@@ -10,7 +10,8 @@
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "lint": "tsc --noEmit",
     "migrate:firestore": "node scripts/migrate-firestore.mjs",
-    "auth:set-temp-passwords": "node scripts/set-temporary-passwords.mjs"
+    "auth:set-temp-passwords": "node scripts/set-temporary-passwords.mjs",
+    "auth:sync-role-claims": "node scripts/sync-role-claims.mjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.3.0",

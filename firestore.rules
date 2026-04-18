@@ -1,11 +1,6 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // ===============================================================
-    // Helper Functions
-    // ===============================================================
-
     function isAuthenticated() {
       return request.auth != null;
     }
@@ -14,34 +9,35 @@ service cloud.firestore {
       return request.auth.token.get('email', '').lower();
     }
 
-    function getUserData(email) {
-      return exists(/databases/$(database)/documents/users/$(email.lower()))
-        ? get(/databases/$(database)/documents/users/$(email.lower())).data
-        : null;
-    }
-
-    function currentUserData() {
-      return isAuthenticated() ? getUserData(currentUserEmail()) : null;
-    }
-
-    function hasUserProfile() {
-      return isAuthenticated() && currentUserData() != null;
+    function currentUserRole() {
+      return isAuthenticated() ? request.auth.token.get('role', '') : '';
     }
 
     function isCeo() {
-      return hasUserProfile() && currentUserData().get('role', '') == 'ceo';
-    }
-
-    function isPrimaryCeo() {
-      return isCeo() && currentUserData().get('isPrimary', false) == true;
+      return currentUserRole() == 'ceo';
     }
 
     function isAdmin() {
-      return hasUserProfile() && currentUserData().get('role', '') == 'admin';
+      return currentUserRole() == 'admin';
+    }
+
+    function isProgramador() {
+      return currentUserRole() == 'programador';
+    }
+
+    function isSeller() {
+      return currentUserRole() == 'seller';
+    }
+
+    function isPrimaryCeo() {
+      return isCeo() && (
+        request.auth.token.get('isPrimaryCeo', false) == true ||
+        currentUserEmail() == 'zsayeth09@gmail.com'
+      );
     }
 
     function canReadAllSalesData() {
-      return isCeo() || isAdmin();
+      return isCeo() || isAdmin() || isProgramador();
     }
 
     function isOwner(email) {
@@ -68,7 +64,7 @@ service cloud.firestore {
         data.email.size() < 120 &&
         data.name is string &&
         data.name.size() < 120 &&
-        data.role in ['ceo', 'admin', 'seller'] &&
+        data.role in ['ceo', 'admin', 'seller', 'programador'] &&
         (
           !data.keys().hasAny(['status']) ||
           data.get('status', 'active') in ['active', 'inactive']
@@ -88,22 +84,29 @@ service cloud.firestore {
       return request.resource.data.get('isPrimary', false) == resource.data.get('isPrimary', false);
     }
 
-    // Owner can only update harmless personal preference fields.
     function ownerProfileUpdateIsSafe() {
       return request.resource.data.diff(resource.data).changedKeys().hasOnly(['preferredChancePrice']);
     }
 
     function canManageUserCreate() {
-      return hasUserProfile() && (
-        (isPrimaryCeo() && isValidUser(request.resource.data) && createdCeoHasValidPrimaryFlag()) ||
+      return isAuthenticated() && (
+        (
+          isCeo() &&
+          isValidUser(request.resource.data) &&
+          createdCeoHasValidPrimaryFlag() &&
+          (
+            request.resource.data.get('role', '') != 'programador' ||
+            isPrimaryCeo()
+          )
+        ) ||
         (isAdmin() && isValidUser(request.resource.data) && request.resource.data.get('role', '') == 'seller')
       );
     }
 
     function canManageUserUpdate() {
-      return hasUserProfile() && (
+      return isAuthenticated() && (
         (
-          isPrimaryCeo() &&
+          isCeo() &&
           updatedUserKeepsPrimaryFlag()
         ) ||
         (
@@ -116,85 +119,42 @@ service cloud.firestore {
     }
 
     function canManageUserDelete() {
-      return hasUserProfile() && (
-        (isPrimaryCeo()) ||
+      return isAuthenticated() && (
+        isCeo() ||
         (isAdmin() && resource.data.get('role', '') == 'seller')
       );
     }
-
-    // ===============================================================
-    // users
-    // ===============================================================
 
     match /users/{email} {
       allow read: if isAuthenticated() && (isOwner(email) || canReadAllSalesData());
-
       allow create: if canManageUserCreate();
-
-      allow update: if
-        canManageUserUpdate() ||
-        (isOwner(email) && ownerProfileUpdateIsSafe());
-
-      allow delete: if canManageUserDelete() &&
-        (
-          resource.data.get('role', '') != 'ceo' ||
-          isPrimaryCeo()
-        );
+      allow update: if canManageUserUpdate() || (isOwner(email) && ownerProfileUpdateIsSafe());
+      allow delete: if canManageUserDelete() && (resource.data.get('role', '') != 'ceo' || isCeo());
     }
-
-    // ===============================================================
-    // Optional provisioning support (kept for compatibility)
-    // ===============================================================
 
     match /userProvisioning/{email} {
-      allow read: if hasUserProfile() && (isOwner(email) || canReadAllSalesData());
-
-      allow create: if hasUserProfile() && (
-        isPrimaryCeo() ||
-        (isAdmin() && request.resource.data.get('role', '') == 'seller')
-      );
-
-      allow update: if hasUserProfile() && (
-        isPrimaryCeo() ||
-        (isAdmin() && resource.data.get('role', '') == 'seller' && request.resource.data.get('role', '') == 'seller')
-      );
-
-      allow delete: if hasUserProfile() && (
-        isPrimaryCeo() ||
-        (isAdmin() && resource.data.get('role', '') == 'seller')
-      );
+      allow read: if isAuthenticated() && (isOwner(email) || canReadAllSalesData());
+      allow create: if isAuthenticated() && ((isCeo() || isProgramador()) || (isAdmin() && request.resource.data.get('role', '') == 'seller'));
+      allow update: if isAuthenticated() && ((isCeo() || isProgramador()) || (isAdmin() && resource.data.get('role', '') == 'seller' && request.resource.data.get('role', '') == 'seller'));
+      allow delete: if isAuthenticated() && ((isCeo() || isProgramador()) || (isAdmin() && resource.data.get('role', '') == 'seller'));
     }
-
-    // ===============================================================
-    // lotteries
-    // ===============================================================
 
     match /lotteries/{lotteryId} {
-      allow read: if hasUserProfile();
-      allow write: if isCeo() || isAdmin();
+      allow read: if isAuthenticated();
+      allow write: if isCeo() || isAdmin() || isProgramador();
     }
 
-    // ===============================================================
-    // tickets
-    // ===============================================================
-
     match /tickets/{ticketId} {
-      allow read: if hasUserProfile() && (
-        canReadAllSalesData() ||
-        isSellerTicketOwner()
-      );
+      allow read: if isAuthenticated() && (canReadAllSalesData() || isSellerTicketOwner());
 
-      allow create: if hasUserProfile() && (
-        isCeo() ||
-        isAdmin() ||
-        incomingTicketBelongsToCurrentUser()
-      );
+      allow create: if isAuthenticated() && (isCeo() || isAdmin() || isProgramador() || incomingTicketBelongsToCurrentUser());
 
       allow update: if
         isCeo() ||
+        isProgramador() ||
         isAdmin() ||
         (
-          hasUserProfile() &&
+          isAuthenticated() &&
           isSellerTicketOwner() &&
           resource.data.get('status', '') == 'active' &&
           resource.data.get('liquidated', false) == false &&
@@ -208,81 +168,50 @@ service cloud.firestore {
 
       allow delete: if
         isCeo() ||
+        isProgramador() ||
         (
-          hasUserProfile() &&
+          isAuthenticated() &&
           isSellerTicketOwner() &&
           resource.data.get('status', '') == 'active' &&
           resource.data.get('liquidated', false) == false
         );
     }
 
-    // ===============================================================
-    // results
-    // ===============================================================
-
     match /results/{resultId} {
-      allow read: if hasUserProfile();
-      allow write: if isCeo() || isAdmin();
+      allow read: if isAuthenticated();
+      allow write: if isCeo() || isAdmin() || isProgramador();
     }
-
-    // ===============================================================
-    // injections
-    // ===============================================================
 
     match /injections/{injectionId} {
-      allow read: if hasUserProfile() && (
-        canReadAllSalesData() ||
-        resource.data.get('userEmail', '').lower() == currentUserEmail()
-      );
-
-      allow create: if isCeo() || isAdmin();
-      allow update: if isCeo() || isAdmin();
-      allow delete: if isPrimaryCeo();
+      allow read: if isAuthenticated() && (canReadAllSalesData() || resource.data.get('userEmail', '').lower() == currentUserEmail());
+      allow create: if isCeo() || isAdmin() || isProgramador();
+      allow update: if isCeo() || isAdmin() || isProgramador();
+      allow delete: if isCeo() || isProgramador();
     }
-
-    // ===============================================================
-    // settlements
-    // ===============================================================
 
     match /settlements/{settlementId} {
-      allow read: if hasUserProfile() && (
-        canReadAllSalesData() ||
-        resource.data.get('userEmail', '').lower() == currentUserEmail()
-      );
-
-      allow write: if isCeo() || isAdmin() || currentUserEmail() == 'zsayeth09@gmail.com';
+      allow read: if isAuthenticated() && (canReadAllSalesData() || resource.data.get('userEmail', '').lower() == currentUserEmail());
+      allow write: if isCeo() || isAdmin() || isProgramador();
     }
-
-    // ===============================================================
-    // daily_archives
-    // ===============================================================
 
     match /daily_archives/{archiveId} {
-      allow read: if hasUserProfile() && canReadAllSalesData();
-      allow create: if isCeo() || isAdmin();
-      allow update: if isCeo() || isAdmin();
-      allow delete: if isPrimaryCeo();
+      allow read: if isAuthenticated() && canReadAllSalesData();
+      allow create: if isCeo() || isAdmin() || isProgramador();
+      allow update: if isCeo() || isAdmin() || isProgramador();
+      allow delete: if isCeo() || isProgramador();
     }
-
-    // ===============================================================
-    // settings
-    // ===============================================================
 
     match /settings/global {
-      allow read: if hasUserProfile();
-      allow write: if isCeo();
+      allow read: if isAuthenticated();
+      allow write: if isCeo() || isProgramador();
     }
 
-    // ===============================================================
-    // Public / connectivity helpers
-    // ===============================================================
-
     match /public/connectivity {
-      allow read, write: if !isAuthenticated() || hasUserProfile();
+      allow read, write: if true;
     }
 
     match /test/connection {
-      allow read, write: if !isAuthenticated() || hasUserProfile();
+      allow read, write: if true;
     }
   }
 }
