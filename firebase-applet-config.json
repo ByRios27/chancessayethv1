@@ -1,10 +1,10 @@
 {
-  "projectId": "chances-v5",
-  "appId": "1:217666388954:web:56dddd47a69a2ecf8b76e3",
-  "apiKey": "AIzaSyD3X4AHe74wxcDuxcdqrCszhTxgsynAx_Q",
-  "authDomain": "chances-v5.firebaseapp.com",
+  "projectId": "chancessayethv1",
+  "appId": "1:994042500081:web:8a34731b3a674c9fdbea50",
+  "apiKey": "AIzaSyBRTG431m8s3x_hfQXnXI1YRUxuTRyNlWw",
+  "authDomain": "chancessayethv1.firebaseapp.com",
   "firestoreDatabaseId": "(default)",
-  "storageBucket": "chances-v5.firebasestorage.app",
-  "messagingSenderId": "217666388954",
-  "measurementId": "G-WNNGFHNH6G"
+  "storageBucket": "chancessayethv1.firebasestorage.app",
+  "messagingSenderId": "994042500081",
+  "measurementId": "G-MX7F0CZCK1"
 }

@@ -1,5 +1,5 @@
 {
-  "name": "ventas-de-chances",
+  "name": "chancessayethv1",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -26,7 +26,7 @@
     "date-fns": "^4.1.0",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
-    "firebase": "^12.11.0",
+    "firebase": "^12.12.1",
     "firebase-admin": "^13.8.0",
     "html-to-image": "^1.11.13",
     "html2canvas": "^1.4.1",

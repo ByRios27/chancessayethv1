@@ -12,3 +12,4 @@ credentials/
 scripts/.env
 firebase-debug.log
 auth-users-old.json
+.env.local
