@@ -9,19 +9,20 @@ export function useInjections({
   enabled,
   canAccessAllUsers,
   businessDayKey,
-  userEmail,
+  sellerId,
   onError,
 }: {
   enabled: boolean;
   canAccessAllUsers: boolean;
   businessDayKey: string;
-  userEmail?: string;
+  sellerId?: string;
   onError?: FirestoreErrorHandler;
 }) {
   const [injections, setInjections] = useState<Injection[]>([]);
 
   useEffect(() => {
     if (!enabled) return;
+    if (!canAccessAllUsers && !sellerId) return;
 
     if (canAccessAllUsers) {
       const qInj = query(
@@ -41,10 +42,10 @@ export function useInjections({
       return () => unsubscribeInjections();
     }
 
-    console.log('Fetching injections for user:', userEmail?.toLowerCase());
+    console.log('Fetching injections for sellerId:', sellerId);
     const qInj = query(
       collection(db, 'injections'),
-      where('userEmail', '==', userEmail?.toLowerCase()),
+      where('sellerId', '==', sellerId),
       where('date', '==', businessDayKey),
       limit(50)
     );
@@ -58,7 +59,7 @@ export function useInjections({
     });
 
     return () => unsubscribeInjections();
-  }, [enabled, canAccessAllUsers, businessDayKey, userEmail, onError]);
+  }, [enabled, canAccessAllUsers, businessDayKey, sellerId, onError]);
 
   return {
     injections,

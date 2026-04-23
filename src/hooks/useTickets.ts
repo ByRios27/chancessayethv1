@@ -10,21 +10,20 @@ export function useTickets({
   enabled,
   canAccessAllUsers,
   businessDayKey,
-  userUid,
-  userRole,
+  sellerId,
   onError,
 }: {
   enabled: boolean;
   canAccessAllUsers: boolean;
   businessDayKey: string;
-  userUid?: string;
-  userRole?: string;
+  sellerId?: string;
   onError?: FirestoreErrorHandler;
 }) {
   const [tickets, setTickets] = useState<LotteryTicket[]>([]);
 
   useEffect(() => {
-    if (!enabled || !userUid || !userRole) return;
+    if (!enabled) return;
+    if (!canAccessAllUsers && !sellerId) return;
 
     const startOfToday = getStartOfBusinessDay();
 
@@ -42,7 +41,7 @@ export function useTickets({
       });
     };
 
-    console.log("Fetching today's tickets for user:", userUid);
+    console.log("Fetching today's tickets for sellerId:", sellerId);
 
     if (canAccessAllUsers) {
       const qToday = query(
@@ -64,7 +63,7 @@ export function useTickets({
 
     const qTodayBySellerId = query(
       collection(db, 'tickets'),
-      where('sellerId', '==', userUid),
+      where('sellerId', '==', sellerId),
       where('timestamp', '>=', startOfToday),
       limit(500)
     );
@@ -87,7 +86,7 @@ export function useTickets({
     return () => {
       unsubscribeTicketsById();
     };
-  }, [enabled, canAccessAllUsers, businessDayKey, userUid, userRole, onError]);
+  }, [enabled, canAccessAllUsers, businessDayKey, sellerId, onError]);
 
   return {
     tickets,

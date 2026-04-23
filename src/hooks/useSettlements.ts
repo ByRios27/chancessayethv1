@@ -8,20 +8,21 @@ type FirestoreErrorHandler = (error: unknown, operation: 'get' | 'list', target:
 export function useSettlements({
   enabled,
   canAccessAllUsers,
-  userEmail,
+  sellerId,
   onError,
 }: {
   enabled: boolean;
   canAccessAllUsers: boolean;
-  userEmail?: string;
+  sellerId?: string;
   onError?: FirestoreErrorHandler;
 }) {
   const [settlements, setSettlements] = useState<Settlement[]>([]);
 
   useEffect(() => {
     if (!enabled) return;
+    if (!canAccessAllUsers && !sellerId) return;
 
-    console.log('Fetching settlements for user:', userEmail?.toLowerCase());
+    console.log('Fetching settlements for sellerId:', sellerId);
 
     if (canAccessAllUsers) {
       const qSettlements = query(
@@ -43,7 +44,7 @@ export function useSettlements({
 
     const qSettlements = query(
       collection(db, 'settlements'),
-      where('userEmail', '==', userEmail?.toLowerCase()),
+      where('sellerId', '==', sellerId),
       limit(50)
     );
     const unsubscribeSettlements = onSnapshot(qSettlements, (snapshot) => {
@@ -56,7 +57,7 @@ export function useSettlements({
     });
 
     return () => unsubscribeSettlements();
-  }, [enabled, canAccessAllUsers, userEmail, onError]);
+  }, [enabled, canAccessAllUsers, sellerId, onError]);
 
   return {
     settlements,

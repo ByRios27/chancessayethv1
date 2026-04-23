@@ -84,9 +84,6 @@ export function HistorySection(props: HistorySectionProps) {
     userStats,
     activeTab,
     setActiveTab,
-    toPng,
-    toast,
-    jsPDF,
   } = props;
 
   return (

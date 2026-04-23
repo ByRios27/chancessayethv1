@@ -1,5 +1,6 @@
 export interface Injection {
   id: string;
+  sellerId?: string;
   userEmail: string;
   amount: number;
   type?: 'injection' | 'payment' | 'debt';
@@ -12,6 +13,7 @@ export interface Injection {
 
 export interface Settlement {
   id: string;
+  sellerId?: string;
   userEmail: string;
   date: string;
   totalSales: number;

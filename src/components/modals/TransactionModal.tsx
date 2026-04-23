@@ -35,12 +35,19 @@ const TransactionModal = ({ show, onClose, users, currentUser, userProfile, targ
 
   const handleSave = async () => {
     if (!targetEmail || !amount || isNaN(Number(amount))) return;
+    const targetUser = allUsers.find((u) => u.email?.toLowerCase() === targetEmail.toLowerCase());
+    const targetSellerId = (targetUser?.sellerId || '').trim();
+    if (!targetSellerId) {
+      toast.error('Usuario destino sin sellerId operativo');
+      return;
+    }
     setLoading(true);
     try {
       const batch = writeBatch(db);
       const transactionRef = doc(collection(db, 'injections')); // We keep using 'injections' collection for historical reasons, but it stores all transactions
       
       batch.set(transactionRef, {
+        sellerId: targetSellerId,
         userEmail: targetEmail.toLowerCase(),
         amount: Number(amount),
         type: type,

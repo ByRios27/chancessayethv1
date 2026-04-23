@@ -96,13 +96,14 @@ export function useAuthSession(enforceSessionByOperationalDay: boolean) {
 
             if (userDoc.exists()) {
               const data = userDoc.data() as UserProfile;
+              const normalizedSellerId = (data.sellerId || '').trim() || email.split('@')[0].toUpperCase();
               const normalizedProfile: UserProfile = {
                 email,
                 name: data.name || 'CEO',
                 role: 'ceo',
                 commissionRate: typeof data.commissionRate === 'number' ? data.commissionRate : 0,
                 status: data.status || 'active',
-                sellerId: data.sellerId || 'CEO01',
+                sellerId: normalizedSellerId || 'CEO01',
                 currentDebt: typeof data.currentDebt === 'number' ? data.currentDebt : 0,
                 canLiquidate: data.canLiquidate ?? true,
               };
@@ -122,7 +123,13 @@ export function useAuthSession(enforceSessionByOperationalDay: boolean) {
             console.log('Non-CEO user logged in:', email, u.uid);
             const userDoc = await getDoc(doc(db, 'users', email));
             if (userDoc.exists()) {
-              setUserProfile(userDoc.data() as UserProfile);
+              const data = userDoc.data() as UserProfile;
+              const normalizedSellerId = (data.sellerId || '').trim() || email.split('@')[0].toUpperCase();
+              setUserProfile({
+                ...data,
+                email,
+                sellerId: normalizedSellerId,
+              } as UserProfile);
             } else {
               console.warn('User profile not found in Firestore for:', email);
               toast.error('Tu perfil no existe en la base de datos. Contacta al administrador.');
