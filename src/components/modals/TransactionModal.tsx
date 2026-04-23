@@ -59,7 +59,7 @@ const TransactionModal = ({ show, onClose, users, currentUser, userProfile, targ
       const firebaseCode = (error as { code?: string })?.code || 'unknown';
       const firebaseMessage = error instanceof Error ? error.message : String(error);
       toast.error(`Error al guardar (injections/users (batch))`, {
-        description: `CÃ³digo: ${firebaseCode} | Causa: ${firebaseMessage}`
+        description: `Código: ${firebaseCode} | Causa: ${firebaseMessage}`
       });
       console.error('Firestore Error Details:', JSON.stringify({
         error: firebaseMessage,

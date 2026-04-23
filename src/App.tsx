@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { format } from 'date-fns';
 import { jsPDF } from 'jspdf';
@@ -112,6 +112,7 @@ import { useAuthSession } from './hooks/useAuthSession';
 import { useInjections } from './hooks/useInjections';
 import { useLiquidation } from './hooks/useLiquidation';
 import { useLotteries } from './hooks/useLotteries';
+import { useAppDataScopes, type AppTabId } from './hooks/useAppDataScopes';
 import { useOperationalArchive } from './hooks/useOperationalArchive';
 import { useOperationalClock } from './hooks/useOperationalClock';
 import { useRecovery } from './hooks/useRecovery';
@@ -171,6 +172,7 @@ import { getBusinessDate, getEndOfBusinessDay } from './utils/dates';
 import { unifyBets } from './utils/bets';
 import { cleanText, normalizeLotteryName, normalizePlainText } from './utils/text';
 import { formatTime12h } from './utils/time';
+import { getVisibleNavItems, type NavItem } from './config/navigation';
 // --- Error Boundary ---
 enum OperationType {
   CREATE = 'create',
@@ -239,7 +241,7 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   toast.error(
     `Error al ${operationLabel} (${target})`,
     {
-      description: `CÃ³digo: ${firebaseCode} | Causa: ${firebaseMessage}`
+      description: `Código: ${firebaseCode} | Causa: ${firebaseMessage}`
     }
   );
 
@@ -258,9 +260,7 @@ function App() {
 
   // Top-level app state
   const [historyTickets, setHistoryTickets] = useState<LotteryTicket[]>([]);
-  const [activeTab, setActiveTab] = useState<'sales' | 'history' | 'admin' | 'dashboard' | 'results' | 'users' | 'liquidaciones' | 'config' | 'archivo' | 'stats' | 'cierres' | 'recovery'>('history');
-  const canAccessManagedUsersData = canUseGlobalScope && (activeTab === 'users' || activeTab === 'liquidaciones' || activeTab === 'archivo' || activeTab === 'recovery');
-  const canAccessAllUsers = canAccessManagedUsersData || (canUseGlobalScope && showGlobalScope && (activeTab === 'stats' || activeTab === 'cierres'));
+  const [activeTab, setActiveTab] = useState<AppTabId>('sales');
   const [expandedStats, setExpandedStats] = useState<string[]>([]);
   const [cierreLottery, setCierreLottery] = useState<string>('');
   const cierreRef = useRef<HTMLDivElement>(null);
@@ -284,7 +284,7 @@ function App() {
     if (userProfile?.role === 'ceo' || userProfile?.role === 'admin' || userProfile?.role === 'programador') {
       setActiveTab('dashboard');
     } else {
-      setActiveTab('history');
+      setActiveTab('sales');
     }
   }, [userProfile?.role]);
 
@@ -304,6 +304,22 @@ function App() {
   const [resultFormSecondPrize, setResultFormSecondPrize] = useState('');
   const [resultFormThirdPrize, setResultFormThirdPrize] = useState('');
   const [historyDate, setHistoryDate] = useState(format(getBusinessDate(), 'yyyy-MM-dd'));
+  const {
+    canAccessManagedUsersData,
+    canAccessAllUsers,
+    shouldLoadUsersList,
+    needsRealtimeOperationalData,
+    shouldLoadResults,
+    shouldLoadLotteries,
+  } = useAppDataScopes({
+    activeTab,
+    userRole: userProfile?.role,
+    canUseGlobalScope,
+    showGlobalScope,
+    historyDate,
+    businessDayKey,
+    archiveDate,
+  });
   const [editingLottery, setEditingLottery] = useState<Lottery | null>(null);
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 1024 : false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -334,6 +350,7 @@ function App() {
   const [editingTicketId, setEditingTicketId] = useState<string | null>(null);
   const { users, setUsers } = useUsers({
     role: userProfile?.role,
+    enabled: shouldLoadUsersList,
     onError: (error, operation, target) => {
       const op = operation === 'list' ? OperationType.LIST : OperationType.GET;
       handleFirestoreError(error, op, target);
@@ -411,14 +428,6 @@ function App() {
     sortedTicketsForLot: Array<{ t: LotteryTicket; prize: number }>;
   }>>(new Map());
 
-  const needsRealtimeOperationalData = useMemo(() => {
-    if (!userProfile?.role) return false;
-    if (activeTab === 'sales' || activeTab === 'dashboard' || activeTab === 'users' || activeTab === 'liquidaciones') return true;
-    if ((activeTab === 'history' || activeTab === 'stats' || activeTab === 'cierres') && historyDate === businessDayKey) return true;
-    if (activeTab === 'archivo' && archiveDate === businessDayKey) return true;
-    return false;
-  }, [activeTab, archiveDate, businessDayKey, historyDate, userProfile?.role]);
-
   const { tickets, setTickets } = useTickets({
     enabled: !!user?.uid && !!userProfile?.role && needsRealtimeOperationalData,
     canAccessAllUsers,
@@ -467,7 +476,7 @@ function App() {
       clearTimeout(timeoutId);
       timeoutId = setTimeout(() => {
         handleLogout();
-        toast.error('SesiÃ³n cerrada por inactividad');
+        toast.error('Sesión cerrada por inactividad');
       }, timeoutMs);
     };
 
@@ -506,13 +515,13 @@ function App() {
   const [globalChancePriceFilter, setGlobalChancePriceFilter] = useState<string>('');
   const [selectedLottery, setSelectedLottery] = useState('');
   const { lotteries } = useLotteries({
-    enabled: !!user?.uid && !!userProfile?.role,
+    enabled: !!user?.uid && !!userProfile?.role && shouldLoadLotteries,
     selectedLottery,
     setSelectedLottery,
     onError: (error, _operation, target) => handleFirestoreError(error, OperationType.GET, target)
   });
   const { results, setResults, getResultKey, sortResultsByRecency } = useResults({
-    enabled: !!user?.uid && !!userProfile?.role,
+    enabled: !!user?.uid && !!userProfile?.role && shouldLoadResults,
     businessDayKey,
     onError: (error, _operation, target) => handleFirestoreError(error, OperationType.GET, target)
   });
@@ -1031,13 +1040,13 @@ function App() {
 
   const addToCart = () => {
     if (!number || !quantity) {
-      toast.error('Ingrese nÃºmero y cantidad');
+      toast.error('Ingrese número y cantidad');
       return;
     }
 
     const qInt = parseInt(quantity);
     if (isNaN(qInt) || qInt <= 0) {
-      toast.error('Cantidad invÃ¡lida');
+      toast.error('Cantidad inválida');
       return;
     }
 
@@ -1056,11 +1065,11 @@ function App() {
     }
 
     if (betType === 'PL' && !globalSettings.palesEnabled) {
-      toast.error('Pales estÃ¡n desactivados');
+      toast.error('Pales están desactivados');
       return;
     }
     if (betType === 'BL' && !globalSettings.billetesEnabled) {
-      toast.error('Billetes estÃ¡n desactivados');
+      toast.error('Billetes están desactivados');
       return;
     }
 
@@ -1084,7 +1093,7 @@ function App() {
     }
     
     if (lotteriesToBuy.size === 0) {
-      toast.error('Seleccione al menos un sorteo vÃ¡lido');
+      toast.error('Seleccione al menos un sorteo válido');
       return;
     }
 
@@ -1094,7 +1103,7 @@ function App() {
     } else if (betType === 'BL') {
       calculatedAmount = parseFloat(plAmount); // Reusing plAmount for BL investment
       if (isNaN(calculatedAmount) || calculatedAmount < 0.10) {
-        toast.error('InversiÃ³n mÃ­nima para Billete (BL) es USD 0.10');
+        toast.error('Inversión mínima para Billete (BL) es USD 0.10');
         return;
       }
     } else {
@@ -1105,7 +1114,7 @@ function App() {
         return;
       }
       if (qInt > 5) {
-        toast.error('MÃ¡ximo 5 combinaciones por nÃºmero en Pale (PL)');
+        toast.error('Máximo 5 combinaciones por número en Pale (PL)');
         return;
       }
       calculatedAmount = qInt * costPerUnit;
@@ -1125,7 +1134,7 @@ function App() {
           .reduce((acc, b) => acc + b.quantity, 0);
 
         if (inCart + inTickets + qInt > 5) {
-          toast.error(`Excede lÃ­mite de 5 combinaciones para #${number} en ${lot}`);
+          toast.error(`Excede límite de 5 combinaciones para #${number} en ${lot}`);
           return;
         }
       }
@@ -1178,7 +1187,7 @@ function App() {
         .reduce((acc, b) => acc + b.quantity, 0);
 
       if (inCartOther + inTickets + newQty > 5) {
-        toast.error(`Excede lÃ­mite de 5 combinaciones para #${num} en ${lot}`);
+        toast.error(`Excede límite de 5 combinaciones para #${num} en ${lot}`);
         return;
       }
     }
@@ -1245,7 +1254,7 @@ function App() {
         return;
       }
       if (!isLotteryOpenForSales(lot)) {
-        toast.error(`El sorteo ${bet.lottery} ya estÃ¡ cerrado.`);
+        toast.error(`El sorteo ${bet.lottery} ya está cerrado.`);
         return;
       }
       const hasResult = results.some(r => cleanText(r.lotteryName) === cleanText(bet.lottery) && r.date === todayStr);
@@ -1282,7 +1291,7 @@ function App() {
         setCustomerName('');
         setShowCheckoutModal(false);
         setShowTicketModal({ ticket: updatedTicket });
-        toast.success('Â¡Venta actualizada con Ã©xito!');
+        toast.success('¡Venta actualizada con éxito!');
       } else {
         // Create new ticket
         const sequenceNumber = getDailySequence();
@@ -1322,7 +1331,7 @@ function App() {
         setCustomerName('');
         setShowCheckoutModal(false);
         setShowTicketModal({ ticket: newTicket });
-        toast.success('Â¡Venta realizada con Ã©xito!');
+        toast.success('¡Venta realizada con éxito!');
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'tickets');
@@ -1356,7 +1365,7 @@ function App() {
       let closeH = parseInt(timeParts[1]);
       let closeM = parseInt(timeParts[2]);
       
-      // Si la hora de cierre es antes de la 1 AM, tambiÃ©n la ajustamos
+      // Si la hora de cierre es antes de la 1 AM, también la ajustamos
       const adjustedCloseH = closeH < 1 ? closeH + 24 : closeH;
       const closeTimeVal = adjustedCloseH * 60 + closeM;
 
@@ -1376,14 +1385,14 @@ function App() {
     if (isNaN(ticketDate.getTime())) return true; // Treat invalid dates as closed
     const now = new Date();
     
-    // Definir el "dÃ­a del sorteo" (que empieza a la 1 AM)
+    // Definir el "día del sorteo" (que empieza a la 1 AM)
     const getLotteryDay = (date: Date) => {
       const d = new Date(date);
       d.setHours(d.getHours() - 1);
       return format(d, 'yyyy-MM-dd');
     };
 
-    // Si no es el mismo "dÃ­a de sorteo", estÃ¡ cerrado
+    // Si no es el mismo "día de sorteo", está cerrado
     if (getLotteryDay(ticketDate) !== getLotteryDay(now)) return true;
 
     // Verificar cada apuesta del ticket
@@ -1698,7 +1707,7 @@ function App() {
     setConfirmModal({
       show: true,
       title: 'Borrar Venta',
-      message: 'Â¿EstÃ¡ seguro de borrar esta venta? Se eliminarÃ¡ permanentemente de la base de datos.',
+      message: '¿Está seguro de borrar esta venta? Se eliminará permanentemente de la base de datos.',
       onConfirm: async () => {
         try {
           await deleteTicketById(id);
@@ -1718,7 +1727,7 @@ function App() {
       ? format(ticket.timestamp.toDate(), 'dd/MM/yyyy HH:mm') 
       : format(new Date(), 'dd/MM/yyyy HH:mm');
     
-    let message = `*CHANCE PRO - TICKET DE LOTERÃA*\n`;
+    let message = `*CHANCE PRO - TICKET DE LOTERÍA*\n`;
     message += `--------------------------------\n`;
     message += `*Ticket:* #${ticketId}\n`;
     message += `*Vendedor:* ${ticket.sellerCode || '---'}\n`;
@@ -1740,10 +1749,10 @@ function App() {
     message += `--------------------------------\n`;
     message += `*TOTAL:* $${totalAmount.toFixed(2)} USD\n`;
     message += `--------------------------------\n`;
-    message += `_Â¡Buena Suerte!_`;
+    message += `_¡Buena Suerte!_`;
 
     const shareData = {
-      title: 'Ticket de LoterÃ­a - Chance Pro',
+      title: 'Ticket de Lotería - Chance Pro',
       text: message
     };
 
@@ -1800,11 +1809,11 @@ function App() {
       return;
     }
     if (newPassword !== confirmPassword) {
-      toast.error('Las contraseÃ±as no coinciden');
+      toast.error('Las contraseñas no coinciden');
       return;
     }
     if (newPassword.length < 6) {
-      toast.error('La contraseÃ±a debe tener al menos 6 caracteres');
+      toast.error('La contraseña debe tener al menos 6 caracteres');
       return;
     }
 
@@ -1812,7 +1821,7 @@ function App() {
     try {
       if (auth.currentUser) {
         await updatePassword(auth.currentUser, newPassword);
-        toast.success('ContraseÃ±a actualizada correctamente');
+        toast.success('Contraseña actualizada correctamente');
         setNewPassword('');
         setConfirmPassword('');
       } else {
@@ -1821,9 +1830,9 @@ function App() {
     } catch (error: any) {
       console.error('Error updating password:', error);
       if (error.code === 'auth/requires-recent-login') {
-        toast.error('Por seguridad, debe cerrar sesiÃ³n e iniciarla de nuevo para cambiar su contraseÃ±a.');
+        toast.error('Por seguridad, debe cerrar sesión e iniciarla de nuevo para cambiar su contraseña.');
       } else {
-        toast.error(`Error: ${error.message || 'No se pudo actualizar la contraseÃ±a'}`);
+        toast.error(`Error: ${error.message || 'No se pudo actualizar la contraseña'}`);
       }
     } finally {
       setIsUpdatingPassword(false);
@@ -1839,13 +1848,13 @@ function App() {
     }
 
      if (!canUpdatePersonalChancePrice) {
-      toast.error('Solo puedes cambiar este precio antes de tu primera venta del dÃ­a o despuÃ©s de ser liquidado');
+      toast.error('Solo puedes cambiar este precio antes de tu primera venta del día o después de ser liquidado');
       return;
     }
 
     const selectedConfig = globalSettings.chancePrices?.find(cp => Math.abs(cp.price - personalChancePrice) < 0.001);
     if (!selectedConfig) {
-      toast.error('Seleccione un precio de chance vÃ¡lido');
+      toast.error('Seleccione un precio de chance válido');
       return;
     }
 
@@ -1876,7 +1885,7 @@ function App() {
     if (userProfileData.role === 'admin') {
       const adminCount = users.filter(u => u.role === 'admin' && u.email !== authEmail).length;
       if (adminCount >= 5) {
-        toast.error('LÃ­mite mÃ¡ximo de 5 administradores alcanzado');
+        toast.error('Límite máximo de 5 administradores alcanzado');
         return;
       }
     }
@@ -1884,7 +1893,7 @@ function App() {
     if (userProfileData.role === 'ceo') {
       const ceoCount = users.filter(u => u.role === 'ceo' && u.email !== authEmail).length;
       if (ceoCount >= 3) {
-        toast.error('LÃ­mite mÃ¡ximo de 3 CEO alcanzado');
+        toast.error('Límite máximo de 3 CEO alcanzado');
         return;
       }
     }
@@ -1899,7 +1908,7 @@ function App() {
 
       if (password) {
         if (!secondaryAuth) {
-          throw new Error('Servicio de autenticaciÃ³n secundaria no disponible');
+          throw new Error('Servicio de autenticación secundaria no disponible');
         }
         // Create user in Firebase Auth using secondary app to avoid signing out the CEO
         try {
@@ -1945,13 +1954,13 @@ function App() {
       if (error.code === 'auth/email-already-in-use') {
         toast.error('El usuario ya existe');
       } else if (error.code === 'auth/invalid-email') {
-        toast.error('El formato del usuario es invÃ¡lido');
+        toast.error('El formato del usuario es inválido');
       } else if (error.code === 'auth/weak-password') {
-        toast.error('La contraseÃ±a es muy dÃ©bil');
+        toast.error('La contraseña es muy débil');
       } else if (error.code === 'auth/admin-restricted-operation') {
-        toast.error('Error: El registro de usuarios estÃ¡ restringido. Por favor, habilite "Permitir que los usuarios se registren" en la consola de Firebase (Authentication > Settings > User actions).');
+        toast.error('Error: El registro de usuarios está restringido. Por favor, habilite "Permitir que los usuarios se registren" en la consola de Firebase (Authentication > Settings > User actions).');
       } else if (error.code === 'auth/operation-not-allowed') {
-        toast.error('El registro de usuarios no estÃ¡ habilitado en Firebase');
+        toast.error('El registro de usuarios no está habilitado en Firebase');
       } else {
         toast.error(`Error: ${error.message || 'No se pudo guardar el usuario'}`);
       }
@@ -1962,7 +1971,7 @@ function App() {
     setConfirmModal({
       show: true,
       title: 'Eliminar Usuario',
-      message: 'Â¿EstÃ¡ seguro de eliminar este usuario? PerderÃ¡ acceso al sistema.',
+      message: '¿Está seguro de eliminar este usuario? Perderá acceso al sistema.',
       onConfirm: async () => {
         try {
           await deleteUserProfile(email);
@@ -1993,7 +2002,7 @@ function App() {
     setConfirmModal({
       show: true,
       title: 'Editar Venta',
-      message: 'Se cargarÃ¡n las apuestas al carrito para modificarlas. El ticket original se mantendrÃ¡ hasta que confirmes los cambios. Â¿Continuar?',
+      message: 'Se cargarán las apuestas al carrito para modificarlas. El ticket original se mantendrá hasta que confirmes los cambios. ¿Continuar?',
       onConfirm: () => {
         const uniqueTicketLotteries = Array.from(new Set(
           (ticket.bets || [])
@@ -2023,7 +2032,7 @@ function App() {
     setEditingTicketId(null);
     setCart([]);
     setCustomerName('');
-    toast.info('EdiciÃ³n cancelada');
+    toast.info('Edición cancelada');
   };
 
   const editCartItem = (idx: number) => {
@@ -2046,7 +2055,7 @@ function App() {
     try {
       const normalizedName = normalizeLotteryName(lotteryData.name || '');
       if (!normalizedName) {
-        toast.error('Ingrese un nombre de sorteo vÃ¡lido');
+        toast.error('Ingrese un nombre de sorteo válido');
         return;
       }
 
@@ -2056,19 +2065,19 @@ function App() {
       });
 
       if (hasDuplicateName) {
-        toast.error('Ya existe un sorteo con ese nombre. Use un nombre Ãºnico.');
+        toast.error('Ya existe un sorteo con ese nombre. Use un nombre único.');
         return;
       }
 
       if (editingLottery) {
         await updateLottery(editingLottery.id, lotteryData);
-        toast.success('LoterÃ­a actualizada');
+        toast.success('Lotería actualizada');
       } else {
         await createLottery({
           ...lotteryData,
           active: true
         });
-        toast.success('LoterÃ­a agregada');
+        toast.success('Lotería agregada');
       }
       setShowLotteryModal(false);
       setEditingLottery(null);
@@ -2080,7 +2089,7 @@ function App() {
   const toggleLotteryActive = async (lottery: Lottery) => {
     try {
       await setLotteryActive(lottery.id, !lottery.active);
-      toast.success(`LoterÃ­a ${lottery.active ? 'pausada' : 'activada'}`);
+      toast.success(`Lotería ${lottery.active ? 'pausada' : 'activada'}`);
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `lotteries/${lottery.id}`);
     }
@@ -2089,12 +2098,12 @@ function App() {
   const deleteLottery = async (id: string) => {
     setConfirmModal({
       show: true,
-      title: 'Eliminar LoterÃ­a',
-      message: 'Â¿EstÃ¡ seguro de eliminar esta loterÃ­a? Esta acciÃ³n no se puede deshacer.',
+      title: 'Eliminar Lotería',
+      message: '¿Está seguro de eliminar esta lotería? Esta acción no se puede deshacer.',
       onConfirm: async () => {
         try {
           await deleteLotteryById(id);
-          toast.success('LoterÃ­a eliminada');
+          toast.success('Lotería eliminada');
         } catch (error) {
           handleFirestoreError(error, OperationType.DELETE, `lotteries/${id}`);
         }
@@ -2149,7 +2158,7 @@ function App() {
 
     const selectedLottery = sortedLotteries.find(lottery => lottery.id === resultFormLotteryId);
     if (!selectedLottery) {
-      toast.error('Seleccione un sorteo vÃ¡lido');
+      toast.error('Seleccione un sorteo válido');
       return;
     }
 
@@ -2230,7 +2239,7 @@ function App() {
     setConfirmModal({
       show: true,
       title: 'Eliminar Resultado',
-      message: 'Â¿EstÃ¡ seguro de eliminar este resultado? Esta acciÃ³n no se puede deshacer.',
+      message: '¿Está seguro de eliminar este resultado? Esta acción no se puede deshacer.',
       onConfirm: async () => {
         try {
           await deleteResultById(id);
@@ -2271,7 +2280,7 @@ function App() {
       return;
     }
     if (liquidationDate !== businessDayKey && isLiquidationDataLoading) {
-      toast.error('Espera a que termine la carga de datos histÃ³ricos');
+      toast.error('Espera a que termine la carga de datos históricos');
       return;
     }
 
@@ -2295,12 +2304,12 @@ function App() {
 
     setConfirmModal({
       show: true,
-      title: selectedLiquidationSettlement ? 'Actualizar LiquidaciÃ³n' : 'Confirmar LiquidaciÃ³n Diaria',
-      message: `Â¿EstÃ¡ seguro de ${actionLabel} a ${userToLiquidate.name} para el dÃ­a ${liquidationDate}? \
+      title: selectedLiquidationSettlement ? 'Actualizar Liquidación' : 'Confirmar Liquidación Diaria',
+      message: `¿Está seguro de ${actionLabel} a ${userToLiquidate.name} para el día ${liquidationDate}? \
 \
 Utilidad Neta: USD ${netProfit.toFixed(2)}\
 Monto Entregado: USD ${paid.toFixed(2)}\
-Deuda AÃ±adida: USD ${debtAdded.toFixed(2)}\
+Deuda Añadida: USD ${debtAdded.toFixed(2)}\
 Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
       onConfirm: async () => {
         try {
@@ -2316,7 +2325,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
             ));
             const lowerMatches = settlementQueryByLower.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Settlement));
             if (lowerMatches.length > 1) {
-              console.warn('Se encontraron mÃºltiples settlements para el mismo usuario+fecha. Se actualizarÃ¡ el mÃ¡s reciente.', lowerMatches.map(item => item.id));
+              console.warn('Se encontraron múltiples settlements para el mismo usuario+fecha. Se actualizará el más reciente.', lowerMatches.map(item => item.id));
             }
             existingSettlement = lowerMatches.sort((a, b) => {
               const aTime = a.timestamp?.toDate?.()?.getTime?.() ?? (a.timestamp?.seconds ? a.timestamp.seconds * 1000 : 0);
@@ -2362,7 +2371,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
 
           const effectiveSettlementId = settlementId || existingSettlement?.id || '';
           console.log('Settlement guardado:', effectiveSettlementId);
-          console.log('Tickets a liquidar (solo dÃ­a actual):', ticketsToLiquidate.length);
+          console.log('Tickets a liquidar (solo día actual):', ticketsToLiquidate.length);
 
           const userRef = doc(db, 'users', userToLiquidate.email);
           await updateDoc(userRef, { currentDebt: finalNewTotalDebt });
@@ -2466,15 +2475,15 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
           }
 
           if (secondaryWarnings.length > 0 && isCurrentOperationalDate) {
-            toast.warning(`LiquidaciÃ³n guardada. Hubo incidencias secundarias en: ${secondaryWarnings.join(', ')}`);
+            toast.warning(`Liquidación guardada. Hubo incidencias secundarias en: ${secondaryWarnings.join(', ')}`);
           } else {
-            toast.success(existingSettlement ? 'LiquidaciÃ³n actualizada correctamente' : 'LiquidaciÃ³n guardada correctamente');
+            toast.success(existingSettlement ? 'Liquidación actualizada correctamente' : 'Liquidación guardada correctamente');
           }
 
           setAmountPaid(String(paid));
         } catch (error) {
           console.error('ERROR LIQUIDACION:', error);
-          alert('Error al guardar la liquidaciÃ³n. Revisa conexiÃ³n o permisos.');
+          alert('Error al guardar la liquidación. Revisa conexión o permisos.');
           handleFirestoreError(error, OperationType.WRITE, 'settlements');
         }
       }
@@ -2816,8 +2825,8 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
 
     setConfirmModal({
       show: true,
-      title: 'Archivar y Limpiar DÃ­a Operativo',
-      message: 'Se archivarÃ¡n los datos del dÃ­a operativo actual y luego se limpiarÃ¡n tickets, resultados e inyecciones operativas. Â¿Deseas continuar?',
+      title: 'Archivar y Limpiar Día Operativo',
+      message: 'Se archivarán los datos del día operativo actual y luego se limpiarán tickets, resultados e inyecciones operativas. ¿Deseas continuar?',
       onConfirm: async () => {
         try {
           const result = await runOperationalArchiveAndCleanup({
@@ -2841,7 +2850,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
   const applyLotteryToCart = (lotteryName: string) => {
     if (!lotteryName) return;
     setCart(cart.map(item => ({ ...item, lottery: lotteryName })));
-    toast.success(`LoterÃ­a ${cleanText(lotteryName)} aplicada a todo el pedido`);
+    toast.success(`Lotería ${cleanText(lotteryName)} aplicada a todo el pedido`);
   };
 
   const downloadDataUrlFile = (dataUrl: string, fileName: string) => {
@@ -2968,7 +2977,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
         dataUrl,
         fileName,
         title: `Cierre ${cleanText(cierreLottery)}`,
-        text: `Reporte de cierre de ${cleanText(cierreLottery)} para el dÃ­a ${historyDate}`,
+        text: `Reporte de cierre de ${cleanText(cierreLottery)} para el día ${historyDate}`,
         dialogTitle: 'Compartir Cierre'
       });
 
@@ -2976,7 +2985,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
         toast.success('Cierre compartido', { id: toastId });
       } else {
         downloadDataUrlFile(dataUrl, fileName);
-        toast.info('Tu dispositivo no permite compartir imÃ¡genes adjuntas. Se descargÃ³ para envÃ­o manual.', { id: toastId });
+        toast.info('Tu dispositivo no permite compartir imágenes adjuntas. Se descargó para envío manual.', { id: toastId });
       }
     } catch (err) {
       console.error('Error generating cierre image', err);
@@ -3379,7 +3388,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
       setSelectedUserToLiquidate(user.email.toLowerCase());
     }
 
-    toast.info(`Nuevo dÃ­a operativo iniciado: ${businessDayKey}`);
+    toast.info(`Nuevo día operativo iniciado: ${businessDayKey}`);
   }, [archiveDate, autoResetStateOnBusinessDayChange, businessDayKey, historyDate, liquidationDate, recoveryDate, user?.email, userProfile?.role, setInjections, setRecoveryDate, setSettlements, setTickets]);
 
   const saveRecoveryLotteryChange = useCallback(async (ticket: RecoveryTicketRecord) => {
@@ -3523,7 +3532,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
     setConfirmModal({
       show: true,
       title: 'Eliminar Ticket',
-      message: `Se eliminarÃ¡ el ticket ${ticket.id.slice(0, 8)} de ${ticket.source === 'tickets' ? 'LIVE' : `ARCHIVO ${ticket.archiveDate}`}. Â¿Deseas continuar?`,
+      message: `Se eliminará el ticket ${ticket.id.slice(0, 8)} de ${ticket.source === 'tickets' ? 'LIVE' : `ARCHIVO ${ticket.archiveDate}`}. ¿Deseas continuar?`,
       onConfirm: async () => {
         setRecoveryDeletingRowId(ticket.rowId);
         try {
@@ -3604,7 +3613,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
       .catch(error => {
         if (cancelled) return;
         console.error('Error loading liquidation source data:', error);
-        toast.error('No se pudieron cargar los datos histÃ³ricos para liquidaciÃ³n');
+        toast.error('No se pudieron cargar los datos históricos para liquidación');
       })
       .finally(() => {
         if (!cancelled) setIsLiquidationDataLoading(false);
@@ -3616,6 +3625,8 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
   }, [activeTab, businessDayKey, fetchUserOperationalDataByDate, liquidationDate, selectedUserToLiquidate]);
 
   const userStats = useMemo(() => {
+    if (!['users', 'history', 'dashboard', 'liquidaciones'].includes(activeTab)) return {};
+
     const stats: Record<string, { sales: number, commissions: number, prizes: number, injections: number, utility: number }> = {};
     
     // Initialize stats for all users
@@ -3659,6 +3670,29 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
 
     return stats;
   }, [activeTab, businessDayKey, users, tickets, historyTickets, injections, historyInjections, historyDate, getTicketPrizes]);
+  const handleLogoutFromUi = useCallback(() => {
+    handleLogout();
+    toast.info('Sesión cerrada');
+  }, [handleLogout]);
+
+  const navigationItems = useMemo<NavItem[]>(() => [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, role: ['ceo', 'admin', 'seller', 'programador'] },
+    { id: 'sales', label: 'Nueva Venta', icon: Plus },
+    { id: 'history', label: 'Resumen de ventas', icon: History },
+    { id: 'stats', label: 'Estadísticas', icon: BarChart3, role: ['ceo', 'admin', 'seller', 'programador'] },
+    { id: 'cierres', label: 'Cierres', icon: Printer, role: ['ceo', 'admin', 'seller', 'programador'] },
+    { id: 'results', label: 'Resultados', icon: CheckCircle2, role: ['ceo', 'admin', 'seller', 'programador'] },
+    { id: 'users', label: 'Usuarios', icon: Users, role: ['ceo', 'programador', 'canLiquidate'] },
+    { id: 'archivo', label: 'Archivo', icon: Archive, role: ['ceo', 'admin', 'programador'] },
+    { id: 'admin', label: 'Loterías', icon: ShieldCheck, role: ['ceo', 'programador'] },
+    { id: 'liquidaciones', label: 'Liquidaciones', icon: DollarSign, role: ['ceo', 'admin', 'seller', 'programador'], permission: 'canLiquidate' },
+    { id: 'recovery', label: 'Recuperación', icon: Database, role: ['programador'] },
+    { id: 'config', label: 'Configuración', icon: Settings, role: ['ceo', 'admin', 'seller', 'programador'] },
+  ], []);
+  const visibleNavigationItems = useMemo(
+    () => getVisibleNavItems(navigationItems, userProfile),
+    [navigationItems, userProfile]
+  );
 
   return (
     <>
@@ -3680,10 +3714,10 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
               <span>Tu cuenta ({user?.email}) no tiene permisos asignados en el sistema. Contacta al administrador.</span>
             </p>
             <button 
-              onClick={handleLogout}
+              onClick={handleLogoutFromUi}
               className="w-full bg-white/10 text-white py-3 rounded-xl font-bold uppercase tracking-widest hover:bg-white/20 transition-all flex items-center justify-center gap-2"
             >
-              <LogOut className="w-4 h-4" /> Cerrar SesiÃ³n
+              <LogOut className="w-4 h-4" /> Cerrar Sesión
             </button>
           </div>
         </div>
@@ -3828,33 +3862,10 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
         </div>
 
         <nav className="flex-1 px-4 space-y-2 mt-4">
-          {[
-            { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, role: ['ceo', 'admin', 'seller', 'programador'] },
-            { id: 'sales', label: 'Nueva Venta', icon: Plus },
-            { id: 'history', label: 'Resumen de ventas', icon: History },
-            { id: 'stats', label: 'EstadÃ­sticas', icon: BarChart3, role: ['ceo', 'admin', 'seller', 'programador'] },
-            { id: 'cierres', label: 'Cierres', icon: Printer, role: ['ceo', 'admin', 'seller', 'programador'] },
-            { id: 'results', label: 'Resultados', icon: CheckCircle2, role: ['ceo', 'admin', 'seller', 'programador'] },
-            { id: 'users', label: 'Usuarios', icon: Users, role: ['ceo', 'programador', 'canLiquidate'] },
-            { id: 'archivo', label: 'Archivo', icon: Archive, role: ['ceo', 'admin', 'programador'] },
-            { id: 'admin', label: 'LoterÃ­as', icon: ShieldCheck, role: ['ceo', 'programador'] },
-            { id: 'liquidaciones', label: 'Liquidaciones', icon: DollarSign, role: ['ceo', 'admin', 'seller', 'programador'], permission: 'canLiquidate' },
-            { id: 'recovery', label: 'RecuperaciÃ³n', icon: Database, role: ['programador'] },
-            { id: 'config', label: 'ConfiguraciÃ³n', icon: Settings, role: ['ceo', 'admin', 'seller', 'programador'] }
-          ].filter(item => {
-            if (!item.role) return true;
-            if (item.permission === 'canLiquidate') {
-              if (userProfile?.role === 'ceo' || userProfile?.role === 'seller' || userProfile?.role === 'programador') return true;
-              return userProfile?.canLiquidate;
-            }
-            if (item.id === 'users' && item.role.includes('canLiquidate')) {
-              return userProfile?.role === 'ceo' || userProfile?.role === 'programador' || userProfile?.canLiquidate;
-            }
-            return item.role.includes(userProfile?.role || '');
-          }).map((item) => (
+          {visibleNavigationItems.map((item) => (
             <button
               key={item.id}
-              onClick={() => setActiveTab(item.id as any)}
+              onClick={() => setActiveTab(item.id)}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
                 activeTab === item.id 
                   ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20' 
@@ -3873,7 +3884,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
             {isSidebarOpen && (
               <div className="flex flex-col">
                 <span className="text-[11px] font-black uppercase tracking-widest leading-none">
-                  {isOnline ? 'Sincronizado' : 'Sin ConexiÃ³n'}
+                  {isOnline ? 'Sincronizado' : 'Sin Conexión'}
                 </span>
                 <span className="text-[9px] font-mono opacity-60 uppercase">
                   {isOnline ? 'Nube Activa' : 'Modo Local'}
@@ -3882,11 +3893,11 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
             )}
           </div>
           <button 
-            onClick={handleLogout}
+            onClick={handleLogoutFromUi}
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-400 hover:bg-red-400/10 transition-all"
           >
             <LogOut className="w-5 h-5 flex-shrink-0" />
-            {isSidebarOpen && <span className="text-sm font-bold uppercase tracking-wider">Cerrar SesiÃ³n</span>}
+            {isSidebarOpen && <span className="text-sm font-bold uppercase tracking-wider">Cerrar Sesión</span>}
           </button>
         </div>
       </motion.aside>
@@ -3909,7 +3920,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
             </div>
             <div className="w-px h-6 bg-white/10 hidden sm:block"></div>
             <div className="flex flex-col items-center">
-              <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider">ComisiÃ³n</span>
+              <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider">Comisión</span>
               <span className="text-xs font-black text-primary">${todayStats.commissions.toFixed(2)}</span>
             </div>
             <div className="w-px h-6 bg-white/10 hidden sm:block"></div>
@@ -3928,9 +3939,9 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
 
           <div className="flex items-center gap-2 shrink-0">
             <button 
-              onClick={handleLogout}
+              onClick={handleLogoutFromUi}
               className="p-2 hover:bg-red-500/10 rounded-lg text-red-400"
-              title="Cerrar SesiÃ³n"
+              title="Cerrar Sesión"
             >
               <LogOut className="w-4 h-4" />
             </button>
@@ -3951,7 +3962,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                   {/* Block 1 (2 columns) */}
                   <div className="grid grid-cols-2 gap-2">
                     <div className="glass-card p-3 border-white/5 bg-white/[0.02]">
-                      <p className="text-[9px] text-muted-foreground uppercase tracking-widest mb-0.5">Ventas del dÃ­a</p>
+                      <p className="text-[9px] text-muted-foreground uppercase tracking-widest mb-0.5">Ventas del día</p>
                       <p className="text-lg font-medium text-white">${todayStats.sales.toFixed(2)}</p>
                     </div>
                     <div className="glass-card p-3 border-white/5 bg-white/[0.02]">
@@ -3990,7 +4001,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                           <div key={inj.id} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/10">
                             <div className="flex flex-col">
                               <span className="text-[10px] font-black text-white uppercase tracking-tighter">
-                                InyecciÃ³n Recibida
+                                Inyección Recibida
                               </span>
                               <span className="text-[9px] text-muted-foreground font-mono">
                                 {inj.timestamp?.toDate 
@@ -4149,7 +4160,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                         betType === 'PL' ? 'bg-primary text-primary-foreground shadow-lg' : 'text-muted-foreground hover:text-foreground'
                       }`}
                     >
-                      PalÃ©
+                      Palé
                     </button>
                   )}
                   {globalSettings.billetesEnabled && (isMultipleMode ? multiLottery.some(name => findActiveLotteryByName(name)?.isFourDigits) : findActiveLotteryByName(selectedLottery)?.isFourDigits) && (
@@ -4181,7 +4192,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                       focusedField === 'number' ? 'border-primary bg-primary/5' : 'border-transparent'
                     }`}
                   >
-                    <span className="text-[11px] font-mono uppercase text-muted-foreground font-medium">NÃºmero</span>
+                    <span className="text-[11px] font-mono uppercase text-muted-foreground font-medium">Número</span>
                     <div className="flex items-center justify-center min-h-[32px] relative w-full">
                       <input
                         ref={numberInputRef}
@@ -4236,7 +4247,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                     }`}
                   >
                     <span className="text-[11px] font-mono uppercase text-muted-foreground font-medium">
-                      {betType === 'CH' ? 'Cantidad' : 'InversiÃ³n'}
+                      {betType === 'CH' ? 'Cantidad' : 'Inversión'}
                     </span>
                     <div className="flex items-center justify-center min-h-[32px] relative w-full">
                       <input
@@ -4393,7 +4404,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                   className="w-full py-3 bg-white/5 border border-border rounded-xl text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground transition-all flex items-center justify-center gap-2"
                 >
                   <Zap className="w-4 h-4" />
-                  Copiado RÃ¡pido
+                  Copiado Rápido
                 </button>
 
                 {/* Seller Daily Balance Summary */}
@@ -4402,7 +4413,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                     <div className="flex items-center justify-between border-b border-primary/10 pb-2">
                       <div className="flex items-center gap-2">
                         <LayoutDashboard className="w-4 h-4 text-primary" />
-                        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Resumen del DÃ­a</h3>
+                        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Resumen del Día</h3>
                       </div>
                       <span className="text-[10px] font-mono opacity-50">{todayStr}</span>
                     </div>
@@ -4520,7 +4531,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                 <div className="glass-card p-4 sm:p-6 border border-white/5">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
                     <div>
-                      <h2 className="text-xl font-light text-white">EstadÃ­sticas de Venta</h2>
+                      <h2 className="text-xl font-light text-white">Estadísticas de Venta</h2>
                       <p className="text-sm font-light text-muted-foreground mt-1">Fracciones y combinaciones por sorteo</p>
                     </div>
                     <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
@@ -4606,7 +4617,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                           {isExpanded && (
                             <div className="p-3 border-t border-white/5">
                               <div className="mb-4">
-                                <h4 className="text-xs font-light text-white/70 mb-2">NÃºmeros (00-99) - Fracciones</h4>
+                                <h4 className="text-xs font-light text-white/70 mb-2">Números (00-99) - Fracciones</h4>
                                 <div className="grid grid-cols-10 gap-[2px]">
                                   {Array.from({ length: 100 }).map((_, i) => {
                                     const num = i.toString().padStart(2, '0');
@@ -4794,11 +4805,11 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                           <table className="w-full text-sm border-collapse mb-6">
                             <thead>
                               <tr className="bg-gray-100">
-                                <th className="border p-2 text-center w-1/6">NÃºm</th>
+                                <th className="border p-2 text-center w-1/6">Núm</th>
                                 <th className="border p-2 text-center w-1/6">Tiempos</th>
-                                <th className="border p-2 text-center w-1/6">NÃºm</th>
+                                <th className="border p-2 text-center w-1/6">Núm</th>
                                 <th className="border p-2 text-center w-1/6">Tiempos</th>
-                                <th className="border p-2 text-center w-1/6">NÃºm</th>
+                                <th className="border p-2 text-center w-1/6">Núm</th>
                                 <th className="border p-2 text-center w-1/6">Tiempos</th>
                               </tr>
                             </thead>
@@ -5027,7 +5038,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
 
         {/* Footer */}
         <footer className="h-auto min-h-12 glass border-t border-border px-3 sm:px-8 py-2 flex items-center justify-between gap-2 shrink-0 text-[8px] sm:text-[9px] font-mono text-muted-foreground uppercase tracking-[0.12em] sm:tracking-[0.2em]">
-          <p>Â© 2026 CHANCE PRO SYSTEMS â€¢ TERMINAL {user.uid.slice(0, 8)}</p>
+          <p>© 2026 CHANCE PRO SYSTEMS • TERMINAL {user.uid.slice(0, 8)}</p>
           <div className="flex gap-3 sm:gap-8 flex-wrap justify-end">
             <span className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-green-500" /> SERVER: OK</span>
             <span>V1.2.0-STABLE</span>

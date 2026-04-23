@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, googleProvider, auth, db, doc, setDoc, getDoc, signOut } from '../../firebase';
+import { signInWithPopup, signInWithRedirect, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, googleProvider, auth, db, doc, setDoc, getDoc, signOut } from '../../firebase';
 import { AlertTriangle, ChevronRight, Lock, ShieldCheck, Ticket as TicketIcon, User as UserIcon } from 'lucide-react';
 import { motion } from 'motion/react';
 import { format } from 'date-fns';
@@ -120,6 +120,9 @@ const Login = () => {
     const toastId = toast.loading('Iniciando sesion con Google...');
 
     try {
+      if (!auth || !googleProvider) {
+        throw new Error('Firebase Auth de Google no esta inicializado.');
+      }
       const ceoEmail = (import.meta.env.VITE_CEO_EMAIL || 'zsayeth09@gmail.com').toLowerCase();
       const userCredential = await signInWithPopup(auth, googleProvider);
       const signedInEmail = (userCredential.user.email || '').toLowerCase();
@@ -152,6 +155,11 @@ const Login = () => {
       localStorage.setItem('sessionBusinessDay', format(getBusinessDate(), 'yyyy-MM-dd'));
       toast.success('Sesion iniciada con Google', { id: toastId });
     } catch (error: any) {
+      if (error?.code === 'auth/argument-error') {
+        await signInWithRedirect(auth, googleProvider);
+        return;
+      }
+
       let errorMessage = 'No se pudo iniciar sesion con Google';
 
       if (error?.code === 'auth/popup-closed-by-user') {

@@ -7,14 +7,17 @@ type FirestoreErrorHandler = (error: unknown, operation: 'get' | 'list', target:
 
 export function useUsers({
   role,
+  enabled = true,
   onError,
 }: {
   role?: string;
+  enabled?: boolean;
   onError?: FirestoreErrorHandler;
 }) {
   const [users, setUsers] = useState<UserProfile[]>([]);
 
   useEffect(() => {
+    if (!enabled) return;
     if (role !== 'ceo' && role !== 'admin' && role !== 'programador') return;
 
     console.log('Fetching all users for role:', role);
@@ -29,7 +32,7 @@ export function useUsers({
     });
 
     return () => unsubscribe();
-  }, [onError, role]);
+  }, [enabled, onError, role]);
 
   return {
     users,

@@ -146,7 +146,7 @@ export function useRecovery({
       setRecoveryTargetLotteryMapByRow(nextMultiSelection);
     } catch (error) {
       console.error('Error fetching recovery data:', error);
-      toast.error('No se pudieron cargar tickets para recuperaciÃ³n');
+      toast.error('No se pudieron cargar tickets para recuperación');
     } finally {
       setIsRecoveryLoading(false);
     }

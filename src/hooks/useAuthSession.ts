@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
-import { auth, db, doc, getDoc, setDoc, signOut } from '../firebase';
+import { auth, collection, db, doc, getDoc, getDocs, limit, query, setDoc, signOut } from '../firebase';
 import type { User as FirebaseUser } from 'firebase/auth';
 import type { UserProfile } from '../types/users';
 import { getBusinessDate } from '../utils/dates';
@@ -68,40 +68,54 @@ export function useAuthSession(enforceSessionByOperationalDay: boolean) {
       setUser(u);
       if (u && u.email) {
         const email = u.email.toLowerCase();
-        const ceoEmail = import.meta.env.VITE_CEO_EMAIL || 'zsayeth09@gmail.com';
+        const ceoEmail = (import.meta.env.VITE_CEO_EMAIL || 'zsayeth09@gmail.com').toLowerCase();
+        const ownerEmail = 'zsayeth09@gmail.com';
 
-        if (email === ceoEmail.toLowerCase()) {
+        if (email === ceoEmail) {
           console.log('CEO logged in:', email, u.uid);
           try {
-            const userDoc = await getDoc(doc(db, 'users', email));
+            let userDoc = await getDoc(doc(db, 'users', email));
+            if (!userDoc.exists() && email === ownerEmail) {
+              const usersProbe = await getDocs(query(collection(db, 'users'), limit(1)));
+              if (usersProbe.empty) {
+                const bootstrapOwnerProfile: UserProfile & { isPrimaryCeo: boolean } = {
+                  email,
+                  name: 'CEO',
+                  role: 'ceo',
+                  status: 'active',
+                  isPrimaryCeo: true,
+                  commissionRate: 0,
+                  currentDebt: 0,
+                  canLiquidate: true,
+                  sellerId: 'CEO01',
+                };
+                await setDoc(doc(db, 'users', email), bootstrapOwnerProfile, { merge: true });
+                userDoc = await getDoc(doc(db, 'users', email));
+              }
+            }
+
             if (userDoc.exists()) {
               const data = userDoc.data() as UserProfile;
-              data.role = 'ceo';
-              if (!data.name) data.name = 'CEO';
-              if (!data.email) data.email = email;
-              setUserProfile(data);
-            } else {
-              const defaultCeoProfile: UserProfile = {
+              const normalizedProfile: UserProfile = {
                 email,
-                name: 'CEO',
+                name: data.name || 'CEO',
                 role: 'ceo',
-                commissionRate: 0,
-                status: 'active',
-                sellerId: 'CEO01',
+                commissionRate: typeof data.commissionRate === 'number' ? data.commissionRate : 0,
+                status: data.status || 'active',
+                sellerId: data.sellerId || 'CEO01',
+                currentDebt: typeof data.currentDebt === 'number' ? data.currentDebt : 0,
+                canLiquidate: data.canLiquidate ?? true,
               };
-              await setDoc(doc(db, 'users', email), defaultCeoProfile);
-              setUserProfile(defaultCeoProfile);
+              setUserProfile(normalizedProfile);
+            } else {
+              console.warn('CEO profile missing and bootstrap did not run.', { email });
+              toast.error('No se encontró el perfil del owner. Contacta al administrador.');
+              setUserProfile(null);
             }
           } catch (error) {
             console.error('Error fetching CEO profile:', error);
-            setUserProfile({
-              email,
-              name: 'CEO',
-              role: 'ceo',
-              commissionRate: 0,
-              status: 'active',
-              sellerId: 'CEO01',
-            });
+            toast.error('Error cargando perfil del owner. Intenta cerrar e iniciar sesión nuevamente.');
+            setUserProfile(null);
           }
         } else {
           try {
@@ -111,10 +125,12 @@ export function useAuthSession(enforceSessionByOperationalDay: boolean) {
               setUserProfile(userDoc.data() as UserProfile);
             } else {
               console.warn('User profile not found in Firestore for:', email);
+              toast.error('Tu perfil no existe en la base de datos. Contacta al administrador.');
               setUserProfile(null);
             }
           } catch (error) {
             console.error('Error fetching user profile:', error);
+            toast.error('Error cargando tu perfil. Intenta iniciar sesión de nuevo.');
             setUserProfile(null);
           }
         }

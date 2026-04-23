@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { motion } from 'motion/react';
 
 type ArchiveSectionProps = any;
@@ -37,7 +37,7 @@ export function ArchiveSection(props: ArchiveSectionProps) {
                 <div className="glass-card p-4 sm:p-6 md:p-10">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-10 gap-6">
                     <div>
-                      <h2 className="text-2xl font-black italic tracking-tighter neon-text uppercase">ARCHIVO HISTÃ“RICO</h2>
+                      <h2 className="text-2xl font-black italic tracking-tighter neon-text uppercase">ARCHIVO HISTÓRICO</h2>
                       <p className="text-xs font-mono text-muted-foreground mt-1 uppercase tracking-widest">Consulta de Datos y Liquidaciones Pasadas</p>
                     </div>
                   </div>
@@ -45,7 +45,7 @@ export function ArchiveSection(props: ArchiveSectionProps) {
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     <div className="lg:col-span-1 space-y-6">
                       <div className="space-y-2">
-                        <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Fecha a Consultar (por defecto: dÃ­a anterior)</label>
+                        <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Fecha a Consultar (por defecto: día anterior)</label>
                         <input 
                           type="date"
                           value={archiveDate}
@@ -127,7 +127,7 @@ export function ArchiveSection(props: ArchiveSectionProps) {
                           <div className="glass-card p-8 space-y-8 bg-black border-white/10 relative overflow-hidden">
                             <div className="flex justify-between items-start border-b border-white/10 pb-6">
                               <div>
-                                <h3 className="text-xl font-black uppercase tracking-tighter text-primary">REPORTE HISTÃ“RICO</h3>
+                                <h3 className="text-xl font-black uppercase tracking-tighter text-primary">REPORTE HISTÓRICO</h3>
                                 <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">{archiveDate}</p>
                               </div>
                               <div className="text-right">

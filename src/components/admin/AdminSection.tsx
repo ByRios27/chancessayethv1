@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { motion } from 'motion/react';
 import { Plus, Settings, ShieldCheck, Trash2, TrendingUp, XCircle } from 'lucide-react';
 
@@ -49,7 +49,7 @@ export function AdminSection(props: AdminSectionProps) {
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-6 mb-10">
                     <div>
                       <h2 className="text-2xl font-black italic tracking-tighter neon-text uppercase">ADMINISTRACI?N</h2>
-                      <p className="text-xs font-mono text-muted-foreground mt-1 uppercase tracking-widest">GestiÃ³n de LoterÃ­as y ParÃ¡metros</p>
+                      <p className="text-xs font-mono text-muted-foreground mt-1 uppercase tracking-widest">Gestión de Loterías y Parámetros</p>
                     </div>
                     <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
                       {(userProfile?.role === 'ceo' || userProfile?.role === 'programador') && (
@@ -67,7 +67,7 @@ export function AdminSection(props: AdminSectionProps) {
                             }}
                             className="flex-1 sm:flex-none bg-primary text-primary-foreground px-4 sm:px-6 py-3 rounded-xl font-bold uppercase text-[10px] sm:text-xs tracking-widest flex items-center justify-center gap-2 hover:brightness-110 transition-all"
                           >
-                            <Plus className="w-4 h-4" /> Nueva LoterÃ­a
+                            <Plus className="w-4 h-4" /> Nueva Lotería
                           </button>
                         </>
                       )}
@@ -142,14 +142,14 @@ export function AdminSection(props: AdminSectionProps) {
                           for (const lot of defaults) {
                             await createLottery({ ...lot, active: true });
                           }
-                          toast.success('LoterÃ­as iniciales creadas');
+                          toast.success('Loterías iniciales creadas');
                         }}
                         className="col-span-full p-10 border-2 border-dashed border-border rounded-2xl flex flex-col items-center justify-center gap-4 hover:bg-white/5 transition-all group"
                       >
                         <Settings className="w-12 h-12 text-muted-foreground group-hover:text-primary transition-colors" />
                         <div className="text-center">
-                          <p className="font-black uppercase tracking-widest text-sm">Sembrar LoterÃ­as Iniciales</p>
-                          <p className="text-[10px] font-mono text-muted-foreground mt-1">Configura rÃ¡pidamente las loterÃ­as mÃ¡s comunes de Colombia</p>
+                          <p className="font-black uppercase tracking-widest text-sm">Sembrar Loterías Iniciales</p>
+                          <p className="text-[10px] font-mono text-muted-foreground mt-1">Configura rápidamente las loterías más comunes de Colombia</p>
                         </div>
                       </button>
                     )}
@@ -162,19 +162,19 @@ export function AdminSection(props: AdminSectionProps) {
                           let fixedCount = 0;
                           for (const docSnap of snap.docs) {
                             const data = docSnap.data();
-                            if (data.name && (data.name.includes('??') || data.name.includes('<') || data.name.includes('Ã'))) {
+                            if (data.name && (data.name.includes('??') || data.name.includes('<') || data.name.includes('Ý'))) {
                               const newName = cleanText(data.name);
                               await updateDoc(doc(db, 'lotteries', docSnap.id), { name: newName });
                               fixedCount++;
                             }
                           }
-                          toast.success(`${fixedCount} loterÃ­as corregidas`);
+                          toast.success(`${fixedCount} loterías corregidas`);
                         }}
                         className="col-span-full p-4 border border-dashed border-primary/30 rounded-xl flex items-center justify-center gap-4 hover:bg-primary/5 transition-all group mt-4"
                       >
                         <ShieldCheck className="w-5 h-5 text-primary" />
                         <div className="text-center">
-                          <p className="font-bold uppercase tracking-widest text-xs">Corregir Nombres de LoterÃ­as Corruptos</p>
+                          <p className="font-bold uppercase tracking-widest text-xs">Corregir Nombres de Loterías Corruptos</p>
                         </div>
                       </button>
                     )}
@@ -189,8 +189,8 @@ export function AdminSection(props: AdminSectionProps) {
                             <Trash2 className="w-5 h-5" /> Zona de Peligro
                           </h3>
                           <p className="text-xs font-mono text-muted-foreground mt-2 max-w-xl">
-                            Esta acciÃ³n eliminarÃ¡ permanentemente todos los registros de ventas, tickets, inyecciones de capital y resultados de loterÃ­as. 
-                            Solo las loterÃ­as y los usuarios se mantendrÃ¡n intactos.
+                            Esta acción eliminará permanentemente todos los registros de ventas, tickets, inyecciones de capital y resultados de loterías. 
+                            Solo las loterías y los usuarios se mantendrán intactos.
                           </p>
                         </div>
                         <button 

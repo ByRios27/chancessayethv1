@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { motion } from 'motion/react';
 import { Lock, Ticket as TicketIcon } from 'lucide-react';
 
@@ -31,7 +31,7 @@ export function ConfigSection(props: ConfigSectionProps) {
                 <div className="glass-card p-4 sm:p-6 md:p-10">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-10 gap-6">
                     <div>
-                      <h2 className="text-2xl font-black italic tracking-tighter neon-text uppercase">CONFIGURACIÃ“N</h2>
+                      <h2 className="text-2xl font-black italic tracking-tighter neon-text uppercase">CONFIGURACIÓN</h2>
                       <p className="text-xs font-mono text-muted-foreground mt-1 uppercase tracking-widest">Ajustes Personales y del Sistema</p>
                     </div>
                   </div>
@@ -62,11 +62,11 @@ export function ConfigSection(props: ConfigSectionProps) {
                           </select>
                         </div>
                         <p className="text-[10px] text-muted-foreground leading-relaxed">
-                          Este ajuste personal define a quÃ© precio venderÃ¡s los chances y cÃ³mo el sistema calcularÃ¡ sus premios segÃºn la tabla global configurada por el CEO.
+                          Este ajuste personal define a qué precio venderás los chances y cómo el sistema calculará sus premios según la tabla global configurada por el CEO.
                         </p>
                         {!canUpdatePersonalChancePrice && (
                           <p className="text-[10px] text-amber-400 leading-relaxed">
-                            Este precio solo puede cambiarse antes de tu primera venta del dÃ­a o despuÃ©s de haber sido liquidado.
+                            Este precio solo puede cambiarse antes de tu primera venta del día o después de haber sido liquidado.
                           </p>
                         )}
                         <button
@@ -90,23 +90,23 @@ export function ConfigSection(props: ConfigSectionProps) {
 
                       <form onSubmit={handleUpdatePassword} className="space-y-4">
                         <div className="space-y-2">
-                          <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Nueva ContraseÃ±a</label>
+                          <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Nueva Contraseña</label>
                           <input 
                             type="password"
                             value={newPassword}
                             onChange={(e) => setNewPassword(e.target.value)}
                             className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition-all"
-                            placeholder="MÃ­nimo 6 caracteres"
+                            placeholder="Mínimo 6 caracteres"
                           />
                         </div>
                         <div className="space-y-2">
-                          <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Confirmar ContraseÃ±a</label>
+                          <label className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Confirmar Contraseña</label>
                           <input 
                             type="password"
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
                             className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition-all"
-                            placeholder="Repita la contraseÃ±a"
+                            placeholder="Repita la contraseña"
                           />
                         </div>
                         <button 
@@ -114,7 +114,7 @@ export function ConfigSection(props: ConfigSectionProps) {
                           disabled={isUpdatingPassword}
                           className="w-full bg-primary text-primary-foreground py-3 rounded-xl font-black uppercase tracking-widest text-xs hover:bg-primary/90 transition-all disabled:opacity-50"
                         >
-                          {isUpdatingPassword ? 'Actualizando...' : 'Cambiar ContraseÃ±a'}
+                          {isUpdatingPassword ? 'Actualizando...' : 'Cambiar Contraseña'}
                         </button>
                       </form>
                     </div>

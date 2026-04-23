@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { motion } from 'motion/react';
 import { Share2 } from 'lucide-react';
 import { toast } from 'sonner';

@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { motion } from 'motion/react';
 import { format } from 'date-fns';
 import { normalizePlainText } from '../../utils/text';
@@ -318,7 +318,7 @@ export function HistorySection(props: HistorySectionProps) {
                                         Anterior
                                       </button>
                                       <span className="text-[10px] font-mono text-muted-foreground">
-                                        PÃ¡gina {currentPage} de {totalPages}
+                                        Página {currentPage} de {totalPages}
                                       </span>
                                       <button 
                                         onClick={(e) => {

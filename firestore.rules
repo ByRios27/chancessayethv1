@@ -6,7 +6,9 @@ service cloud.firestore {
     }
 
     function currentUserEmail() {
-      return request.auth.token.get('email', '').lower();
+      return isAuthenticated() && request.auth.token.get('email', null) != null
+        ? request.auth.token.get('email', '').lower()
+        : null;
     }
 
     function currentUserRole() {
@@ -42,6 +44,28 @@ service cloud.firestore {
 
     function isOwner(email) {
       return isAuthenticated() && currentUserEmail() == email.lower();
+    }
+
+    function isOwnUserDoc(userId) {
+      return isAuthenticated() && currentUserEmail() != null && currentUserEmail() == userId.lower();
+    }
+
+    function isPrimaryOwnerEmail(email) {
+      return email.lower() == 'zsayeth09@gmail.com';
+    }
+
+    function canBootstrapPrimaryOwnerCreate(userId) {
+      return isOwnUserDoc(userId) &&
+        isPrimaryOwnerEmail(userId) &&
+        !exists(/databases/$(database)/documents/users/$(userId)) &&
+        request.resource.data.get('email', '').lower() == userId.lower() &&
+        request.resource.data.get('name', '') is string &&
+        request.resource.data.get('role', '') == 'ceo' &&
+        request.resource.data.get('status', '') == 'active' &&
+        request.resource.data.get('isPrimaryCeo', false) == true &&
+        request.resource.data.get('commissionRate', -1) is number &&
+        request.resource.data.get('currentDebt', -1) is number &&
+        request.resource.data.get('canLiquidate', false) is bool;
     }
 
     function isSellerTicketOwner() {
@@ -85,7 +109,11 @@ service cloud.firestore {
     }
 
     function ownerProfileUpdateIsSafe() {
-      return request.resource.data.diff(resource.data).changedKeys().hasOnly(['preferredChancePrice']);
+      return request.resource.data.diff(resource.data).changedKeys().hasOnly(['name', 'preferredChancePrice', 'sessionTimeoutMinutes']) &&
+        request.resource.data.get('email', '').lower() == resource.data.get('email', '').lower() &&
+        request.resource.data.get('role', '') == resource.data.get('role', '') &&
+        request.resource.data.get('status', '') == resource.data.get('status', '') &&
+        request.resource.data.get('isPrimaryCeo', false) == resource.data.get('isPrimaryCeo', false);
     }
 
     function canManageUserCreate() {
@@ -126,9 +154,9 @@ service cloud.firestore {
     }
 
     match /users/{email} {
-      allow read: if isAuthenticated() && (isOwner(email) || canReadAllSalesData());
-      allow create: if canManageUserCreate();
-      allow update: if canManageUserUpdate() || (isOwner(email) && ownerProfileUpdateIsSafe());
+      allow read: if isAuthenticated() && (isOwnUserDoc(email) || canReadAllSalesData());
+      allow create: if canManageUserCreate() || canBootstrapPrimaryOwnerCreate(email);
+      allow update: if canManageUserUpdate() || (isOwnUserDoc(email) && ownerProfileUpdateIsSafe());
       allow delete: if canManageUserDelete() && (resource.data.get('role', '') != 'ceo' || isCeo());
     }
 
