@@ -348,13 +348,17 @@ function App() {
   const [expandedLotteries, setExpandedLotteries] = useState<string[]>([]);
   const [lotteryPages, setLotteryPages] = useState<Record<string, number>>({});
   const [editingTicketId, setEditingTicketId] = useState<string | null>(null);
+  const handleUsersHookError = useCallback((error: unknown, operation: 'get' | 'list', target: string) => {
+    const op = operation === 'list' ? OperationType.LIST : OperationType.GET;
+    handleFirestoreError(error, op, target);
+  }, []);
+  const handleOperationalHookError = useCallback((error: unknown, _operation: 'get' | 'list', target: string) => {
+    handleFirestoreError(error, OperationType.GET, target);
+  }, []);
   const { users, setUsers } = useUsers({
     role: userProfile?.role,
     enabled: shouldLoadUsersList,
-    onError: (error, operation, target) => {
-      const op = operation === 'list' ? OperationType.LIST : OperationType.GET;
-      handleFirestoreError(error, op, target);
-    }
+    onError: handleUsersHookError
   });
   
   const selectableUsers = useMemo(() => {
@@ -427,31 +431,33 @@ function App() {
     netProfit: number;
     sortedTicketsForLot: Array<{ t: LotteryTicket; prize: number }>;
   }>>(new Map());
+  const baseRealtimeEnabled = !!user?.uid && !!userProfile?.role && needsRealtimeOperationalData;
+  const ticketsRealtimeEnabled = baseRealtimeEnabled;
+  const injectionsRealtimeEnabled = baseRealtimeEnabled && activeTab !== 'sales';
+  const settlementsRealtimeEnabled = baseRealtimeEnabled && activeTab !== 'sales';
 
   const { tickets, setTickets } = useTickets({
-    enabled: !!user?.uid && !!userProfile?.role && needsRealtimeOperationalData,
+    enabled: ticketsRealtimeEnabled,
     canAccessAllUsers,
     businessDayKey,
     userUid: user?.uid,
-    userEmail: user?.email,
     userRole: userProfile?.role,
-    userCanLiquidate: userProfile?.canLiquidate,
-    onError: (error, _operation, target) => handleFirestoreError(error, OperationType.GET, target),
+    onError: handleOperationalHookError,
   });
 
   const { injections, setInjections } = useInjections({
-    enabled: !!user?.uid && !!userProfile?.role && needsRealtimeOperationalData,
+    enabled: injectionsRealtimeEnabled,
     canAccessAllUsers,
     businessDayKey,
     userEmail: user?.email,
-    onError: (error, _operation, target) => handleFirestoreError(error, OperationType.GET, target),
+    onError: handleOperationalHookError,
   });
 
   const { settlements, setSettlements } = useSettlements({
-    enabled: !!user?.uid && !!userProfile?.role && needsRealtimeOperationalData,
+    enabled: settlementsRealtimeEnabled,
     canAccessAllUsers,
     userEmail: user?.email,
-    onError: (error, _operation, target) => handleFirestoreError(error, OperationType.GET, target),
+    onError: handleOperationalHookError,
   });
 
   useEffect(() => {
@@ -516,14 +522,15 @@ function App() {
   const [selectedLottery, setSelectedLottery] = useState('');
   const { lotteries } = useLotteries({
     enabled: !!user?.uid && !!userProfile?.role && shouldLoadLotteries,
+    onlyActive: activeTab === 'sales',
     selectedLottery,
     setSelectedLottery,
-    onError: (error, _operation, target) => handleFirestoreError(error, OperationType.GET, target)
+    onError: handleOperationalHookError
   });
   const { results, setResults, getResultKey, sortResultsByRecency } = useResults({
     enabled: !!user?.uid && !!userProfile?.role && shouldLoadResults,
     businessDayKey,
-    onError: (error, _operation, target) => handleFirestoreError(error, OperationType.GET, target)
+    onError: handleOperationalHookError
   });
   const [cart, setCart] = useState<Bet[]>([]);
   const cartTotal = useMemo(() => {
@@ -916,19 +923,8 @@ function App() {
           where('timestamp', '<', end),
           limit(600)
         );
-        const historyBySellerEmailQ = sellerEmail
-          ? query(
-              collection(db, 'tickets'),
-              where('sellerEmail', '==', sellerEmail),
-              where('timestamp', '>=', start),
-              where('timestamp', '<', end),
-              limit(600)
-            )
-          : null;
-
-        const [historyByIdSnap, historyByEmailSnap, injectionSnap, settlementSnap, resultSnap] = await Promise.all([
+        const [historyByIdSnap, injectionSnap, settlementSnap, resultSnap] = await Promise.all([
           getDocs(historyBySellerIdQ),
-          historyBySellerEmailQ ? getDocs(historyBySellerEmailQ) : Promise.resolve(null),
           sellerEmail ? getDocs(query(
             collection(db, 'injections'),
             where('userEmail', '==', sellerEmail),
@@ -949,7 +945,7 @@ function App() {
         ]);
 
         if (!cancelled) {
-          const loadedTickets = mergeTicketSnapshots(historyByIdSnap, historyByEmailSnap);
+          const loadedTickets = mergeTicketSnapshots(historyByIdSnap);
           const loadedInjections = injectionSnap ? injectionSnap.docs.map(d => ({ id: d.id, ...d.data() } as Injection)) : [];
           const loadedSettlements = settlementSnap ? settlementSnap.docs.map(d => ({ id: d.id, ...d.data() } as Settlement)) : [];
           const loadedResults = resultSnap.docs.map(d => ({ id: d.id, ...d.data() } as LotteryResult));
@@ -1032,7 +1028,7 @@ function App() {
   };
 
   const hasOwnUnliquidatedSalesInBusinessDay = tickets.some(t =>
-    (t.sellerId === user?.uid || t.sellerEmail?.toLowerCase() === user?.email?.toLowerCase()) &&
+    t.sellerId === user?.uid &&
     !t.liquidated
   );
 
@@ -3049,7 +3045,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
     const todayTickets = tickets.filter(t => {
       const tDate = getTicketDateKey(t);
       const matchesDate = tDate === todayStr;
-      const matchesUser = canAccessAllUsers || t.sellerId === user?.uid || t.sellerEmail?.toLowerCase() === user?.email?.toLowerCase();
+      const matchesUser = canAccessAllUsers || t.sellerId === user?.uid;
       // Keep daily fixed markers stable through liquidations: include any non-cancelled ticket.
       return matchesDate && matchesUser && t.status !== 'cancelled';
     });
@@ -3094,7 +3090,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
       const ticketDate = format(tDate, 'yyyy-MM-dd');
       const matchesDate = activeTab === 'history' ? ticketDate === historyDate : true;
       
-      const matchesUser = canAccessAllUsers || t.sellerId === user?.uid || t.sellerEmail?.toLowerCase() === user?.email?.toLowerCase();
+      const matchesUser = canAccessAllUsers || t.sellerId === user?.uid;
 
       const matchesSearch = t.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (t.bets && t.bets.some(b => b && b.number && b.number.includes(searchTerm))) ||
@@ -4754,7 +4750,7 @@ Nueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
                       if (t.status === 'cancelled') return false;
                       if (!ticketMatchesGlobalChancePrice(t)) return false;
                       if (canAccessAllUsers) return true;
-                      return t.sellerId === user?.uid || t.sellerEmail?.toLowerCase() === user?.email?.toLowerCase();
+                      return t.sellerId === user?.uid;
                     });
                     const bets = scopedTickets.flatMap(t => t.bets || []).filter(b => cleanText(b.lottery) === cleanText(cierreLottery));
                     const lotteryInfo = lotteries.find(l => cleanText(l.name) === cleanText(cierreLottery));

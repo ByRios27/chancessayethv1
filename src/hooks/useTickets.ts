@@ -11,18 +11,14 @@ export function useTickets({
   canAccessAllUsers,
   businessDayKey,
   userUid,
-  userEmail,
   userRole,
-  userCanLiquidate,
   onError,
 }: {
   enabled: boolean;
   canAccessAllUsers: boolean;
   businessDayKey: string;
   userUid?: string;
-  userEmail?: string;
   userRole?: string;
-  userCanLiquidate?: boolean;
   onError?: FirestoreErrorHandler;
 }) {
   const [tickets, setTickets] = useState<LotteryTicket[]>([]);
@@ -66,26 +62,16 @@ export function useTickets({
       return () => unsubscribeTickets();
     }
 
-    const sellerEmail = userEmail?.toLowerCase();
     const qTodayBySellerId = query(
       collection(db, 'tickets'),
       where('sellerId', '==', userUid),
       where('timestamp', '>=', startOfToday),
       limit(500)
     );
-    const qTodayBySellerEmail = sellerEmail
-      ? query(
-          collection(db, 'tickets'),
-          where('sellerEmail', '==', sellerEmail),
-          where('timestamp', '>=', startOfToday),
-          limit(500)
-        )
-      : null;
 
     let sellerIdSnapshot: { docs: Array<{ id: string; data: () => unknown }> } | null = null;
-    let sellerEmailSnapshot: { docs: Array<{ id: string; data: () => unknown }> } | null = null;
     const publishSellerTickets = () => {
-      const merged = mergeTicketSnapshots(sellerIdSnapshot, sellerEmailSnapshot);
+      const merged = mergeTicketSnapshots(sellerIdSnapshot);
       console.log("Today's seller tickets fetched successfully:", merged.length);
       setTickets(merged);
     };
@@ -98,21 +84,10 @@ export function useTickets({
       onError?.(error, 'get', 'tickets_today_by_sellerId');
     });
 
-    const unsubscribeTicketsByEmail = qTodayBySellerEmail
-      ? onSnapshot(qTodayBySellerEmail, (snapshot) => {
-          sellerEmailSnapshot = snapshot;
-          publishSellerTickets();
-        }, (error) => {
-          console.error("Error fetching today's tickets by sellerEmail:", error);
-          onError?.(error, 'get', 'tickets_today_by_sellerEmail');
-        })
-      : () => {};
-
     return () => {
       unsubscribeTicketsById();
-      unsubscribeTicketsByEmail();
     };
-  }, [enabled, canAccessAllUsers, businessDayKey, userUid, userEmail, userRole, userCanLiquidate, onError]);
+  }, [enabled, canAccessAllUsers, businessDayKey, userUid, userRole, onError]);
 
   return {
     tickets,
