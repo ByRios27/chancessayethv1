@@ -115,6 +115,61 @@ const Login = () => {
     }
   };
 
+  const handleGoogleLogin = async () => {
+    setLoading(true);
+    const toastId = toast.loading('Iniciando sesion con Google...');
+
+    try {
+      const ceoEmail = (import.meta.env.VITE_CEO_EMAIL || 'zsayeth09@gmail.com').toLowerCase();
+      const userCredential = await signInWithPopup(auth, googleProvider);
+      const signedInEmail = (userCredential.user.email || '').toLowerCase();
+
+      if (!signedInEmail) {
+        await signOut(auth);
+        localStorage.removeItem('sessionBusinessDay');
+        toast.error('La cuenta de Google no tiene correo valido.', { id: toastId });
+        return;
+      }
+
+      if (signedInEmail !== ceoEmail) {
+        const userDoc = await getDoc(doc(db, 'users', signedInEmail));
+        if (!userDoc.exists()) {
+          await signOut(auth);
+          localStorage.removeItem('sessionBusinessDay');
+          toast.error('Tu usuario no existe en la base de datos.', { id: toastId });
+          return;
+        }
+
+        const profile = userDoc.data() as UserProfile;
+        if ((profile.status || 'active') !== 'active') {
+          await signOut(auth);
+          localStorage.removeItem('sessionBusinessDay');
+          toast.error('Tu usuario esta inactivo. Contacta al administrador.', { id: toastId });
+          return;
+        }
+      }
+
+      localStorage.setItem('sessionBusinessDay', format(getBusinessDate(), 'yyyy-MM-dd'));
+      toast.success('Sesion iniciada con Google', { id: toastId });
+    } catch (error: any) {
+      let errorMessage = 'No se pudo iniciar sesion con Google';
+
+      if (error?.code === 'auth/popup-closed-by-user') {
+        errorMessage = 'Se cerro la ventana de Google antes de completar el inicio de sesion.';
+      } else if (error?.code === 'auth/popup-blocked') {
+        errorMessage = 'El navegador bloqueo la ventana emergente de Google.';
+      } else if (error?.code === 'auth/network-request-failed') {
+        errorMessage = 'Error de red. Verifique su conexion a internet.';
+      } else if (error?.message) {
+        errorMessage = `Error: ${error.message}`;
+      }
+
+      toast.error(errorMessage, { id: toastId });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4 relative overflow-hidden">
       {/* Background Accents */}
@@ -191,6 +246,15 @@ const Login = () => {
             ) : (
               <><span>Ingresar al Sistema</span> <ChevronRight className="w-4 h-4" /></>
             )}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleGoogleLogin}
+            disabled={loading}
+            className="w-full bg-white/5 border border-white/15 text-foreground py-4 rounded-xl font-black uppercase tracking-[0.2em] text-xs hover:bg-white/10 active:scale-[0.98] transition-all disabled:opacity-50"
+          >
+            Iniciar con Google
           </button>
         </form>
       </motion.div>
