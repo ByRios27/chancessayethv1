@@ -1,6 +1,7 @@
-import React from 'react';
+ï»¿import React from 'react';
 import { motion } from 'motion/react';
 import { Plus, Settings, Trash2, User as UserIcon, Zap } from 'lucide-react';
+import { USERS_DOMAIN_SPEC, canExecuteUsersAction } from '../../domains/users/domainSpec';
 
 type UsersSectionProps = {
   selectedManageUserEmail: string;
@@ -31,6 +32,12 @@ export function UsersSection({
   setShowInjectionModal,
   deleteUser,
 }: UsersSectionProps) {
+  const role = userProfile?.role;
+  const canCreateUser = canExecuteUsersAction(role, 'createUser');
+  const canEditUser = canExecuteUsersAction(role, 'editUser');
+  const canDeleteUser = canExecuteUsersAction(role, 'deleteUser');
+  const canInjectCapital = canExecuteUsersAction(role, 'injectCapital');
+
   return (
     <motion.div
       key="users"
@@ -43,7 +50,7 @@ export function UsersSection({
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-10 gap-6">
           <div>
             <h2 className="text-2xl font-black italic tracking-tighter neon-text uppercase">USUARIOS</h2>
-            <p className="text-xs font-mono text-muted-foreground mt-1 uppercase tracking-widest">Gestión de Accesos y Comisiones</p>
+            <p className="text-xs font-mono text-muted-foreground mt-1 uppercase tracking-widest">Gestion de perfiles, estado y comision</p>
           </div>
           <div className="flex items-center gap-4 w-full sm:w-auto">
             <select
@@ -72,7 +79,7 @@ export function UsersSection({
                 });
               })()}
             </select>
-            {(userProfile?.role === 'ceo' || userProfile?.role === 'programador') && (
+            {canCreateUser && (
               <button
                 onClick={() => {
                   setEditingUser(null);
@@ -105,7 +112,7 @@ export function UsersSection({
                     <p className="font-black text-sm uppercase tracking-tight text-white/90">{u.name}</p>
                     <div className="flex items-center gap-2 mt-1">
                       <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">{u.role}</p>
-                      <span className="text-muted-foreground">•</span>
+                      <span className="text-muted-foreground">â€¢</span>
                       <p className="text-[10px] font-mono text-muted-foreground">{u.email}</p>
                     </div>
                   </div>
@@ -147,7 +154,7 @@ export function UsersSection({
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 <div className="bg-black/40 p-4 rounded-xl border border-white/5">
-                  <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mb-1">Comisión Asignada</p>
+                  <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mb-1">Comision Asignada</p>
                   <p className="text-xl font-black text-white">{u.commissionRate}%</p>
                 </div>
                 <div className="bg-black/40 p-4 rounded-xl border border-white/5">
@@ -159,20 +166,20 @@ export function UsersSection({
               </div>
 
               <div className="flex flex-wrap items-center gap-3">
-                {(userProfile?.role === 'ceo' || userProfile?.role === 'programador') && (
+                {canEditUser && (
                   <button
                     onClick={() => {
                       setEditingUser(u);
                       setShowUserModal(true);
                     }}
-                    disabled={u.role === 'ceo' && userProfile?.role !== 'ceo' && userProfile?.role !== 'programador'}
+                    disabled={u.role === 'ceo' && role !== 'ceo' && role !== 'programador'}
                     className="flex-1 min-w-0 bg-white/5 hover:bg-white/10 text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                   >
                     <Settings className="w-4 h-4" /> Configurar
                   </button>
                 )}
 
-                {(userProfile?.role === 'ceo' || userProfile?.role === 'programador' || userProfile?.canLiquidate) && (
+                {canInjectCapital && (
                   <button
                     onClick={() => {
                       setInjectionTargetUserEmail(u.email);
@@ -186,7 +193,7 @@ export function UsersSection({
                   </button>
                 )}
 
-                {(userProfile?.role === 'ceo' || userProfile?.role === 'programador') && u.role !== 'ceo' && u.role !== 'programador' && (
+                {canDeleteUser && u.role !== 'ceo' && u.role !== 'programador' && (
                   <button
                     onClick={() => deleteUser(u.email)}
                     className="p-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl transition-all"
@@ -200,7 +207,7 @@ export function UsersSection({
           );
         })() : (
           <div className="h-64 flex items-center justify-center text-muted-foreground font-mono text-sm uppercase tracking-widest border-2 border-dashed border-border rounded-2xl p-10">
-            Seleccione un usuario para ver y gestionar sus detalles
+            {USERS_DOMAIN_SPEC.emptyStates.noSelection}
           </div>
         )}
       </div>

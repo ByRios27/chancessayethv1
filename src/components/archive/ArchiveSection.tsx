@@ -1,5 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
+import { canAccessArchiveDomain } from '../../domains/archive/domainSpec';
 
 type ArchiveSectionProps = any;
 
@@ -25,6 +26,7 @@ export function ArchiveSection(props: ArchiveSectionProps) {
     cleanText,
     formatTime12h,
   } = props;
+  const canAccessDomain = canAccessArchiveDomain(userProfile?.role, userProfile?.canLiquidate);
 
   return (
               <motion.div
@@ -79,7 +81,7 @@ export function ArchiveSection(props: ArchiveSectionProps) {
                         </select>
                       </div>
 
-                      {(userProfile?.role === 'ceo' || userProfile?.canLiquidate) ? (
+                      {canAccessDomain ? (
                         <div className="space-y-2">
                           <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Seleccionar Usuario</label>
                           <select 
@@ -114,6 +116,7 @@ export function ArchiveSection(props: ArchiveSectionProps) {
                     </div>
 
                     <div className="lg:col-span-2">
+                      {/* TODO(remodel): keep archive as read-only historical consultation UI in next phase. */}
                       {archiveUserEmail && archiveTickets.length > 0 ? (() => {
                         const userToLiquidate = users.find(u => u.email === archiveUserEmail);
                         const summary = buildFinancialSummary({
@@ -164,18 +167,20 @@ export function ArchiveSection(props: ArchiveSectionProps) {
                               </div>
                             </div>
 
-                            <div className="flex gap-4">
-                              <button 
-                                onClick={() => {
-                                  setSelectedUserToLiquidate(archiveUserEmail);
-                                  setLiquidationDate(archiveDate);
-                                  setActiveTab('liquidaciones');
-                                }}
-                                className="flex-1 bg-primary text-primary-foreground font-black uppercase tracking-widest py-4 rounded-xl hover:brightness-110 transition-all shadow-lg shadow-primary/20"
-                              >
-                                Ir a Liquidar
-                              </button>
-                            </div>
+                            {canAccessDomain && (
+                              <div className="flex gap-4">
+                                <button
+                                  onClick={() => {
+                                    setSelectedUserToLiquidate(archiveUserEmail);
+                                    setLiquidationDate(archiveDate);
+                                    setActiveTab('liquidaciones');
+                                  }}
+                                  className="flex-1 bg-primary text-primary-foreground font-black uppercase tracking-widest py-4 rounded-xl hover:brightness-110 transition-all shadow-lg shadow-primary/20"
+                                >
+                                  Ir a Liquidar
+                                </button>
+                              </div>
+                            )}
                           </div>
                         );
                       })() : (

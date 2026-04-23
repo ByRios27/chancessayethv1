@@ -2,6 +2,7 @@ import { motion } from 'motion/react';
 import { Share2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useCierresDomain } from '../hooks/useCierresDomain';
+import { CIERRES_DOMAIN_SPEC } from '../domainSpec';
 
 export function CierresDomain(props: any) {
   const {
@@ -118,6 +119,7 @@ export function CierresDomain(props: any) {
         </div>
 
         {cierreLottery && cierreData ? (
+          // TODO(remodel): split report generation and export actions into dedicated mobile cards.
           <div className="overflow-x-auto bg-white rounded p-4 sm:p-8" style={{ color: '#000' }}>
             <div ref={cierreRef} className="bg-white w-full max-w-3xl mx-auto" style={{ padding: '20px' }}>
               <div className="mb-6">
@@ -185,7 +187,7 @@ export function CierresDomain(props: any) {
           </div>
         ) : (
           <div className="text-center py-12 text-muted-foreground font-light border border-white/5 rounded bg-black/20">
-            Seleccione un sorteo para ver el cierre.
+            {CIERRES_DOMAIN_SPEC.emptyStates.noLotterySelected}
           </div>
         )}
       </div>

@@ -1,6 +1,7 @@
 import { toast } from 'sonner';
 import type { Lottery } from '../../../types/lotteries';
 import { createLottery, deleteLottery as deleteLotteryById, setLotteryActive, updateLottery } from '../../../services/repositories/lotteriesRepo';
+import { ADMIN_CONFIG_DOMAIN_SPEC, canExecuteAdminConfigAction } from '../domainSpec';
 
 interface ConfirmModalState {
   show: boolean;
@@ -10,6 +11,7 @@ interface ConfirmModalState {
 }
 
 interface UseGeneralConfigDomainParams {
+  userRole?: string;
   lotteries: Lottery[];
   editingLottery: Lottery | null;
   setEditingLottery: (value: Lottery | null) => void;
@@ -20,6 +22,7 @@ interface UseGeneralConfigDomainParams {
 }
 
 export function useGeneralConfigDomain({
+  userRole,
   lotteries,
   editingLottery,
   setEditingLottery,
@@ -29,6 +32,12 @@ export function useGeneralConfigDomain({
   onError,
 }: UseGeneralConfigDomainParams) {
   const saveLottery = async (lotteryData: Partial<Lottery>) => {
+    const action = editingLottery ? 'editLottery' : 'createLottery';
+    if (!canExecuteAdminConfigAction(userRole, action)) {
+      toast.error(ADMIN_CONFIG_DOMAIN_SPEC.expectedErrors.unauthorizedAction);
+      return;
+    }
+
     try {
       const normalizedName = normalizeLotteryName(lotteryData.name || '');
       if (!normalizedName) {
@@ -42,7 +51,7 @@ export function useGeneralConfigDomain({
       });
 
       if (hasDuplicateName) {
-        toast.error('Ya existe un sorteo con ese nombre. Use un nombre unico.');
+        toast.error(ADMIN_CONFIG_DOMAIN_SPEC.expectedErrors.duplicateLottery);
         return;
       }
 
@@ -62,6 +71,11 @@ export function useGeneralConfigDomain({
   };
 
   const toggleLotteryActive = async (lottery: Lottery) => {
+    if (!canExecuteAdminConfigAction(userRole, 'toggleLotteryActive')) {
+      toast.error(ADMIN_CONFIG_DOMAIN_SPEC.expectedErrors.unauthorizedAction);
+      return;
+    }
+
     try {
       await setLotteryActive(lottery.id, !lottery.active);
       toast.success(`Loteria ${lottery.active ? 'pausada' : 'activada'}`);
@@ -71,6 +85,11 @@ export function useGeneralConfigDomain({
   };
 
   const deleteLottery = async (id: string) => {
+    if (!canExecuteAdminConfigAction(userRole, 'deleteLottery')) {
+      toast.error(ADMIN_CONFIG_DOMAIN_SPEC.expectedErrors.unauthorizedAction);
+      return;
+    }
+
     setConfirmModal(prev => ({
       ...prev,
       show: true,

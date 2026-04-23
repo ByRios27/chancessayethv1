@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { createUserWithEmailAndPassword, secondaryAuth, signOut } from '../../../firebase';
 import { deleteUserProfile, reserveNextSellerId, saveUserProfile } from '../../../services/repositories/usersRepo';
 import type { UserProfile } from '../../../types/users';
+import { USERS_DOMAIN_SPEC, canExecuteUsersAction } from '../domainSpec';
 
 interface ConfirmModalState {
   show: boolean;
@@ -14,6 +15,7 @@ interface ConfirmModalState {
 
 interface UseUsersDomainParams {
   users: UserProfile[];
+  userRole?: string;
   currentUserEmail?: string;
   editingUser: UserProfile | null;
   setEditingUser: (value: UserProfile | null) => void;
@@ -25,6 +27,7 @@ interface UseUsersDomainParams {
 
 export function useUsersDomain({
   users,
+  userRole,
   currentUserEmail,
   editingUser,
   setEditingUser,
@@ -36,6 +39,12 @@ export function useUsersDomain({
   const [selectedManageUserEmail, setSelectedManageUserEmail] = useState('');
 
   const saveUser = async (userProfileData: UserProfile, password?: string) => {
+    const action = editingUser ? 'editUser' : 'createUser';
+    if (!canExecuteUsersAction(userRole, action)) {
+      toast.error(USERS_DOMAIN_SPEC.expectedErrors.unauthorizedAction);
+      return;
+    }
+
     const rawEmail = userProfileData.email.toLowerCase();
     const authEmail = rawEmail.includes('@') ? rawEmail : `${rawEmail}@chancepro.local`;
 
@@ -120,6 +129,11 @@ export function useUsersDomain({
   };
 
   const deleteUser = async (email: string) => {
+    if (!canExecuteUsersAction(userRole, 'deleteUser')) {
+      toast.error(USERS_DOMAIN_SPEC.expectedErrors.unauthorizedAction);
+      return;
+    }
+
     setConfirmModal({
       show: true,
       title: 'Eliminar Usuario',

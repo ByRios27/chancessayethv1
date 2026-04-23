@@ -149,6 +149,13 @@ import { ResultsDomain } from './domains/results/components/ResultsDomain';
 import ErrorBoundary from './components/shared/ErrorBoundary';
 import Login from './components/shared/Login';
 import { UsersDomain } from './domains/users/components/UsersDomain';
+import { ARCHIVE_DOMAIN_SPEC, canAccessArchiveDomain } from './domains/archive/domainSpec';
+import { ADMIN_CONFIG_DOMAIN_SPEC, canAccessAdminConfigDomain } from './domains/admin-config/domainSpec';
+import { CIERRES_DOMAIN_SPEC, canAccessCierresDomain } from './domains/cierres/domainSpec';
+import { LIQUIDATION_DOMAIN_SPEC, canAccessLiquidationDomain } from './domains/liquidation/domainSpec';
+import { RESULTS_DOMAIN_SPEC, canAccessResultsDomain } from './domains/results/domainSpec';
+import { SALES_DOMAIN_SPEC, type DomainRole } from './domains/sales/domainSpec';
+import { USERS_DOMAIN_SPEC, canAccessUsersDomain } from './domains/users/domainSpec';
 
 import type { RecoveryTicketRecord } from './types/archive';
 import type { Bet, LotteryTicket } from './types/bets';
@@ -256,6 +263,7 @@ function App() {
   const autoResetStateOnBusinessDayChange = false;
   const { user, userProfile, setUserProfile, loading, handleLogout } = useAuthSession(enforceSessionByOperationalDay);
   const { tick, businessDayKey, getQuickOperationalDate, applyOperationalQuickDate } = useOperationalClock();
+  const currentUserRole = userProfile?.role;
   const canUseGlobalScope = userProfile?.role === 'ceo' || userProfile?.role === 'programador' || !!userProfile?.canLiquidate;
   const [showGlobalScope, setShowGlobalScope] = useState(false);
 
@@ -451,6 +459,7 @@ function App() {
   }>({ show: false, ticket: null });
   const { selectedManageUserEmail, setSelectedManageUserEmail, saveUser, deleteUser } = useUsersDomain({
     users,
+    userRole: userProfile?.role,
     currentUserEmail: userProfile?.email,
     editingUser,
     setEditingUser,
@@ -1186,7 +1195,7 @@ function App() {
     e.preventDefault();
     if (!user || cart.length === 0 || isSubmittingSale || saleInFlightRef.current) return;
     if (!operationalSellerId) {
-      toast.error('Perfil sin sellerId operativo. Contacta al administrador.');
+      toast.error(SALES_DOMAIN_SPEC.expectedErrors.missingSellerId);
       return;
     }
     setShowCheckoutModal(true);
@@ -1195,7 +1204,7 @@ function App() {
   const confirmSale = async () => {
     if (!user || cart.length === 0 || saleInFlightRef.current) return;
     if (!operationalSellerId) {
-      toast.error('Perfil sin sellerId operativo. No se puede registrar la venta.');
+      toast.error(SALES_DOMAIN_SPEC.expectedErrors.missingSellerId);
       return;
     }
 
@@ -1799,6 +1808,7 @@ function App() {
   };
 
   const { saveLottery, toggleLotteryActive, deleteLottery } = useGeneralConfigDomain({
+    userRole: userProfile?.role,
     lotteries,
     editingLottery,
     setEditingLottery,
@@ -2524,24 +2534,39 @@ function App() {
     toast.info('SesiÃƒÆ’Ã‚Â³n cerrada');
   }, [handleLogout]);
 
+  const canAccessDashboard = currentUserRole === 'ceo' || currentUserRole === 'admin' || currentUserRole === 'programador';
+  const canAccessStats = currentUserRole === 'ceo' || currentUserRole === 'admin' || currentUserRole === 'programador';
+  const canAccessCierres = canAccessCierresDomain(currentUserRole);
+  const canAccessResults = canAccessResultsDomain(currentUserRole);
+  const canAccessUsers = canAccessUsersDomain(currentUserRole);
+  const canAccessArchive = canAccessArchiveDomain(currentUserRole, userProfile?.canLiquidate);
+  const canAccessAdminConfig = canAccessAdminConfigDomain(currentUserRole);
+  const canAccessLiquidation = canAccessLiquidationDomain(currentUserRole, userProfile?.canLiquidate);
+
   const navigationItems = useMemo<NavItem[]>(() => [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, role: ['ceo', 'admin', 'seller', 'programador'] },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, role: ['ceo', 'admin', 'programador'] },
     { id: 'sales', label: 'Nueva Venta', icon: Plus },
     { id: 'history', label: 'Resumen de ventas', icon: History },
-    { id: 'stats', label: 'EstadÃƒÆ’Ã‚Â­sticas', icon: BarChart3, role: ['ceo', 'admin', 'seller', 'programador'] },
-    { id: 'cierres', label: 'Cierres', icon: Printer, role: ['ceo', 'admin', 'seller', 'programador'] },
-    { id: 'results', label: 'Resultados', icon: CheckCircle2, role: ['ceo', 'admin', 'seller', 'programador'] },
-    { id: 'users', label: 'Usuarios', icon: Users, role: ['ceo', 'programador', 'canLiquidate'] },
-    { id: 'archivo', label: 'Archivo', icon: Archive, role: ['ceo', 'admin', 'programador'] },
-    { id: 'admin', label: 'LoterÃƒÆ’Ã‚Â­as', icon: ShieldCheck, role: ['ceo', 'programador'] },
-    { id: 'liquidaciones', label: 'Liquidaciones', icon: DollarSign, role: ['ceo', 'admin', 'seller', 'programador'], permission: 'canLiquidate' },
+    { id: 'stats', label: 'Estadisticas', icon: BarChart3, role: ['ceo', 'admin', 'programador'] },
+    { id: 'cierres', label: 'Cierres', icon: Printer, role: [...CIERRES_DOMAIN_SPEC.allowedRoles] as DomainRole[] },
+    { id: 'results', label: 'Resultados', icon: CheckCircle2, role: [...RESULTS_DOMAIN_SPEC.allowedRoles] as DomainRole[] },
+    { id: 'users', label: 'Usuarios', icon: Users, role: [...USERS_DOMAIN_SPEC.allowedRoles] as DomainRole[] },
+    { id: 'archivo', label: 'Archivo', icon: Archive, role: [...ARCHIVE_DOMAIN_SPEC.allowedRoles] as DomainRole[] },
+    { id: 'admin', label: 'Configuracion general', icon: ShieldCheck, role: [...ADMIN_CONFIG_DOMAIN_SPEC.allowedRoles] as DomainRole[] },
+    { id: 'liquidaciones', label: 'Liquidaciones', icon: DollarSign, role: [...LIQUIDATION_DOMAIN_SPEC.allowedRoles] as DomainRole[], permission: 'canLiquidate' },
     { id: 'recovery', label: 'RecuperaciÃƒÆ’Ã‚Â³n', icon: Database, role: ['programador'] },
-    { id: 'config', label: 'ConfiguraciÃƒÂ³n general', icon: Settings, role: ['ceo', 'admin', 'seller', 'programador'] },
+    { id: 'config', label: 'Mi cuenta', icon: Settings, role: [...SALES_DOMAIN_SPEC.allowedRoles] as DomainRole[] },
   ], []);
   const visibleNavigationItems = useMemo(
     () => getVisibleNavItems(navigationItems, userProfile),
     [navigationItems, userProfile]
   );
+
+  useEffect(() => {
+    if (!userProfile) return;
+    if (visibleNavigationItems.some((item) => item.id === activeTab)) return;
+    setActiveTab('sales');
+  }, [activeTab, userProfile, visibleNavigationItems]);
 
   return (
     <>
@@ -2800,7 +2825,7 @@ function App() {
         {/* Scrollable Area */}
         <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-8 custom-scrollbar min-w-0">
           <AnimatePresence mode="wait">
-            {activeTab === 'dashboard' && (
+            {activeTab === 'dashboard' && canAccessDashboard && (
               <Suspense fallback={<div className="text-xs text-muted-foreground">Cargando dashboard...</div>}>
                 <DashboardStatsDomainLazy
                   mode="dashboard"
@@ -3311,7 +3336,7 @@ function App() {
                 setActiveTab={setActiveTab}
               />
             )}
-            {activeTab === 'stats' && (
+            {activeTab === 'stats' && canAccessStats && (
               <Suspense fallback={<div className="text-xs text-muted-foreground">Cargando estadisticas...</div>}>
                 <DashboardStatsDomainLazy
                   mode="stats"
@@ -3336,7 +3361,7 @@ function App() {
               </Suspense>
             )}
 
-            {activeTab === 'cierres' && (
+            {activeTab === 'cierres' && canAccessCierres && (
               <Suspense fallback={<div className="text-xs text-muted-foreground">Cargando cierres...</div>}>
                 <CierresDomainLazy
                   canUseGlobalScope={canUseGlobalScope}
@@ -3362,7 +3387,7 @@ function App() {
               </Suspense>
             )}
 
-            {activeTab === 'results' && (
+            {activeTab === 'results' && canAccessResults && (
               <ResultsDomain
                 canManageResults={canManageResults}
                 editingResult={editingResult}
@@ -3391,7 +3416,7 @@ function App() {
                 deleteResult={deleteResult}
               />
             )}
-            {activeTab === 'admin' && (
+            {activeTab === 'admin' && canAccessAdminConfig && (
               <GeneralConfigDomain
                 userProfile={userProfile}
                 setShowSettingsModal={setShowSettingsModal}
@@ -3415,7 +3440,7 @@ function App() {
                 handleDeleteAllSalesData={handleDeleteAllSalesData}
               />
             )}
-            {activeTab === 'users' && (
+            {activeTab === 'users' && canAccessUsers && (
               <UsersDomain
                 selectedManageUserEmail={selectedManageUserEmail}
                 setSelectedManageUserEmail={setSelectedManageUserEmail}
@@ -3431,7 +3456,7 @@ function App() {
                 deleteUser={deleteUser}
               />
             )}
-            {activeTab === 'liquidaciones' && (
+            {activeTab === 'liquidaciones' && canAccessLiquidation && (
               <Suspense fallback={<div className="text-xs text-muted-foreground">Cargando liquidaciones...</div>}>
                 <LiquidationDomainLazy
                   isPrimaryCeoUser={isPrimaryCeoUser}
@@ -3466,7 +3491,7 @@ function App() {
                 />
               </Suspense>
             )}
-            {activeTab === 'archivo' && (
+            {activeTab === 'archivo' && canAccessArchive && (
               <Suspense fallback={<div className="text-xs text-muted-foreground">Cargando archivo...</div>}>
                 <ArchiveDomainLazy
                   archiveDate={archiveDate}

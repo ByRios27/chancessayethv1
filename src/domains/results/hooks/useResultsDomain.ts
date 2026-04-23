@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import type { Lottery } from '../../../types/lotteries';
 import type { LotteryResult } from '../../../types/results';
 import type { LotteryTicket } from '../../../types/bets';
+import { RESULTS_DOMAIN_SPEC, canExecuteResultsAction } from '../domainSpec';
 
 interface ConfirmModalState {
   show: boolean;
@@ -53,7 +54,7 @@ export function useResultsDomain({
   const [resultFormSecondPrize, setResultFormSecondPrize] = useState('');
   const [resultFormThirdPrize, setResultFormThirdPrize] = useState('');
 
-  const canManageResults = userRole === 'ceo' || userRole === 'admin' || userRole === 'programador';
+  const canManageResults = canExecuteResultsAction(userRole, 'createResult');
   const isCeoUser = userRole === 'ceo' || userRole === 'programador';
 
   const sortedResults = useMemo(() => {
@@ -162,7 +163,7 @@ export function useResultsDomain({
 
   const saveResult = useCallback(async (resultData: Partial<LotteryResult>) => {
     if (!canManageResults) {
-      toast.error('No tiene permisos para guardar resultados');
+      toast.error(RESULTS_DOMAIN_SPEC.expectedErrors.unauthorizedAction);
       return false;
     }
 
@@ -178,7 +179,7 @@ export function useResultsDomain({
     );
 
     if (duplicate) {
-      toast.error('Ese sorteo ya tiene resultado para esa fecha');
+      toast.error(RESULTS_DOMAIN_SPEC.expectedErrors.duplicateResult);
       return false;
     }
 
@@ -207,12 +208,12 @@ export function useResultsDomain({
 
   const handleCreateResultFromForm = useCallback(async () => {
     if (!canManageResults) {
-      toast.error('No tiene permisos para ingresar resultados');
+      toast.error(RESULTS_DOMAIN_SPEC.expectedErrors.unauthorizedAction);
       return;
     }
 
     if (!resultFormLotteryId || !resultFormDate || !resultFormFirstPrize || !resultFormSecondPrize || !resultFormThirdPrize) {
-      toast.error('Complete todos los campos del resultado');
+      toast.error(RESULTS_DOMAIN_SPEC.expectedErrors.incompleteForm);
       return;
     }
 
@@ -234,7 +235,7 @@ export function useResultsDomain({
       result.id !== editingResult?.id
     );
     if (alreadyExists) {
-      toast.error('Ese sorteo ya tiene resultado para la fecha seleccionada');
+      toast.error(RESULTS_DOMAIN_SPEC.expectedErrors.duplicateResult);
       return;
     }
 
@@ -256,7 +257,7 @@ export function useResultsDomain({
 
   const deleteResult = async (id: string) => {
     if (!canManageResults) {
-      toast.error('No tiene permisos para eliminar resultados');
+      toast.error(RESULTS_DOMAIN_SPEC.expectedErrors.unauthorizedAction);
       return;
     }
 

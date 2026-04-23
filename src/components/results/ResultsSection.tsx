@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { Edit2, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { RESULTS_DOMAIN_SPEC } from '../../domains/results/domainSpec';
 
 type ResultsSectionProps = {
   canManageResults: boolean;
@@ -259,7 +260,7 @@ export function ResultsSection({
 
           {availableResultLotteries.length === 0 && (
             <div className="text-xs font-mono uppercase tracking-wider text-amber-300/90 bg-amber-500/10 border border-amber-400/20 rounded-xl px-3 py-2">
-              Todos los sorteos ya tienen resultados para esta fecha
+              {RESULTS_DOMAIN_SPEC.emptyStates.noAvailableLotteries}
             </div>
           )}
         </div>
@@ -268,7 +269,7 @@ export function ResultsSection({
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
         {visibleResults.length === 0 ? (
           <div className="glass-card p-4 text-center text-muted-foreground font-mono uppercase text-xs md:col-span-2 xl:col-span-3">
-            No hay resultados registrados
+            {RESULTS_DOMAIN_SPEC.emptyStates.noResults}
           </div>
         ) : (
           visibleResults.map((res) => {

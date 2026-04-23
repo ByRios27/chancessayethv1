@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { Share2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { canAccessLiquidationDomain } from '../../domains/liquidation/domainSpec';
 
 type LiquidationSectionProps = any;
 
@@ -37,6 +38,9 @@ export function LiquidationSection(props: LiquidationSectionProps) {
     shareImageDataUrl,
     downloadDataUrlFile,
   } = props;
+  const canAccessDomain = canAccessLiquidationDomain(userProfile?.role, userProfile?.canLiquidate);
+  const canGenerateConsolidated = isPrimaryCeoUser;
+  const canManageDailyLiquidation = canAccessDomain;
 
   return (
     <motion.div
@@ -52,7 +56,8 @@ export function LiquidationSection(props: LiquidationSectionProps) {
             <h2 className="text-2xl font-black italic tracking-tighter neon-text uppercase">LIQUIDACIONES</h2>
             <p className="text-xs font-mono text-muted-foreground mt-1 uppercase tracking-widest">Cierre de caja y reporte de ventas</p>
           </div>
-          {isPrimaryCeoUser && (
+          {canGenerateConsolidated && (
+            // TODO(remodel): split this block into its own "Ver consolidado" section in next visual phase.
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
               <div className="flex items-center gap-2">
                 <button
@@ -165,7 +170,7 @@ export function LiquidationSection(props: LiquidationSectionProps) {
               )}
             </div>
 
-            {(userProfile?.role === 'ceo' || userProfile?.canLiquidate) ? (
+            {canManageDailyLiquidation ? (
               <div className="space-y-2">
                 <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Seleccionar Usuario</label>
                 <select
@@ -190,7 +195,7 @@ export function LiquidationSection(props: LiquidationSectionProps) {
               </div>
             )}
 
-            {selectedUserToLiquidate && (userProfile?.role === 'ceo' || userProfile?.canLiquidate) && (
+            {selectedUserToLiquidate && canManageDailyLiquidation && (
               <>
                 {selectedLiquidationSettlement && (
                   <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2">
