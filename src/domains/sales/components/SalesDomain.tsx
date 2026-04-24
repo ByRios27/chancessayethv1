@@ -149,6 +149,24 @@ export function SalesDomain(props: SalesDomainProps) {
   const hasActiveLotteries = safeActiveLotteries.length > 0;
   const canOperateSales = canSell && hasActiveLotteries;
 
+  if (import.meta.env.DEV) {
+    const requiredCallbacks = {
+      handleSell,
+      addToCart,
+      clearCart,
+      cancelEdit,
+      setShowFastEntryModal,
+      updateCartItemQuantity,
+      removeFromCart,
+    };
+
+    Object.entries(requiredCallbacks).forEach(([name, fn]) => {
+      if (typeof fn !== 'function') {
+        console.error(`[SalesDomain] Missing callback prop: ${name}`, fn);
+      }
+    });
+  }
+
   return (
     <motion.div
       key="sales"
@@ -500,14 +518,26 @@ export function SalesDomain(props: SalesDomainProps) {
             <div className="flex gap-2">
               {editingTicketId && (
                 <button
-                  onClick={cancelEdit}
+                  onClick={() => {
+                    if (typeof cancelEdit !== 'function') {
+                      console.error('[SalesDomain] cancelEdit is not a function', cancelEdit);
+                      return;
+                    }
+                    cancelEdit();
+                  }}
                   className="flex-1 py-3 bg-red-500/10 text-red-400 rounded-xl text-xs font-black uppercase tracking-widest active:scale-95 transition-transform border border-red-500/20"
                 >
                   Cancelar
                 </button>
               )}
               <button
-                onClick={handleSell}
+                onClick={(event) => {
+                  if (typeof handleSell !== 'function') {
+                    console.error('[SalesDomain] handleSell is not a function', handleSell);
+                    return;
+                  }
+                  handleSell(event);
+                }}
                 disabled={!canOperateSales}
                 className="flex-1 py-3 bg-white text-black rounded-xl text-xs font-black uppercase tracking-widest active:scale-95 transition-transform disabled:opacity-60 disabled:cursor-not-allowed"
               >
@@ -519,7 +549,13 @@ export function SalesDomain(props: SalesDomainProps) {
       )}
 
       <button
-        onClick={() => setShowFastEntryModal(true)}
+        onClick={() => {
+          if (typeof setShowFastEntryModal !== 'function') {
+            console.error('[SalesDomain] setShowFastEntryModal is not a function', setShowFastEntryModal);
+            return;
+          }
+          setShowFastEntryModal(true);
+        }}
         className="w-full py-3 bg-white/5 border border-border rounded-xl text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground transition-all flex items-center justify-center gap-2"
       >
         <Zap className="w-4 h-4" />
