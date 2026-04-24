@@ -9,8 +9,7 @@ interface LotteryDayStatsParams {
   tickets: LotteryTicket[];
   historyTickets: LotteryTicket[];
   canAccessAllUsers: boolean;
-  userUid?: string;
-  userEmail?: string | null;
+  sellerId?: string;
   cleanText: (text: string) => string;
   getTicketPrizes: (ticket: LotteryTicket, filterLottery?: string, typeFilter?: string) => { totalPrize: number };
 }
@@ -23,8 +22,7 @@ export const getLotteryDayStats = ({
   tickets,
   historyTickets,
   canAccessAllUsers,
-  userUid,
-  userEmail,
+  sellerId,
   cleanText,
   getTicketPrizes,
 }: LotteryDayStatsParams) => {
@@ -35,7 +33,7 @@ export const getLotteryDayStats = ({
     const tDateObj = t.timestamp?.toDate ? t.timestamp.toDate() : (t.timestamp?.seconds ? new Date(t.timestamp.seconds * 1000) : new Date());
     const tDate = format(tDateObj, 'yyyy-MM-dd');
 
-    const matchesUser = canAccessAllUsers || t.sellerId === userUid || t.sellerEmail?.toLowerCase() === userEmail?.toLowerCase();
+    const matchesUser = canAccessAllUsers || (!!sellerId && t.sellerId === sellerId);
 
     return tDate === date && (t.status === 'active' || t.status === 'winner') && matchesUser && t.bets && t.bets.some(b => cleanText(b.lottery) === cleanText(lotteryName) && (!typeFilter || b.type === typeFilter));
   });
@@ -68,8 +66,7 @@ interface StatsByDrawParams {
   tickets: LotteryTicket[];
   historyTickets: LotteryTicket[];
   canAccessAllUsers: boolean;
-  userUid?: string;
-  userEmail?: string | null;
+  sellerId?: string;
   cleanText: (text: string) => string;
   getTicketPrizes: (ticket: LotteryTicket, filterLottery?: string, typeFilter?: string) => { totalPrize: number };
 }
@@ -81,8 +78,7 @@ export const getStatsByDraw = ({
   tickets,
   historyTickets,
   canAccessAllUsers,
-  userUid,
-  userEmail,
+  sellerId,
   cleanText,
   getTicketPrizes,
 }: StatsByDrawParams) => {
@@ -93,7 +89,7 @@ export const getStatsByDraw = ({
     const tDateObj = t.timestamp?.toDate ? t.timestamp.toDate() : (t.timestamp?.seconds ? new Date(t.timestamp.seconds * 1000) : new Date());
     const tDate = format(tDateObj, 'yyyy-MM-dd');
 
-    const matchesUser = canAccessAllUsers || t.sellerId === userUid || t.sellerEmail?.toLowerCase() === userEmail?.toLowerCase();
+    const matchesUser = canAccessAllUsers || (!!sellerId && t.sellerId === sellerId);
 
     return tDate === date && (t.status === 'active' || t.status === 'winner') && matchesUser && t.bets && t.bets.some(b => cleanText(b.lottery) === cleanText(lotteryName));
   });
@@ -117,7 +113,7 @@ export const getStatsByDraw = ({
 };
 
 interface UserLotteryDayStatsParams {
-  userEmail: string;
+  sellerId: string;
   lotteryName: string;
   date: string;
   typeFilter?: string;
@@ -128,7 +124,7 @@ interface UserLotteryDayStatsParams {
 }
 
 export const getUserLotteryDayStats = ({
-  userEmail,
+  sellerId,
   lotteryName,
   date,
   typeFilter,
@@ -142,7 +138,7 @@ export const getUserLotteryDayStats = ({
 
   const dayTickets = sourceTickets.filter(t => {
     const tDate = t.timestamp?.toDate ? format(t.timestamp.toDate(), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
-    return tDate === date && (t.status === 'active' || t.status === 'winner') && t.sellerEmail?.toLowerCase() === userEmail?.toLowerCase() && t.bets && t.bets.some(b => b.lottery === lotteryName && (!typeFilter || b.type === typeFilter));
+    return tDate === date && (t.status === 'active' || t.status === 'winner') && t.sellerId === sellerId && t.bets && t.bets.some(b => b.lottery === lotteryName && (!typeFilter || b.type === typeFilter));
   });
 
   const sales = dayTickets.reduce((acc, t) => {

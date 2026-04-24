@@ -5,8 +5,6 @@ import { toast } from 'sonner';
 import { Capacitor } from '@capacitor/core';
 import { Share } from '@capacitor/share';
 import { Filesystem, Directory } from '@capacitor/filesystem';
-import * as htmlToImage from 'html-to-image';
-import { toPng } from 'html-to-image';
 import { jsPDF } from 'jspdf';
 import QRCode from 'react-qr-code';
 import { DollarSign, Download, Printer, Share2, X } from 'lucide-react';
@@ -190,8 +188,9 @@ const TicketModal = ({ ticket, results, lotteries, globalSettings, users, onClos
 
       const width = node.scrollWidth;
       const height = node.scrollHeight;
+      const { toPng } = await import('html-to-image');
 
-      const dataUrl = await htmlToImage.toPng(node, {
+      const dataUrl = await toPng(node, {
         width,
         height,
         backgroundColor: '#ffffff',
@@ -291,6 +290,7 @@ const TicketModal = ({ ticket, results, lotteries, globalSettings, users, onClos
       const node = ticketRef.current;
       const width = node.scrollWidth;
       const height = node.scrollHeight;
+      const { toPng } = await import('html-to-image');
 
       const dataUrl = await toPng(node, { 
         width,

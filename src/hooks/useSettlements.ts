@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { collection, limit, onSnapshot, orderBy, query, where } from '../firebase';
+import { useCallback, useEffect, useState } from 'react';
+import { collection, getDocs, limit, orderBy, query, where } from '../firebase';
 import { db } from '../firebase';
 import type { Settlement } from '../types/finance';
 
@@ -17,50 +17,68 @@ export function useSettlements({
   onError?: FirestoreErrorHandler;
 }) {
   const [settlements, setSettlements] = useState<Settlement[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshTick, setRefreshTick] = useState(0);
+  const refresh = useCallback(() => {
+    setRefreshTick((prev) => prev + 1);
+  }, []);
 
   useEffect(() => {
-    if (!enabled) return;
-    if (!canAccessAllUsers && !sellerId) return;
+    if (!enabled) {
+      setLoading(false);
+      setError(null);
+      return;
+    }
+    if (!canAccessAllUsers && !sellerId) {
+      setLoading(false);
+      setError(null);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
 
-    console.log('Fetching settlements for sellerId:', sellerId);
+    const run = async () => {
+      try {
+        const qSettlements = canAccessAllUsers
+          ? query(
+            collection(db, 'settlements'),
+            orderBy('timestamp', 'desc'),
+            limit(120)
+          )
+          : query(
+            collection(db, 'settlements'),
+            where('sellerId', '==', sellerId),
+            limit(50)
+          );
 
-    if (canAccessAllUsers) {
-      const qSettlements = query(
-        collection(db, 'settlements'),
-        orderBy('timestamp', 'desc'),
-        limit(120)
-      );
-      const unsubscribeSettlements = onSnapshot(qSettlements, (snapshot) => {
-        console.log('Settlements fetched successfully:', snapshot.size);
+        const snapshot = await getDocs(qSettlements);
+        if (cancelled) return;
         const docs = snapshot.docs.map((settlementDoc) => ({ id: settlementDoc.id, ...settlementDoc.data() } as Settlement));
         setSettlements(docs);
-      }, (error) => {
+      } catch (error) {
         console.error('Error fetching settlements:', error);
+        const message = error instanceof Error ? error.message : 'No se pudieron cargar las liquidaciones';
+        setError(message);
         onError?.(error, 'get', 'settlements');
-      });
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
 
-      return () => unsubscribeSettlements();
-    }
+    void run();
 
-    const qSettlements = query(
-      collection(db, 'settlements'),
-      where('sellerId', '==', sellerId),
-      limit(50)
-    );
-    const unsubscribeSettlements = onSnapshot(qSettlements, (snapshot) => {
-      console.log('Settlements fetched successfully:', snapshot.size);
-      const docs = snapshot.docs.map((settlementDoc) => ({ id: settlementDoc.id, ...settlementDoc.data() } as Settlement));
-      setSettlements(docs);
-    }, (error) => {
-      console.error('Error fetching settlements:', error);
-      onError?.(error, 'get', 'settlements');
-    });
-
-    return () => unsubscribeSettlements();
-  }, [enabled, canAccessAllUsers, sellerId, onError]);
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled, canAccessAllUsers, sellerId, onError, refreshTick]);
 
   return {
     settlements,
     setSettlements,
+    loading,
+    error,
+    refresh,
   };
 }

@@ -1,10 +1,39 @@
 import { motion } from 'motion/react';
 import { Share2 } from 'lucide-react';
 import { format } from 'date-fns';
+import type { Lottery } from '../../../types/lotteries';
 import { useCierresDomain } from '../hooks/useCierresDomain';
 import { CIERRES_DOMAIN_SPEC } from '../domainSpec';
 
-export function CierresDomain(props: any) {
+interface CierresDomainProps {
+  canUseGlobalScope: boolean;
+  showGlobalScope: boolean;
+  setShowGlobalScope: (value: boolean) => void;
+  canAccessAllUsers: boolean;
+  globalChancePriceFilter: string;
+  setGlobalChancePriceFilter: (value: string) => void;
+  globalSettings: { chancePrices?: Array<{ price: number }> };
+  historyDate: string;
+  setHistoryDate: (value: string) => void;
+  lotteries?: Lottery[];
+  cleanText: (value: string) => string;
+  userProfile?: { name?: string; sellerId?: string };
+  user?: { displayName?: string; email?: string };
+  formatTime12h: (value: string) => string;
+  historyTickets: unknown[];
+  operationalSellerId?: string;
+  ticketMatchesGlobalChancePrice: (ticket: unknown) => boolean;
+  shareImageDataUrl: (params: {
+    dataUrl: string;
+    fileName: string;
+    title: string;
+    text: string;
+    dialogTitle: string;
+  }) => Promise<boolean>;
+  downloadDataUrlFile: (dataUrl: string, fileName: string) => void;
+}
+
+export function CierresDomain(props: CierresDomainProps) {
   const {
     canUseGlobalScope,
     showGlobalScope,
@@ -26,6 +55,47 @@ export function CierresDomain(props: any) {
     shareImageDataUrl,
     downloadDataUrlFile,
   } = props;
+  const safeLotteries = lotteries ?? [];
+
+  const safeSetShowGlobalScope = (value: boolean) => {
+    if (typeof setShowGlobalScope !== 'function') {
+      console.error('[CierresDomain] Callback invalido: setShowGlobalScope', setShowGlobalScope);
+      return;
+    }
+    setShowGlobalScope(value);
+  };
+
+  const safeSetGlobalChancePriceFilter = (value: string) => {
+    if (typeof setGlobalChancePriceFilter !== 'function') {
+      console.error('[CierresDomain] Callback invalido: setGlobalChancePriceFilter', setGlobalChancePriceFilter);
+      return;
+    }
+    setGlobalChancePriceFilter(value);
+  };
+
+  const safeSetHistoryDate = (value: string) => {
+    if (typeof setHistoryDate !== 'function') {
+      console.error('[CierresDomain] Callback invalido: setHistoryDate', setHistoryDate);
+      return;
+    }
+    setHistoryDate(value);
+  };
+
+  const safeSetCierreLottery = (value: string) => {
+    if (typeof setCierreLottery !== 'function') {
+      console.error('[CierresDomain] Callback invalido: setCierreLottery', setCierreLottery);
+      return;
+    }
+    setCierreLottery(value);
+  };
+
+  const safeHandleDownloadCierre = () => {
+    if (typeof handleDownloadCierre !== 'function') {
+      console.error('[CierresDomain] Callback invalido: handleDownloadCierre', handleDownloadCierre);
+      return;
+    }
+    handleDownloadCierre();
+  };
 
   const {
     cierreLottery,
@@ -63,13 +133,13 @@ export function CierresDomain(props: any) {
             {canUseGlobalScope && (
               <div className="flex bg-black/30 border border-white/10 rounded overflow-hidden">
                 <button
-                  onClick={() => setShowGlobalScope(false)}
+                  onClick={() => safeSetShowGlobalScope(false)}
                   className={`px-3 py-2 text-xs font-bold uppercase tracking-wider transition-colors ${!showGlobalScope ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-white'}`}
                 >
                   Propio
                 </button>
                 <button
-                  onClick={() => setShowGlobalScope(true)}
+                  onClick={() => safeSetShowGlobalScope(true)}
                   className={`px-3 py-2 text-xs font-bold uppercase tracking-wider transition-colors ${showGlobalScope ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-white'}`}
                 >
                   Global
@@ -79,11 +149,11 @@ export function CierresDomain(props: any) {
             {canAccessAllUsers && (
               <select
                 value={globalChancePriceFilter}
-                onChange={(e) => setGlobalChancePriceFilter(e.target.value)}
+                onChange={(e) => safeSetGlobalChancePriceFilter(e.target.value)}
                 className="bg-black/30 border border-white/10 p-2 rounded text-sm text-white focus:outline-none focus:border-primary/50 font-light w-full sm:w-auto"
               >
                 <option value="">Todos los precios</option>
-                {(globalSettings.chancePrices || []).map((config: any, index: number) => (
+                {(globalSettings.chancePrices || []).map((config, index) => (
                   <option key={`cierre-price-${config.price}-${index}`} value={config.price}>
                     Chance USD {config.price.toFixed(2)}
                   </option>
@@ -93,21 +163,21 @@ export function CierresDomain(props: any) {
             <input
               type="date"
               value={historyDate}
-              onChange={(e) => setHistoryDate(e.target.value)}
+              onChange={(e) => safeSetHistoryDate(e.target.value)}
               className="bg-black/30 border border-white/10 p-2 rounded text-sm text-white focus:outline-none focus:border-primary/50 font-light w-full sm:w-auto"
             />
             <select
               value={cierreLottery}
-              onChange={(e) => setCierreLottery(e.target.value)}
+              onChange={(e) => safeSetCierreLottery(e.target.value)}
               className="bg-black/30 border border-white/10 p-2 rounded text-sm text-white focus:outline-none focus:border-primary/50 font-light w-full sm:w-auto"
             >
               <option value="">Seleccione un sorteo</option>
-              {lotteries.map((l: any) => (
+              {safeLotteries.map((l) => (
                 <option key={l.id} value={l.name}>{cleanText(l.name)}</option>
               ))}
             </select>
             <button
-              onClick={handleDownloadCierre}
+              onClick={safeHandleDownloadCierre}
               disabled={!cierreLottery}
               className="flex items-center justify-center gap-2 bg-primary/20 hover:bg-primary/30 text-primary p-2 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               title="Compartir"

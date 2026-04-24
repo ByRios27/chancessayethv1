@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { collection, limit, onSnapshot, query, where } from '../firebase';
+import { collection, getDocs, limit, query, where } from '../firebase';
 import { db } from '../firebase';
 import type { LotteryResult } from '../types/results';
 
@@ -15,6 +15,12 @@ export function useResults({
   onError?: FirestoreErrorHandler;
 }) {
   const [results, setResults] = useState<LotteryResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshTick, setRefreshTick] = useState(0);
+  const refresh = useCallback(() => {
+    setRefreshTick((prev) => prev + 1);
+  }, []);
 
   const getResultKey = useCallback((result: LotteryResult) => {
     return result.id || `${result.lotteryId}|${result.date}|${result.firstPrize}|${result.secondPrize}|${result.thirdPrize}`;
@@ -48,7 +54,14 @@ export function useResults({
   }, [businessDayKey, getResultKey, sortResultsByRecency]);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled) {
+      setLoading(false);
+      setError(null);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
 
     const qRes = query(
       collection(db, 'results'),
@@ -56,20 +69,35 @@ export function useResults({
       limit(300)
     );
 
-    const unsubscribe = onSnapshot(qRes, (snapshot) => {
-      const docs = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() } as LotteryResult));
-      setResults((prev) => mergeResultsWithLiveFeed(prev, docs));
-    }, (error) => {
-      onError?.(error, 'get', 'results');
-    });
+    const run = async () => {
+      try {
+        const snapshot = await getDocs(qRes);
+        if (cancelled) return;
+        const docs = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() } as LotteryResult));
+        setResults((prev) => mergeResultsWithLiveFeed(prev, docs));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'No se pudieron cargar los resultados';
+        setError(message);
+        onError?.(error, 'get', 'results');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
 
-    return () => unsubscribe();
-  }, [businessDayKey, enabled, mergeResultsWithLiveFeed, onError]);
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [businessDayKey, enabled, mergeResultsWithLiveFeed, onError, refreshTick]);
 
   return {
     results,
     setResults,
     getResultKey,
     sortResultsByRecency,
+    loading,
+    error,
+    refresh,
   };
 }

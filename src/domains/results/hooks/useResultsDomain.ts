@@ -21,7 +21,6 @@ interface UseResultsDomainParams {
   sortedLotteries: Lottery[];
   tickets: LotteryTicket[];
   currentSellerId?: string;
-  currentUserEmail?: string;
   getOperationalTimeSortValue: (time: string) => number;
   cleanText: (value: string) => string;
   getResultKey: (result: LotteryResult) => string;
@@ -38,7 +37,6 @@ export function useResultsDomain({
   sortedLotteries,
   tickets,
   currentSellerId,
-  currentUserEmail,
   getOperationalTimeSortValue,
   cleanText,
   getResultKey,
@@ -108,10 +106,9 @@ export function useResultsDomain({
     const map = new Map<string, { sales: number; prizes: number; hasWinners: boolean }>();
     if (!canManageResults || !currentSellerId) return map;
 
-    const currentEmail = (currentUserEmail || '').toLowerCase();
     const ownTickets = tickets.filter(ticket =>
       (ticket.status === 'active' || ticket.status === 'winner') &&
-      (ticket.sellerId === currentSellerId || (!!currentEmail && (ticket.sellerEmail || '').toLowerCase() === currentEmail))
+      ticket.sellerId === currentSellerId
     );
 
     visibleResults.forEach(result => {
@@ -130,7 +127,7 @@ export function useResultsDomain({
     });
 
     return map;
-  }, [canManageResults, cleanText, currentSellerId, currentUserEmail, getResultKey, getTicketDateKey, getTicketPrizesFromSource, tickets, visibleResults]);
+  }, [canManageResults, cleanText, currentSellerId, getResultKey, getTicketDateKey, getTicketPrizesFromSource, tickets, visibleResults]);
 
   const resetResultForm = useCallback(() => {
     setResultFormLotteryId('');

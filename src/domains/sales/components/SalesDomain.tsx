@@ -77,7 +77,7 @@ function NumericKeyboard({
         <button
           key={key}
           onClick={() => (key === '⌫' ? onBackspace() : onKeyPress(key))}
-          className="py-3 rounded-xl bg-white/5 border border-border text-sm font-black active:scale-95 transition-transform"
+          className="py-3 rounded-xl surface-panel text-sm font-black active:scale-95 transition-transform"
         >
           {key}
         </button>
@@ -176,20 +176,20 @@ export function SalesDomain(props: SalesDomainProps) {
       className="max-w-md mx-auto space-y-4 pb-24"
     >
       {!canSell && (
-        <div className="glass-card p-4 border border-red-500/20 bg-red-500/5">
+        <div className="surface-card p-4 border border-red-500/30 bg-red-500/10">
           <p className="text-xs font-black uppercase tracking-widest text-red-400">Ventas bloqueadas</p>
           <p className="text-xs text-muted-foreground mt-1">{sellBlockedReason}</p>
         </div>
       )}
 
       {!hasActiveLotteries && (
-        <div className="glass-card p-4 border border-amber-500/20 bg-amber-500/5">
+        <div className="surface-card p-4 border border-amber-500/30 bg-amber-500/10">
           <p className="text-xs font-black uppercase tracking-widest text-amber-300">Sin sorteos activos</p>
           <p className="text-xs text-muted-foreground mt-1">No hay sorteos disponibles para vender en este momento.</p>
         </div>
       )}
 
-      <div className="glass-card p-3 flex items-center justify-between relative z-30">
+      <div className="section-frame flex items-center justify-between relative z-30">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
             <Calendar className="w-4 h-4 text-primary" />
@@ -208,7 +208,7 @@ export function SalesDomain(props: SalesDomainProps) {
                 {showMultiSelect && (
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setShowMultiSelect(false)} />
-                    <div className="fixed inset-x-3 bottom-24 bg-background border border-border rounded-xl shadow-2xl z-50 p-2 space-y-1 max-h-[60vh] overflow-y-auto sm:absolute sm:top-full sm:left-0 sm:bottom-auto sm:inset-x-auto sm:mt-2 sm:w-full sm:min-w-[240px] sm:max-h-80">
+                    <div className="fixed inset-x-3 bottom-24 surface-panel shadow-2xl z-50 p-2 space-y-1 max-h-[60vh] overflow-y-auto sm:absolute sm:top-full sm:left-0 sm:bottom-auto sm:inset-x-auto sm:mt-2 sm:w-full sm:min-w-[240px] sm:max-h-80">
                       {safeActiveLotteries.length > 0 ? (
                         <>
                           <div className="flex items-center justify-between p-2 border-b border-white/10 mb-1">
@@ -226,7 +226,7 @@ export function SalesDomain(props: SalesDomainProps) {
                             </button>
                           </div>
                           {safeActiveLotteries.map((lottery) => (
-                            <label key={lottery.id} className="flex items-center gap-2 p-2 hover:bg-white/5 rounded-lg cursor-pointer transition-colors">
+                            <label key={lottery.id} className="flex items-center gap-2 p-2 hover:bg-white/10 rounded-lg cursor-pointer transition-colors">
                               <input
                                 type="checkbox"
                                 checked={safeMultiLottery.includes(lottery.name)}
@@ -276,7 +276,7 @@ export function SalesDomain(props: SalesDomainProps) {
             if (next) setShowMultiSelect(true);
           }}
           className={`px-4 py-2.5 rounded-xl text-[10px] font-bold uppercase transition-all border ${
-            isMultipleMode ? 'bg-primary border-primary text-primary-foreground' : 'bg-white/5 border-border text-muted-foreground'
+            isMultipleMode ? 'bg-primary border-primary text-primary-foreground' : 'surface-panel text-muted-foreground'
           }`}
           disabled={!hasActiveLotteries}
         >
@@ -284,7 +284,7 @@ export function SalesDomain(props: SalesDomainProps) {
         </button>
       </div>
 
-      <div className="bg-white/5 border border-border rounded-2xl p-1 flex gap-1">
+      <div className="surface-panel rounded-2xl p-1.5 flex gap-1">
         <button
           onClick={() => {
             setBetType('CH');
@@ -337,8 +337,8 @@ export function SalesDomain(props: SalesDomainProps) {
             setFocusedField('number');
             numberInputRef.current?.focus();
           }}
-          className={`glass-card p-2.5 flex flex-col items-center justify-center gap-0.5 transition-all border-2 cursor-pointer ${
-            focusedField === 'number' ? 'border-primary bg-primary/5' : 'border-transparent'
+          className={`surface-card p-2.5 flex flex-col items-center justify-center gap-0.5 transition-all border-2 cursor-pointer ${
+            focusedField === 'number' ? 'border-primary bg-primary/10' : 'border-white/10'
           }`}
         >
           <span className="text-[11px] font-mono uppercase text-muted-foreground font-medium">Numero</span>
@@ -389,8 +389,8 @@ export function SalesDomain(props: SalesDomainProps) {
               amountInputRef.current?.select();
             }, 0);
           }}
-          className={`glass-card p-2.5 flex flex-col items-center justify-center gap-0.5 transition-all border-2 cursor-pointer ${
-            focusedField === 'amount' ? 'border-primary bg-primary/5' : 'border-transparent'
+          className={`surface-card p-2.5 flex flex-col items-center justify-center gap-0.5 transition-all border-2 cursor-pointer ${
+            focusedField === 'amount' ? 'border-primary bg-primary/10' : 'border-white/10'
           }`}
         >
           <span className="text-[11px] font-mono uppercase text-muted-foreground font-medium">
@@ -447,7 +447,7 @@ export function SalesDomain(props: SalesDomainProps) {
       </button>
 
       {safeCart.length > 0 && (
-        <div className="glass-card p-3 space-y-2">
+        <div className="section-frame space-y-2">
           <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
             <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Carrito ({safeCart.length})</h3>
             <button onClick={clearCart} className="text-[11px] font-bold uppercase text-red-500">Vaciar</button>
@@ -462,15 +462,15 @@ export function SalesDomain(props: SalesDomainProps) {
             ).map(([lotteryName, bets]) => {
               const betList = bets as (Bet & { originalIdx: number })[];
               return (
-              <div key={lotteryName} className="space-y-1.5 bg-black/20 p-2 rounded-xl border border-white/5">
+              <div key={lotteryName} className="space-y-1.5 surface-panel p-2">
                 <div className="text-[10px] font-bold uppercase tracking-widest text-primary flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 bg-primary rounded-full"></span>
                   {cleanText(lotteryName)}
-                  <span className="text-muted-foreground ml-auto bg-white/5 px-1.5 py-0.5 rounded">({betList.length})</span>
+                  <span className="text-muted-foreground ml-auto bg-white/10 px-1.5 py-0.5 rounded">({betList.length})</span>
                 </div>
                 <div className="space-y-1">
                   {betList.map((bet) => (
-                    <div key={`${bet.lottery}-${bet.number}-${bet.type}-${bet.originalIdx}`} className="flex items-center justify-between text-xs bg-white/5 p-1.5 rounded-lg border border-white/5">
+                    <div key={`${bet.lottery}-${bet.number}-${bet.type}-${bet.originalIdx}`} className="flex items-center justify-between text-xs surface-soft p-1.5">
                       <div className="flex items-center gap-2 overflow-hidden">
                         <span className="font-mono font-bold text-primary shrink-0">{bet.type}</span>
                         <span className="font-bold tracking-widest shrink-0">{bet.number}</span>
@@ -556,14 +556,14 @@ export function SalesDomain(props: SalesDomainProps) {
           }
           setShowFastEntryModal(true);
         }}
-        className="w-full py-3 bg-white/5 border border-border rounded-xl text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground transition-all flex items-center justify-center gap-2"
+        className="w-full py-3 surface-panel text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground transition-all flex items-center justify-center gap-2"
       >
         <Zap className="w-4 h-4" />
         Copiado rapido
       </button>
 
       {userProfile?.role === 'seller' && (
-        <div className="glass-card p-4 space-y-4 border-primary/20 bg-primary/5">
+        <div className="surface-card p-4 space-y-4 border-primary/30 bg-primary/10">
           <div className="flex items-center justify-between border-b border-primary/10 pb-2">
             <div className="flex items-center gap-2">
               <LayoutDashboard className="w-4 h-4 text-primary" />

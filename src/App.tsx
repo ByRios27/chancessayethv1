@@ -82,7 +82,6 @@ import {
   googleProvider,
   increment,
   limit,
-  onSnapshot,
   orderBy,
   query,
   runTransaction,
@@ -232,10 +231,18 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   } as Record<OperationType, string>)[operationType];
 
   const target = path || 'documento';
+  const humanHint = firebaseCode === 'permission-denied'
+    ? 'No tienes permisos para esta acción.'
+    : firebaseCode === 'failed-precondition'
+      ? 'Falta un requisito previo para completar la operación.'
+      : firebaseCode === 'unavailable'
+        ? 'Servicio temporalmente no disponible. Intenta nuevamente.'
+        : `Causa: ${firebaseMessage}`;
+
   toast.error(
     `Error al ${operationLabel} (${target})`,
     {
-      description: `Código: ${firebaseCode} | Causa: ${firebaseMessage}`
+      description: `Código: ${firebaseCode} | ${humanHint}`
     }
   );
 
@@ -422,7 +429,13 @@ function App() {
     onError: handleOperationalHookError,
   });
 
-  const { injections, setInjections } = useInjections({
+  const {
+    injections,
+    setInjections,
+    loading: injectionsLoading,
+    error: injectionsError,
+    refresh: refreshInjections,
+  } = useInjections({
     enabled: injectionsRealtimeEnabled,
     canAccessAllUsers,
     businessDayKey,
@@ -430,7 +443,13 @@ function App() {
     onError: handleOperationalHookError,
   });
 
-  const { settlements, setSettlements } = useSettlements({
+  const {
+    settlements,
+    setSettlements,
+    loading: settlementsLoading,
+    error: settlementsError,
+    refresh: refreshSettlements,
+  } = useSettlements({
     enabled: settlementsRealtimeEnabled,
     canAccessAllUsers,
     sellerId: operationalSellerId,
@@ -485,11 +504,44 @@ function App() {
     setSelectedLottery,
     onError: handleOperationalHookError
   });
-  const { results, setResults, getResultKey } = useResults({
+  const {
+    results,
+    setResults,
+    getResultKey,
+    loading: resultsLoading,
+    error: resultsError,
+    refresh: refreshResults,
+  } = useResults({
     enabled: !!user?.uid && !!userProfile?.role && shouldLoadResults,
     businessDayKey,
     onError: handleOperationalHookError
   });
+
+  const tabNeedsPunctualRefresh = useMemo(() => (
+    ['results', 'stats', 'dashboard', 'history', 'liquidaciones', 'archivo', 'cierres'] as AppTabId[]
+  ).includes(activeTab), [activeTab]);
+
+  const punctualDataLoading = resultsLoading || injectionsLoading || settlementsLoading;
+
+  const handleRefreshPunctualData = useCallback(() => {
+    refreshResults();
+    refreshInjections();
+    refreshSettlements();
+    toast.success('Actualizando datos puntuales...');
+  }, [refreshInjections, refreshResults, refreshSettlements]);
+
+  useEffect(() => {
+    if (resultsError) toast.error(`Resultados: ${resultsError}`);
+  }, [resultsError]);
+
+  useEffect(() => {
+    if (injectionsError) toast.error(`Inyecciones: ${injectionsError}`);
+  }, [injectionsError]);
+
+  useEffect(() => {
+    if (settlementsError) toast.error(`Liquidaciones: ${settlementsError}`);
+  }, [settlementsError]);
+
   const [cart, setCart] = useState<Bet[]>([]);
   const cartTotal = useMemo(() => {
     return cart.reduce((acc, item) => acc + (item.type === 'CH' ? item.quantity * chancePrice : item.amount), 0);
@@ -689,18 +741,19 @@ function App() {
   useEffect(() => {
     if (!user?.uid || !userProfile?.role) return;
 
-    // Fetch global settings
-    console.log("Fetching global settings for role:", userProfile.role);
-    const unsubscribeSettings = onSnapshot(doc(db, 'settings', 'global'), async (snapshot) => {
-      if (snapshot.exists()) {
-        console.log("Global settings fetched successfully");
-        const data = snapshot.id ? { id: snapshot.id, ...snapshot.data() } as GlobalSettings : snapshot.data() as GlobalSettings;
-        setGlobalSettings(data);
-      } else {
-        console.warn("Global settings document not found");
-        // If CEO is logged in and settings are missing, initialize them
+    let cancelled = false;
+    const loadGlobalSettings = async () => {
+      try {
+        const snapshot = await getDoc(doc(db, 'settings', 'global'));
+        if (cancelled) return;
+
+        if (snapshot.exists()) {
+          const data = snapshot.id ? { id: snapshot.id, ...snapshot.data() } as GlobalSettings : snapshot.data() as GlobalSettings;
+          setGlobalSettings(data);
+          return;
+        }
+
         if (userProfile.role === 'ceo') {
-          console.log("Initializing global settings for the first time...");
           const initialSettings: GlobalSettings = {
             id: 'global',
             chancePrices: [
@@ -715,23 +768,20 @@ function App() {
             pl23Multiplier: 200,
             nextSellerNumber: 1
           };
-          try {
-            await setDoc(doc(db, 'settings', 'global'), initialSettings);
-            console.log("Global settings initialized successfully");
-            // Also initialize connectivity doc for testing
-            await setDoc(doc(db, 'public', 'connectivity'), { lastTested: serverTimestamp() });
-          } catch (err) {
-            console.error("Error initializing global settings:", err);
-          }
+          await setDoc(doc(db, 'settings', 'global'), initialSettings);
+          await setDoc(doc(db, 'public', 'connectivity'), { lastTested: serverTimestamp() });
+          if (!cancelled) setGlobalSettings(initialSettings);
         }
+      } catch (error) {
+        console.error("Error fetching global settings:", error);
+        handleFirestoreError(error, OperationType.GET, 'settings/global');
       }
-    }, (error) => {
-      console.error("Error fetching global settings:", error);
-      handleFirestoreError(error, OperationType.GET, 'settings/global');
-    });
+    };
+
+    void loadGlobalSettings();
 
     return () => {
-      unsubscribeSettings();
+      cancelled = true;
     };
   }, [user?.uid, userProfile?.role]);
 
@@ -1273,7 +1323,6 @@ function App() {
     sortedLotteries,
     tickets,
     currentSellerId: operationalSellerId,
-    currentUserEmail: userProfile?.email,
     getOperationalTimeSortValue,
     cleanText,
     getResultKey,
@@ -2570,6 +2619,25 @@ function App() {
 
         {/* Scrollable Area */}
         <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-8 custom-scrollbar min-w-0">
+          {tabNeedsPunctualRefresh && (
+            <div className="mb-4 glass-card p-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Datos puntuales</p>
+                <p className="text-xs text-muted-foreground">
+                  {punctualDataLoading ? 'Actualizando datos...' : 'Sin tiempo real en esta vista. Usa refrescar cuando lo necesites.'}
+                </p>
+              </div>
+              <button
+                onClick={handleRefreshPunctualData}
+                disabled={punctualDataLoading}
+                className="px-3 py-2 rounded-lg border border-border text-xs font-black uppercase tracking-widest hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <Repeat className={`w-3.5 h-3.5 ${punctualDataLoading ? 'animate-spin' : ''}`} />
+                Refrescar
+              </button>
+            </div>
+          )}
+
           <AnimatePresence mode="wait">
             {activeTab === 'dashboard' && canAccessDashboard && (
               <Suspense fallback={<div className="text-xs text-muted-foreground">Cargando dashboard...</div>}>
