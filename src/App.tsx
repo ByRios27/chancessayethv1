@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { format } from 'date-fns';
 import {
@@ -9,16 +9,13 @@ import {
   Banknote,
   BarChart3,
   Bell,
-  Calendar,
   Check,
   CheckCircle2,
-  ChevronDown,
   ChevronRight,
   Cloud,
   CloudOff,
   Copy,
   Database,
-  Delete,
   DollarSign,
   Edit2,
   Flag,
@@ -29,13 +26,11 @@ import {
   LogOut,
   Menu,
   MessageCircle,
-  Minus,
   Moon,
   Plus,
   PlusCircle,
   Printer,
   Repeat,
-  RotateCcw,
   Search,
   Settings,
   Share2,
@@ -155,6 +150,10 @@ import { CIERRES_DOMAIN_SPEC, canAccessCierresDomain } from './domains/cierres/d
 import { LIQUIDATION_DOMAIN_SPEC, canAccessLiquidationDomain } from './domains/liquidation/domainSpec';
 import { RESULTS_DOMAIN_SPEC, canAccessResultsDomain } from './domains/results/domainSpec';
 import { SALES_DOMAIN_SPEC, type DomainRole } from './domains/sales/domainSpec';
+import { SalesDomain } from './domains/sales/components/SalesDomain';
+import { validateLotterySellable, validateSalesAccess } from './domains/sales/helpers/validation';
+import { useSalesAvailability } from './domains/sales/hooks/useSalesAvailability';
+import { useSalesCartActions } from './domains/sales/hooks/useSalesCartActions';
 import { USERS_DOMAIN_SPEC, canAccessUsersDomain } from './domains/users/domainSpec';
 
 import type { RecoveryTicketRecord } from './types/archive';
@@ -236,7 +235,7 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   toast.error(
     `Error al ${operationLabel} (${target})`,
     {
-      description: `CÃƒÆ’Ã‚Â³digo: ${firebaseCode} | Causa: ${firebaseMessage}`
+      description: `CÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³digo: ${firebaseCode} | Causa: ${firebaseMessage}`
     }
   );
 
@@ -518,8 +517,6 @@ function App() {
   });
   const [showSettingsModal, setShowSettingsModal] = useState(false);
 
-  const Cursor = () => <span className="w-[2px] h-6 bg-primary animate-blink inline-block align-middle ml-0.5" />;
-
   // Refs for auto-focus
   const numberInputRef = useRef<HTMLInputElement>(null);
   const amountInputRef = useRef<HTMLInputElement>(null);
@@ -595,56 +592,6 @@ function App() {
     if (betType === 'CH') setQuantity('1');
     else setPlAmount('1.00');
     setFocusedField('number');
-  };
-
-  const NumericKeyboard = ({ onKeyPress, onBackspace, onClear }: { 
-    onKeyPress: (key: string) => void; 
-    onBackspace: () => void;
-    onClear: () => void;
-  }) => {
-    const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0'];
-    
-    return (
-      <div className="grid grid-cols-3 gap-1.5 w-full max-w-md mx-auto">
-        {keys.map((key) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => onKeyPress(key)}
-            className="h-14 md:h-16 bg-white/5 border border-border rounded-xl text-xl font-bold hover:bg-white/10 active:scale-95 transition-all flex items-center justify-center"
-          >
-            {key}
-          </button>
-        ))}
-        <button
-          type="button"
-          onClick={onBackspace}
-          className="h-14 md:h-16 bg-white/5 border border-border rounded-xl text-xl font-bold hover:bg-white/10 active:scale-95 transition-all flex items-center justify-center"
-        >
-          <Delete className="w-6 h-6" />
-        </button>
-        <div className="col-span-3 flex justify-center mt-1">
-          <button
-            type="button"
-            onClick={onClear}
-            className="p-1.5 text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <RotateCcw className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-    );
-  };
-  const handleNumberChange = (val: string) => {
-    const cleanVal = val.replace(/\D/g, '');
-    setNumber(cleanVal);
-    
-    // Auto-focus logic
-    const maxLength = betType === 'CH' ? 2 : 4;
-    if (cleanVal.length === maxLength) {
-      amountInputRef.current?.focus();
-      amountInputRef.current?.select();
-    }
   };
 
   const getBusinessDayRange = useCallback((day: string) => {
@@ -1001,178 +948,6 @@ function App() {
 
   const canUpdatePersonalChancePrice = !hasOwnUnliquidatedSalesInBusinessDay;
 
-  const addToCart = () => {
-    if (!number || !quantity) {
-      toast.error('Ingrese nÃƒÆ’Ã‚Âºmero y cantidad');
-      return;
-    }
-
-    const qInt = parseInt(quantity);
-    if (isNaN(qInt) || qInt <= 0) {
-      toast.error('Cantidad invÃƒÆ’Ã‚Â¡lida');
-      return;
-    }
-
-    // Validate number length
-    if (betType === 'CH' && number.length !== 2) {
-      toast.error('Chance (CH) debe ser de 2 cifras');
-      return;
-    }
-    if (betType === 'PL' && number.length !== 4) {
-      toast.error('Pale (PL) debe ser de 4 cifras');
-      return;
-    }
-    if (betType === 'BL' && number.length !== 4) {
-      toast.error('Billete (BL) debe ser de 4 cifras');
-      return;
-    }
-
-    if (betType === 'PL' && !globalSettings.palesEnabled) {
-      toast.error('Pales estÃƒÆ’Ã‚Â¡n desactivados');
-      return;
-    }
-    if (betType === 'BL' && !globalSettings.billetesEnabled) {
-      toast.error('Billetes estÃƒÆ’Ã‚Â¡n desactivados');
-      return;
-    }
-
-    const lotteriesToBuy = new Set<string>();
-    if (isMultipleMode) {
-      multiLottery.forEach(l => {
-        const lottery = findActiveLotteryByName(l);
-        if (betType === 'BL' && !lottery?.isFourDigits) {
-          toast.error(`Sorteo ${l} no admite Billetes (4 cifras)`);
-          return;
-        }
-        lotteriesToBuy.add((lottery?.name || l).trim());
-      });
-    } else if (selectedLottery) {
-      const lottery = findActiveLotteryByName(selectedLottery);
-      if (betType === 'BL' && !lottery?.isFourDigits) {
-        toast.error('Este sorteo no admite Billetes (4 cifras)');
-        return;
-      }
-      lotteriesToBuy.add((lottery?.name || selectedLottery).trim());
-    }
-    
-    if (lotteriesToBuy.size === 0) {
-      toast.error('Seleccione al menos un sorteo vÃƒÆ’Ã‚Â¡lido');
-      return;
-    }
-
-    let calculatedAmount = 0;
-    if (betType === 'CH') {
-      calculatedAmount = qInt * chancePrice;
-    } else if (betType === 'BL') {
-      calculatedAmount = parseFloat(plAmount); // Reusing plAmount for BL investment
-      if (isNaN(calculatedAmount) || calculatedAmount < 0.10) {
-        toast.error('InversiÃƒÆ’Ã‚Â³n mÃƒÆ’Ã‚Â­nima para Billete (BL) es USD 0.10');
-        return;
-      }
-    } else {
-      // For PL, quantity is units (max 5), plAmount is price per unit
-      const costPerUnit = parseFloat(plAmount);
-      if (isNaN(costPerUnit) || costPerUnit < 0.10 || costPerUnit > 5.00) {
-        toast.error('Costo de Pale (PL) debe ser entre USD 0.10 y USD 5.00');
-        return;
-      }
-      if (qInt > 5) {
-        toast.error('MÃƒÆ’Ã‚Â¡ximo 5 combinaciones por nÃƒÆ’Ã‚Âºmero en Pale (PL)');
-        return;
-      }
-      calculatedAmount = qInt * costPerUnit;
-    }
-
-    // Check existing quantity for this number/lottery in cart and active tickets
-    for (const lot of lotteriesToBuy) {
-      if (betType === 'PL') {
-        const inCart = cart
-          .filter(b => b && b.number === number && b.lottery === lot && b.type === 'PL')
-          .reduce((acc, b) => acc + b.quantity, 0);
-        
-        const inTickets = tickets
-          .filter(t => t.status === 'active' && t.bets)
-          .flatMap(t => t.bets)
-          .filter(b => b && b.number === number && b.lottery === lot && b.type === 'PL')
-          .reduce((acc, b) => acc + b.quantity, 0);
-
-        if (inCart + inTickets + qInt > 5) {
-          toast.error(`Excede lÃƒÆ’Ã‚Â­mite de 5 combinaciones para #${number} en ${lot}`);
-          return;
-        }
-      }
-    }
-
-    setCart(prevCart => {
-      const newBets: Bet[] = [];
-      lotteriesToBuy.forEach(lot => {
-        newBets.push({
-          number: number.trim(),
-          lottery: lot.trim(),
-          amount: calculatedAmount,
-          type: betType,
-          quantity: qInt
-        });
-      });
-      return unifyBets([...prevCart, ...newBets]);
-    });
-
-    setNumber('');
-    setQuantity('1');
-    setPlAmount('1.00');
-    setFocusedField('number');
-    setTimeout(() => {
-      numberInputRef.current?.focus();
-    }, 0);
-  };
-
-  const removeFromCart = (index: number) => {
-    setCart(cart.filter((_, i) => i !== index));
-  };
-
-  const updateCartItemQuantity = (index: number, newQty: number) => {
-    if (newQty < 1) return;
-    const item = cart[index];
-    if (!item) return;
-
-    if (item.type === 'PL') {
-      const lot = item.lottery;
-      const num = item.number;
-      
-      const inCartOther = cart
-        .filter((b, i) => b && i !== index && b.number === num && b.lottery === lot && b.type === 'PL')
-        .reduce((acc, b) => acc + b.quantity, 0);
-      
-      const inTickets = tickets
-        .filter(t => t.status === 'active' && t.bets)
-        .flatMap(t => t.bets)
-        .filter(b => b && b.number === num && b.lottery === lot && b.type === 'PL')
-        .reduce((acc, b) => acc + b.quantity, 0);
-
-      if (inCartOther + inTickets + newQty > 5) {
-        toast.error(`Excede lÃƒÆ’Ã‚Â­mite de 5 combinaciones para #${num} en ${lot}`);
-        return;
-      }
-    }
-
-    setCart(prev => prev.map((item, i) => {
-      if (i !== index) return item;
-      const unitAmount = item.amount / item.quantity;
-      return { ...item, quantity: newQty, amount: unitAmount * newQty };
-    }));
-  };
-
-  const updateCartItemAmount = (index: number, newAmount: number) => {
-    if (newAmount < 0) return;
-    setCart(prev => prev.map((item, i) => i === index ? { ...item, amount: newAmount } : item));
-  };
-
-  const clearCart = () => {
-    if (cart.length === 0) return;
-    setCart([]);
-    toast.success('Panel limpiado');
-  };
-
   const getDailySequence = () => {
     const now = new Date();
     const startOfDay = new Date(now);
@@ -1193,18 +968,37 @@ function App() {
 
   const handleSell = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || cart.length === 0 || isSubmittingSale || saleInFlightRef.current) return;
-    if (!operationalSellerId) {
-      toast.error(SALES_DOMAIN_SPEC.expectedErrors.missingSellerId);
+    if (!user) return;
+    if (isSubmittingSale || saleInFlightRef.current) {
+      toast.error(SALES_DOMAIN_SPEC.expectedErrors.saleInProgress);
+      return;
+    }
+    if (cart.length === 0) {
+      toast.error(SALES_DOMAIN_SPEC.expectedErrors.emptyCart);
+      return;
+    }
+    const salesAccessError = validateSalesAccess({ userProfile, operationalSellerId });
+    if (salesAccessError) {
+      toast.error(salesAccessError);
       return;
     }
     setShowCheckoutModal(true);
   };
 
   const confirmSale = async () => {
-    if (!user || cart.length === 0 || saleInFlightRef.current) return;
-    if (!operationalSellerId) {
-      toast.error(SALES_DOMAIN_SPEC.expectedErrors.missingSellerId);
+    if (!user) return;
+    if (saleInFlightRef.current) {
+      toast.error(SALES_DOMAIN_SPEC.expectedErrors.saleInProgress);
+      return;
+    }
+    if (cart.length === 0) {
+      toast.error(SALES_DOMAIN_SPEC.expectedErrors.emptyCart);
+      return;
+    }
+
+    const salesAccessError = validateSalesAccess({ userProfile, operationalSellerId });
+    if (salesAccessError) {
+      toast.error(salesAccessError);
       return;
     }
 
@@ -1216,21 +1010,17 @@ function App() {
     const finalCustomerName = customerName.trim() || 'Cliente General';
 
     // Verify if any lottery in the cart is closed or has results
-    const now = new Date();
-    const todayStr = format(now, 'yyyy-MM-dd');
     for (const bet of unifiedCart) {
       const lot = lotteries.find(l => cleanText(l.name) === cleanText(bet.lottery));
-      if (!lot) {
-        toast.error(`Sorteo no encontrado: ${bet.lottery}`);
-        return;
-      }
-      if (!isLotteryOpenForSales(lot)) {
-        toast.error(`El sorteo ${bet.lottery} ya estÃƒÆ’Ã‚Â¡ cerrado.`);
-        return;
-      }
-      const hasResult = results.some(r => cleanText(r.lotteryName) === cleanText(bet.lottery) && r.date === todayStr);
-      if (hasResult) {
-        toast.error(`El sorteo ${bet.lottery} ya tiene resultados.`);
+      const sellableError = validateLotterySellable({
+        lottery: lot,
+        lotteryName: bet.lottery,
+        isLotteryOpenForSales,
+        results,
+        cleanText,
+      });
+      if (sellableError) {
+        toast.error(sellableError);
         return;
       }
     }
@@ -1262,7 +1052,7 @@ function App() {
         setCustomerName('');
         setShowCheckoutModal(false);
         setShowTicketModal({ ticket: updatedTicket });
-        toast.success('Ãƒâ€šÃ‚Â¡Venta actualizada con ÃƒÆ’Ã‚Â©xito!');
+        toast.success('ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡Venta actualizada con ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©xito!');
       } else {
         // Create new ticket
         const sequenceNumber = getDailySequence();
@@ -1302,49 +1092,13 @@ function App() {
         setCustomerName('');
         setShowCheckoutModal(false);
         setShowTicketModal({ ticket: newTicket });
-        toast.success('Ãƒâ€šÃ‚Â¡Venta realizada con ÃƒÆ’Ã‚Â©xito!');
+        toast.success('ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡Venta realizada con ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©xito!');
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'tickets');
     } finally {
       saleInFlightRef.current = false;
       setIsSubmittingSale(false);
-    }
-  };
-
-  const isLotteryOpenForSales = (lot: Lottery) => {
-    if (!lot.active) return false;
-    if (!lot.closingTime) return true;
-    
-    try {
-      const now = new Date();
-      let currentHour = now.getHours();
-      const currentMinutes = now.getMinutes();
-      
-      // Ajustar para el ciclo de 1 AM a 1 AM
-      // Si es antes de la 1 AM, lo tratamos como horas 24, 25, 26
-      const adjustedHour = currentHour < 1 ? currentHour + 24 : currentHour;
-      const currentTimeVal = adjustedHour * 60 + currentMinutes;
-
-      // Parse closing time safely
-      const timeParts = lot.closingTime.match(/(\d+):(\d+)/);
-      if (!timeParts) {
-        console.warn(`Invalid closing time format for ${lot.name}: ${lot.closingTime}`);
-        return true; // Default to open if format is weird
-      }
-      
-      let closeH = parseInt(timeParts[1]);
-      let closeM = parseInt(timeParts[2]);
-      
-      // Si la hora de cierre es antes de la 1 AM, tambiÃƒÆ’Ã‚Â©n la ajustamos
-      const adjustedCloseH = closeH < 1 ? closeH + 24 : closeH;
-      const closeTimeVal = adjustedCloseH * 60 + closeM;
-
-      const isOpen = currentTimeVal < closeTimeVal;
-      return isOpen;
-    } catch (e) {
-      console.error(`Error in isLotteryOpenForSales for ${lot.name}:`, e);
-      return true;
     }
   };
 
@@ -1356,14 +1110,14 @@ function App() {
     if (isNaN(ticketDate.getTime())) return true; // Treat invalid dates as closed
     const now = new Date();
     
-    // Definir el "dÃƒÆ’Ã‚Â­a del sorteo" (que empieza a la 1 AM)
+    // Definir el "dÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­a del sorteo" (que empieza a la 1 AM)
     const getLotteryDay = (date: Date) => {
       const d = new Date(date);
       d.setHours(d.getHours() - 1);
       return format(d, 'yyyy-MM-dd');
     };
 
-    // Si no es el mismo "dÃƒÆ’Ã‚Â­a de sorteo", estÃƒÆ’Ã‚Â¡ cerrado
+    // Si no es el mismo "dÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­a de sorteo", estÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ cerrado
     if (getLotteryDay(ticketDate) !== getLotteryDay(now)) return true;
 
     // Verificar cada apuesta del ticket
@@ -1452,21 +1206,45 @@ function App() {
   const sortedLotteries = [...lotteries].sort((a, b) => {
     return getOperationalTimeSortValue(a.drawTime || '00:00') - getOperationalTimeSortValue(b.drawTime || '00:00');
   });
-  const activeLotteries = useMemo(() => {
-    const seenNames = new Set<string>();
-    return sortedLotteries
-      .filter(l => isLotteryOpenForSales(l))
-      .filter(lottery => {
-        const key = normalizeLotteryName(lottery.name);
-        if (!key || seenNames.has(key)) return false;
-        seenNames.add(key);
-        return true;
-      });
-  }, [sortedLotteries]);
-  const findActiveLotteryByName = useCallback((name: string) => {
-    const key = normalizeLotteryName(name);
-    return activeLotteries.find(l => normalizeLotteryName(l.name) === key);
-  }, [activeLotteries]);
+  const { isLotteryOpenForSales, activeLotteries, findActiveLotteryByName } = useSalesAvailability({
+    sortedLotteries,
+    isMultipleMode,
+    multiLottery,
+    selectedLottery,
+    setSelectedLottery,
+    setMultiLottery,
+    betType,
+    setBetType,
+    setNumber,
+  });
+  const {
+    addToCart,
+    removeFromCart,
+    updateCartItemQuantity,
+    updateCartItemAmount,
+    clearCart,
+  } = useSalesCartActions({
+    userProfile,
+    operationalSellerId,
+    number,
+    quantity,
+    plAmount,
+    betType,
+    chancePrice,
+    globalSettings,
+    isMultipleMode,
+    multiLottery,
+    selectedLottery,
+    findActiveLotteryByName,
+    cart,
+    setCart,
+    tickets,
+    setNumber,
+    setQuantity,
+    setPlAmount,
+    setFocusedField,
+    numberInputRef,
+  });
   const {
     canManageResults,
     isCeoUser,
@@ -1513,39 +1291,6 @@ function App() {
     },
   });
 
-  // Auto-select first active lottery if none selected or current is closed
-  useEffect(() => {
-    if (activeLotteries.length > 0) {
-      if (!isMultipleMode) {
-        if (!selectedLottery || !findActiveLotteryByName(selectedLottery)) {
-          setSelectedLottery(activeLotteries[0].name);
-        }
-      } else {
-        // Filter closed lotteries from multiLottery
-        const validMulti = multiLottery.filter(name => !!findActiveLotteryByName(name));
-        if (validMulti.length !== multiLottery.length) {
-          setMultiLottery(validMulti);
-        }
-      }
-    } else {
-      if (selectedLottery !== '') setSelectedLottery('');
-      if (multiLottery.length > 0) setMultiLottery([]);
-    }
-  }, [activeLotteries, findActiveLotteryByName, isMultipleMode, selectedLottery, multiLottery]);
-
-  useEffect(() => {
-    if (betType === 'BL') {
-      const supportsBL = isMultipleMode 
-        ? multiLottery.some(name => findActiveLotteryByName(name)?.isFourDigits)
-        : findActiveLotteryByName(selectedLottery)?.isFourDigits;
-      
-      if (!supportsBL) {
-        setBetType('CH');
-        setNumber('');
-      }
-    }
-  }, [betType, findActiveLotteryByName, isMultipleMode, multiLottery, selectedLottery]);
-
   const cancelTicket = async (id: string) => {
     const ticket = tickets.find(t => t.id === id);
     if (!ticket) return;
@@ -1568,7 +1313,7 @@ function App() {
     setConfirmModal({
       show: true,
       title: 'Borrar Venta',
-      message: 'Ãƒâ€šÃ‚Â¿EstÃƒÆ’Ã‚Â¡ seguro de borrar esta venta? Se eliminarÃƒÆ’Ã‚Â¡ permanentemente de la base de datos.',
+      message: 'ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿EstÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ seguro de borrar esta venta? Se eliminarÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ permanentemente de la base de datos.',
       onConfirm: async () => {
         try {
           await deleteTicketById(id);
@@ -1588,7 +1333,7 @@ function App() {
       ? format(ticket.timestamp.toDate(), 'dd/MM/yyyy HH:mm') 
       : format(new Date(), 'dd/MM/yyyy HH:mm');
     
-    let message = `*CHANCE PRO - TICKET DE LOTERÃƒÆ’Ã‚ÂA*\n`;
+    let message = `*CHANCE PRO - TICKET DE LOTERÃƒÆ’Ã†â€™Ãƒâ€šÃ‚ÂA*\n`;
     message += `--------------------------------\n`;
     message += `*Ticket:* #${ticketId}\n`;
     message += `*Vendedor:* ${ticket.sellerCode || '---'}\n`;
@@ -1610,10 +1355,10 @@ function App() {
     message += `--------------------------------\n`;
     message += `*TOTAL:* $${totalAmount.toFixed(2)} USD\n`;
     message += `--------------------------------\n`;
-    message += `_Ãƒâ€šÃ‚Â¡Buena Suerte!_`;
+    message += `_ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡Buena Suerte!_`;
 
     const shareData = {
-      title: 'Ticket de LoterÃƒÆ’Ã‚Â­a - Chance Pro',
+      title: 'Ticket de LoterÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­a - Chance Pro',
       text: message
     };
 
@@ -1670,11 +1415,11 @@ function App() {
       return;
     }
     if (newPassword !== confirmPassword) {
-      toast.error('Las contraseÃƒÆ’Ã‚Â±as no coinciden');
+      toast.error('Las contraseÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â±as no coinciden');
       return;
     }
     if (newPassword.length < 6) {
-      toast.error('La contraseÃƒÆ’Ã‚Â±a debe tener al menos 6 caracteres');
+      toast.error('La contraseÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â±a debe tener al menos 6 caracteres');
       return;
     }
 
@@ -1682,7 +1427,7 @@ function App() {
     try {
       if (auth.currentUser) {
         await updatePassword(auth.currentUser, newPassword);
-        toast.success('ContraseÃƒÆ’Ã‚Â±a actualizada correctamente');
+        toast.success('ContraseÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â±a actualizada correctamente');
         setNewPassword('');
         setConfirmPassword('');
       } else {
@@ -1691,9 +1436,9 @@ function App() {
     } catch (error: any) {
       console.error('Error updating password:', error);
       if (error.code === 'auth/requires-recent-login') {
-        toast.error('Por seguridad, debe cerrar sesiÃƒÆ’Ã‚Â³n e iniciarla de nuevo para cambiar su contraseÃƒÆ’Ã‚Â±a.');
+        toast.error('Por seguridad, debe cerrar sesiÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n e iniciarla de nuevo para cambiar su contraseÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â±a.');
       } else {
-        toast.error(`Error: ${error.message || 'No se pudo actualizar la contraseÃƒÆ’Ã‚Â±a'}`);
+        toast.error(`Error: ${error.message || 'No se pudo actualizar la contraseÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â±a'}`);
       }
     } finally {
       setIsUpdatingPassword(false);
@@ -1709,13 +1454,13 @@ function App() {
     }
 
      if (!canUpdatePersonalChancePrice) {
-      toast.error('Solo puedes cambiar este precio antes de tu primera venta del dÃƒÆ’Ã‚Â­a o despuÃƒÆ’Ã‚Â©s de ser liquidado');
+      toast.error('Solo puedes cambiar este precio antes de tu primera venta del dÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­a o despuÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©s de ser liquidado');
       return;
     }
 
     const selectedConfig = globalSettings.chancePrices?.find(cp => Math.abs(cp.price - personalChancePrice) < 0.001);
     if (!selectedConfig) {
-      toast.error('Seleccione un precio de chance vÃƒÆ’Ã‚Â¡lido');
+      toast.error('Seleccione un precio de chance vÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡lido');
       return;
     }
 
@@ -1758,7 +1503,7 @@ function App() {
     setConfirmModal({
       show: true,
       title: 'Editar Venta',
-      message: 'Se cargarÃƒÆ’Ã‚Â¡n las apuestas al carrito para modificarlas. El ticket original se mantendrÃƒÆ’Ã‚Â¡ hasta que confirmes los cambios. Ãƒâ€šÃ‚Â¿Continuar?',
+      message: 'Se cargarÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡n las apuestas al carrito para modificarlas. El ticket original se mantendrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ hasta que confirmes los cambios. ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿Continuar?',
       onConfirm: () => {
         const uniqueTicketLotteries = Array.from(new Set(
           (ticket.bets || [])
@@ -1788,7 +1533,7 @@ function App() {
     setEditingTicketId(null);
     setCart([]);
     setCustomerName('');
-    toast.info('EdiciÃƒÆ’Ã‚Â³n cancelada');
+    toast.info('EdiciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n cancelada');
   };
 
   const editCartItem = (idx: number) => {
@@ -1912,8 +1657,8 @@ function App() {
 
     setConfirmModal({
       show: true,
-      title: 'Archivar y Limpiar DÃƒÆ’Ã‚Â­a Operativo',
-      message: 'Se archivarÃƒÆ’Ã‚Â¡n los datos del dÃƒÆ’Ã‚Â­a operativo actual y luego se limpiarÃƒÆ’Ã‚Â¡n tickets, resultados e inyecciones operativas. Ãƒâ€šÃ‚Â¿Deseas continuar?',
+      title: 'Archivar y Limpiar DÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­a Operativo',
+      message: 'Se archivarÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡n los datos del dÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­a operativo actual y luego se limpiarÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡n tickets, resultados e inyecciones operativas. ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿Deseas continuar?',
       onConfirm: async () => {
         try {
           const result = await runOperationalArchiveAndCleanup({
@@ -1937,7 +1682,7 @@ function App() {
   const applyLotteryToCart = (lotteryName: string) => {
     if (!lotteryName) return;
     setCart(cart.map(item => ({ ...item, lottery: lotteryName })));
-    toast.success(`LoterÃƒÆ’Ã‚Â­a ${cleanText(lotteryName)} aplicada a todo el pedido`);
+    toast.success(`LoterÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­a ${cleanText(lotteryName)} aplicada a todo el pedido`);
   };
 
   const downloadDataUrlFile = (dataUrl: string, fileName: string) => {
@@ -2287,7 +2032,7 @@ function App() {
       setSelectedUserToLiquidate(user.email.toLowerCase());
     }
 
-    toast.info(`Nuevo dÃƒÆ’Ã‚Â­a operativo iniciado: ${businessDayKey}`);
+    toast.info(`Nuevo dÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­a operativo iniciado: ${businessDayKey}`);
   }, [archiveDate, autoResetStateOnBusinessDayChange, businessDayKey, historyDate, liquidationDate, recoveryDate, user?.email, userProfile?.role, setInjections, setRecoveryDate, setSettlements, setTickets]);
 
   const saveRecoveryLotteryChange = useCallback(async (ticket: RecoveryTicketRecord) => {
@@ -2431,7 +2176,7 @@ function App() {
     setConfirmModal({
       show: true,
       title: 'Eliminar Ticket',
-      message: `Se eliminarÃƒÆ’Ã‚Â¡ el ticket ${ticket.id.slice(0, 8)} de ${ticket.source === 'tickets' ? 'LIVE' : `ARCHIVO ${ticket.archiveDate}`}. Ãƒâ€šÃ‚Â¿Deseas continuar?`,
+      message: `Se eliminarÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ el ticket ${ticket.id.slice(0, 8)} de ${ticket.source === 'tickets' ? 'LIVE' : `ARCHIVO ${ticket.archiveDate}`}. ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿Deseas continuar?`,
       onConfirm: async () => {
         setRecoveryDeletingRowId(ticket.rowId);
         try {
@@ -2531,7 +2276,7 @@ function App() {
   }, [activeTab, businessDayKey, users, tickets, historyTickets, injections, historyInjections, historyDate, getTicketPrizes]);
   const handleLogoutFromUi = useCallback(() => {
     handleLogout();
-    toast.info('SesiÃƒÆ’Ã‚Â³n cerrada');
+    toast.info('SesiÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n cerrada');
   }, [handleLogout]);
 
   const canAccessDashboard = currentUserRole === 'ceo' || currentUserRole === 'admin' || currentUserRole === 'programador';
@@ -2554,13 +2299,15 @@ function App() {
     { id: 'archivo', label: 'Archivo', icon: Archive, role: [...ARCHIVE_DOMAIN_SPEC.allowedRoles] as DomainRole[] },
     { id: 'admin', label: 'Configuracion general', icon: ShieldCheck, role: [...ADMIN_CONFIG_DOMAIN_SPEC.allowedRoles] as DomainRole[] },
     { id: 'liquidaciones', label: 'Liquidaciones', icon: DollarSign, role: [...LIQUIDATION_DOMAIN_SPEC.allowedRoles] as DomainRole[], permission: 'canLiquidate' },
-    { id: 'recovery', label: 'RecuperaciÃƒÆ’Ã‚Â³n', icon: Database, role: ['programador'] },
+    { id: 'recovery', label: 'RecuperaciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n', icon: Database, role: ['programador'] },
     { id: 'config', label: 'Mi cuenta', icon: Settings, role: [...SALES_DOMAIN_SPEC.allowedRoles] as DomainRole[] },
   ], []);
   const visibleNavigationItems = useMemo(
     () => getVisibleNavItems(navigationItems, userProfile),
     [navigationItems, userProfile]
   );
+  const salesAccessError = validateSalesAccess({ userProfile, operationalSellerId });
+  const canSell = !salesAccessError;
 
   useEffect(() => {
     if (!userProfile) return;
@@ -2591,7 +2338,7 @@ function App() {
               onClick={handleLogoutFromUi}
               className="w-full bg-white/10 text-white py-3 rounded-xl font-bold uppercase tracking-widest hover:bg-white/20 transition-all flex items-center justify-center gap-2"
             >
-              <LogOut className="w-4 h-4" /> Cerrar SesiÃƒÆ’Ã‚Â³n
+              <LogOut className="w-4 h-4" /> Cerrar SesiÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n
             </button>
           </div>
         </div>
@@ -2758,7 +2505,7 @@ function App() {
             {isSidebarOpen && (
               <div className="flex flex-col">
                 <span className="text-[11px] font-black uppercase tracking-widest leading-none">
-                  {isOnline ? 'Sincronizado' : 'Sin ConexiÃƒÆ’Ã‚Â³n'}
+                  {isOnline ? 'Sincronizado' : 'Sin ConexiÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n'}
                 </span>
                 <span className="text-[9px] font-mono opacity-60 uppercase">
                   {isOnline ? 'Nube Activa' : 'Modo Local'}
@@ -2771,7 +2518,7 @@ function App() {
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-400 hover:bg-red-400/10 transition-all"
           >
             <LogOut className="w-5 h-5 flex-shrink-0" />
-            {isSidebarOpen && <span className="text-sm font-bold uppercase tracking-wider">Cerrar SesiÃƒÆ’Ã‚Â³n</span>}
+            {isSidebarOpen && <span className="text-sm font-bold uppercase tracking-wider">Cerrar SesiÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n</span>}
           </button>
         </div>
       </motion.aside>
@@ -2794,7 +2541,7 @@ function App() {
             </div>
             <div className="w-px h-6 bg-white/10 hidden sm:block"></div>
             <div className="flex flex-col items-center">
-              <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider">ComisiÃƒÆ’Ã‚Â³n</span>
+              <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider">ComisiÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n</span>
               <span className="text-xs font-black text-primary">${todayStats.commissions.toFixed(2)}</span>
             </div>
             <div className="w-px h-6 bg-white/10 hidden sm:block"></div>
@@ -2815,7 +2562,7 @@ function App() {
             <button 
               onClick={handleLogoutFromUi}
               className="p-2 hover:bg-red-500/10 rounded-lg text-red-400"
-              title="Cerrar SesiÃƒÆ’Ã‚Â³n"
+              title="Cerrar SesiÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n"
             >
               <LogOut className="w-4 h-4" />
             </button>
@@ -2844,437 +2591,56 @@ function App() {
             )}
 
             {activeTab === 'sales' && (
-              <motion.div
-                key="sales"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                className="max-w-md mx-auto space-y-4 pb-24"
-              >
-                {/* Lottery Selector */}
-                <div className="glass-card p-3 flex items-center justify-between relative z-30">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
-                      <Calendar className="w-4 h-4 text-primary" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-[11px] font-mono uppercase text-muted-foreground leading-none mb-1">Sorteo Activo</p>
-                      {isMultipleMode ? (
-                        <div className="relative">
-                          <button 
-                            onClick={() => setShowMultiSelect(!showMultiSelect)}
-                            className="text-sm font-bold truncate flex items-center gap-1 w-full text-left"
-                          >
-                            {multiLottery.length === 0 ? 'Seleccione Sorteos' : `${multiLottery.length} Sorteos`}
-                            <ChevronDown className={`w-3 h-3 transition-transform ${showMultiSelect ? 'rotate-180' : ''}`} />
-                          </button>
-                          
-                              {showMultiSelect && (
-                                <>
-                                  <div 
-                                    className="fixed inset-0 z-40" 
-                                    onClick={() => setShowMultiSelect(false)}
-                                  />
-                                  <div className="fixed inset-x-3 bottom-24 bg-background border border-border rounded-xl shadow-2xl z-50 p-2 space-y-1 max-h-[60vh] overflow-y-auto sm:absolute sm:top-full sm:left-0 sm:bottom-auto sm:inset-x-auto sm:mt-2 sm:w-full sm:min-w-[240px] sm:max-h-80">
-                                    {activeLotteries.length > 0 ? (
-                                      <>
-                                        <div className="flex items-center justify-between p-2 border-b border-white/10 mb-1">
-                                          <button 
-                                            onClick={() => setMultiLottery(activeLotteries.map(l => l.name))}
-                                            className="text-[10px] font-bold uppercase text-primary hover:text-primary/80"
-                                          >
-                                            Todos
-                                          </button>
-                                          <button 
-                                            onClick={() => setMultiLottery([])}
-                                            className="text-[10px] font-bold uppercase text-red-500 hover:text-red-400"
-                                          >
-                                            Ninguno
-                                          </button>
-                                        </div>
-                                        {activeLotteries.map(l => (
-                                          <label key={l.id} className="flex items-center gap-2 p-2 hover:bg-white/5 rounded-lg cursor-pointer transition-colors">
-                                            <input 
-                                              type="checkbox" 
-                                              checked={multiLottery.includes(l.name)}
-                                              onChange={(e) => {
-                                                if (e.target.checked) {
-                                                  setMultiLottery([...multiLottery, l.name]);
-                                                } else {
-                                                  setMultiLottery(multiLottery.filter(name => name !== l.name));
-                                                }
-                                              }}
-                                              className="rounded border-border text-primary focus:ring-primary bg-transparent"
-                                            />
-                                            <span className="text-xs font-medium">{cleanText(l.name)}</span>
-                                          </label>
-                                        ))}
-                                      </>
-                                    ) : (
-                                      <div className="p-4 text-center text-xs text-muted-foreground">
-                                        No hay sorteos disponibles
-                                      </div>
-                                    )}
-                                  </div>
-                                </>
-                              )}
-                        </div>
-                      ) : (
-                        <select 
-                          value={selectedLottery}
-                          onChange={(e) => setSelectedLottery(e.target.value)}
-                          className="bg-transparent border-none p-0 font-bold text-sm focus:outline-none w-full truncate"
-                        >
-                          <option key="default" value="" className="bg-background">
-                            {activeLotteries.length > 0 ? "Seleccione Sorteo" : "Sin sorteos activos"}
-                          </option>
-                          {activeLotteries.map(l => (
-                            <option key={l.id} value={l.name} className="bg-background">
-                              {cleanText(l.name)} {l.drawTime ? `(${formatTime12h(l.drawTime)})` : ''}
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                    </div>
-                  </div>
-                  <button 
-                    onClick={() => {
-                      const next = !isMultipleMode;
-                      setIsMultipleMode(next);
-                      if (next) setShowMultiSelect(true);
-                    }}
-                    className={`px-4 py-2.5 rounded-xl text-[10px] font-bold uppercase transition-all border ${
-                      isMultipleMode ? 'bg-primary border-primary text-primary-foreground' : 'bg-white/5 border-border text-muted-foreground'
-                    }`}
-                  >
-                    Multi
-                  </button>
-                </div>
-
-                {/* Bet Type Selector */}
-                <div className="bg-white/5 border border-border rounded-2xl p-1 flex gap-1">
-                  <button
-                    onClick={() => {
-                      setBetType('CH');
-                      setNumber('');
-                      setQuantity('1');
-                      setFocusedField('number');
-                    }}
-                    className={`flex-1 py-3 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all ${
-                      betType === 'CH' ? 'bg-primary text-primary-foreground shadow-lg' : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    Chance
-                  </button>
-                  {globalSettings.palesEnabled && (
-                    <button
-                      onClick={() => {
-                        setBetType('PL');
-                        setNumber('');
-                        setQuantity('1');
-                        setPlAmount('1.00');
-                        setFocusedField('number');
-                      }}
-                      className={`flex-1 py-3 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all ${
-                        betType === 'PL' ? 'bg-primary text-primary-foreground shadow-lg' : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      PalÃƒÆ’Ã‚Â©
-                    </button>
-                  )}
-                  {globalSettings.billetesEnabled && (isMultipleMode ? multiLottery.some(name => findActiveLotteryByName(name)?.isFourDigits) : findActiveLotteryByName(selectedLottery)?.isFourDigits) && (
-                    <button
-                      onClick={() => {
-                        setBetType('BL');
-                        setNumber('');
-                        setQuantity('1');
-                        setPlAmount('1.00');
-                        setFocusedField('number');
-                      }}
-                      className={`flex-1 py-3 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all ${
-                        betType === 'BL' ? 'bg-primary text-primary-foreground shadow-lg' : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      Billete
-                    </button>
-                  )}
-                </div>
-
-                {/* Input Boxes */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div
-                    onClick={() => {
-                      setFocusedField('number');
-                      numberInputRef.current?.focus();
-                    }}
-                    className={`glass-card p-2.5 flex flex-col items-center justify-center gap-0.5 transition-all border-2 cursor-pointer ${
-                      focusedField === 'number' ? 'border-primary bg-primary/5' : 'border-transparent'
-                    }`}
-                  >
-                    <span className="text-[11px] font-mono uppercase text-muted-foreground font-medium">NÃƒÆ’Ã‚Âºmero</span>
-                    <div className="flex items-center justify-center min-h-[32px] relative w-full">
-                      <input
-                        ref={numberInputRef}
-                        type="text"
-                        inputMode="none"
-                        value={number === 'NaN' ? '' : number}
-                        onChange={(e) => {
-                          const val = e.target.value.replace(/\D/g, '');
-                          const maxLen = betType === 'CH' ? 2 : 4;
-                          if (val.length <= maxLen) {
-                            setNumber(val);
-                            if (val.length === maxLen) {
-                              setFocusedField('amount');
-                              setIsAmountSelected(true);
-                              setTimeout(() => {
-                                amountInputRef.current?.focus();
-                                amountInputRef.current?.select();
-                              }, 0);
-                            }
-                          }
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && number.length === (betType === 'CH' ? 2 : 4)) {
-                            setFocusedField('amount');
-                            setIsAmountSelected(true);
-                            setTimeout(() => {
-                              amountInputRef.current?.focus();
-                              amountInputRef.current?.select();
-                            }, 0);
-                          }
-                        }}
-                        onFocus={() => setFocusedField('number')}
-                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                      />
-                      <span className="text-2xl font-bold tracking-widest">
-                        {number || (betType === 'CH' ? '--' : '----')}
-                      </span>
-                      {focusedField === 'number' && <Cursor />}
-                    </div>
-                  </div>
-                  <div
-                    onClick={() => {
-                      setFocusedField('amount');
-                      setIsAmountSelected(true);
-                      setTimeout(() => {
-                        amountInputRef.current?.focus();
-                        amountInputRef.current?.select();
-                      }, 0);
-                    }}
-                    className={`glass-card p-2.5 flex flex-col items-center justify-center gap-0.5 transition-all border-2 cursor-pointer ${
-                      focusedField === 'amount' ? 'border-primary bg-primary/5' : 'border-transparent'
-                    }`}
-                  >
-                    <span className="text-[11px] font-mono uppercase text-muted-foreground font-medium">
-                      {betType === 'CH' ? 'Cantidad' : 'InversiÃƒÆ’Ã‚Â³n'}
-                    </span>
-                    <div className="flex items-center justify-center min-h-[32px] relative w-full">
-                      <input
-                        ref={amountInputRef}
-                        type="text"
-                        inputMode="none"
-                        value={betType === 'CH' ? (quantity === 'NaN' ? '' : quantity) : (plAmount === 'NaN' ? '' : plAmount)}
-                        onChange={(e) => {
-                          const val = e.target.value.replace(/[^0-9.]/g, '');
-                          setIsAmountSelected(false);
-                          if (betType === 'CH') {
-                            setQuantity(val);
-                          } else {
-                            setPlAmount(val);
-                          }
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            addToCart();
-                          }
-                        }}
-                        onFocus={() => {
-                          setFocusedField('amount');
-                          setIsAmountSelected(true);
-                        }}
-                        className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                      />
-                      <span className={`text-2xl font-bold ${isAmountSelected && focusedField === 'amount' ? 'bg-primary/30 text-primary px-1 rounded' : ''}`}>
-                        {betType === 'CH' ? quantity : plAmount}
-                      </span>
-                      {focusedField === 'amount' && <Cursor />}
-                    </div>
-                    <span className="text-[10px] font-mono text-muted-foreground">
-                      {betType === 'CH' ? `$${(parseFloat(quantity) * chancePrice || 0).toFixed(2)}` : `USD`}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Numeric Keyboard */}
-                <div className="py-2">
-                  <NumericKeyboard 
-                    onKeyPress={handleKeyPress}
-                    onBackspace={handleBackspace}
-                    onClear={handleClear}
-                  />
-                </div>
-
-                {/* Add Button */}
-                <button
-                  onClick={addToCart}
-                  className="w-full py-4 bg-primary text-primary-foreground rounded-2xl font-black uppercase tracking-widest text-base shadow-xl shadow-primary/20 active:scale-95 transition-all flex items-center justify-center gap-3"
-                >
-                  <Plus className="w-5 h-5" />
-                  Agregar al Ticket
-                </button>
-
-                {/* Cart Preview (Compact) */}
-                {cart.length > 0 && (
-                  <div className="glass-card p-3 space-y-2">
-                    <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
-                      <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Carrito ({cart.length})</h3>
-                      <button onClick={clearCart} className="text-[11px] font-bold uppercase text-red-500">Vaciar</button>
-                    </div>
-                    <div className="max-h-32 overflow-y-auto space-y-2 custom-scrollbar pr-1">
-                      {Object.entries(
-                        cart.reduce((acc, bet, idx) => {
-                          if (!acc[bet.lottery]) acc[bet.lottery] = [];
-                          acc[bet.lottery].push({ ...bet, originalIdx: idx });
-                          return acc;
-                        }, {} as Record<string, (Bet & { originalIdx: number })[]>)
-                      ).map(([lotteryName, bets]) => {
-                        const betList = bets as (Bet & { originalIdx: number })[];
-                        return (
-                        <div key={lotteryName} className="space-y-1.5 bg-black/20 p-2 rounded-xl border border-white/5">
-                          <div className="text-[10px] font-bold uppercase tracking-widest text-primary flex items-center gap-1.5">
-                            <span className="w-1.5 h-1.5 bg-primary rounded-full"></span>
-                            {cleanText(lotteryName)}
-                            <span className="text-muted-foreground ml-auto bg-white/5 px-1.5 py-0.5 rounded">({betList.length})</span>
-                          </div>
-                          <div className="space-y-1">
-                            {betList.map((bet) => (
-                              <div key={`${bet.lottery}-${bet.number}-${bet.type}-${bet.originalIdx}`} className="flex items-center justify-between text-xs bg-white/5 p-1.5 rounded-lg border border-white/5">
-                                <div className="flex items-center gap-2 overflow-hidden">
-                                  <span className="font-mono font-bold text-primary shrink-0">{bet.type}</span>
-                                  <span className="font-bold tracking-widest shrink-0">{bet.number}</span>
-                                </div>
-                                <div className="flex items-center gap-2 shrink-0">
-                                  <div className="flex items-center gap-1 bg-white/10 rounded-lg px-1.5 py-0.5 border border-white/10">
-                                    <button 
-                                      onClick={() => bet.type === 'BL' ? updateCartItemAmount(bet.originalIdx, Math.max(0.1, bet.amount - 0.1)) : updateCartItemQuantity(bet.originalIdx, bet.quantity - 1)}
-                                      className="p-1.5 text-muted-foreground hover:text-primary transition-colors active:scale-90"
-                                    >
-                                      <Minus className="w-3.5 h-3.5" />
-                                    </button>
-                                    <div className="flex flex-col items-center min-w-[50px] px-1">
-                                      <span className="text-[8px] font-mono opacity-50 leading-none mb-0.5">
-                                        {bet.type === 'BL' ? 'INV' : `QTY:${bet.quantity}`}
-                                      </span>
-                                      <span className="font-black text-[11px] leading-none">
-                                        ${(bet.type === 'CH' ? bet.quantity * chancePrice : bet.amount).toFixed(2)}
-                                      </span>
-                                    </div>
-                                    <button 
-                                      onClick={() => bet.type === 'BL' ? updateCartItemAmount(bet.originalIdx, bet.amount + 0.1) : updateCartItemQuantity(bet.originalIdx, bet.quantity + 1)}
-                                      className="p-1.5 text-muted-foreground hover:text-primary transition-colors active:scale-90"
-                                    >
-                                      <Plus className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                  <button onClick={() => removeFromCart(bet.originalIdx)} className="text-red-500/70 hover:text-red-500 p-1.5 transition-colors">
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                        );
-                      })}
-                    </div>
-                    <div className="flex flex-col gap-3 pt-3 border-t border-white/10">
-                      <div className="flex items-center justify-between">
-                        <div className="flex flex-col">
-                          <span className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Total</span>
-                          {editingTicketId && (
-                            <span className="text-[9px] font-black text-primary uppercase animate-pulse">Editando Ticket</span>
-                          )}
-                        </div>
-                        <span className="text-xl font-black text-primary">${cartTotal.toFixed(2)}</span>
-                      </div>
-                      <div className="flex gap-2">
-                        {editingTicketId && (
-                          <button 
-                            onClick={cancelEdit}
-                            className="flex-1 py-3 bg-red-500/10 text-red-400 rounded-xl text-xs font-black uppercase tracking-widest active:scale-95 transition-transform border border-red-500/20"
-                          >
-                            Cancelar
-                          </button>
-                        )}
-                        <button 
-                          onClick={handleSell}
-                          className="flex-1 py-3 bg-white text-black rounded-xl text-xs font-black uppercase tracking-widest active:scale-95 transition-transform"
-                        >
-                          {editingTicketId ? 'Actualizar Ticket' : 'Generar Ticket'}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Fast Entry Button */}
-                <button 
-                  onClick={() => setShowFastEntryModal(true)}
-                  className="w-full py-3 bg-white/5 border border-border rounded-xl text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground transition-all flex items-center justify-center gap-2"
-                >
-                  <Zap className="w-4 h-4" />
-                  Copiado RÃƒÆ’Ã‚Â¡pido
-                </button>
-
-                {/* Seller Daily Balance Summary */}
-                {userProfile?.role === 'seller' && (
-                  <div className="glass-card p-4 space-y-4 border-primary/20 bg-primary/5">
-                    <div className="flex items-center justify-between border-b border-primary/10 pb-2">
-                      <div className="flex items-center gap-2">
-                        <LayoutDashboard className="w-4 h-4 text-primary" />
-                        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-primary">Resumen del DÃƒÆ’Ã‚Â­a</h3>
-                      </div>
-                      <span className="text-[10px] font-mono opacity-50">{todayStr}</span>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-4">
-                      <div>
-                        <p className="text-[9px] uppercase text-muted-foreground font-bold tracking-wider mb-1">Ventas Brutas</p>
-                        <p className="text-sm font-black">${todayStats.sales.toFixed(2)}</p>
-                      </div>
-                      <div>
-                        <p className="text-[9px] uppercase text-muted-foreground font-bold tracking-wider mb-1">Inyecciones</p>
-                        <p className="text-sm font-black text-blue-400">${todayStats.injections.toFixed(2)}</p>
-                      </div>
-                      <div>
-                        <p className="text-[9px] uppercase text-muted-foreground font-bold tracking-wider mb-1">Premios</p>
-                        <p className="text-sm font-black text-red-400">${todayStats.prizes.toFixed(2)}</p>
-                      </div>
-                      <div>
-                        <p className="text-[9px] uppercase text-muted-foreground font-bold tracking-wider mb-1">Utilidad Banca</p>
-                        <p className={`text-sm font-black ${todayStats.bankProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                          ${todayStats.bankProfit.toFixed(2)}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="pt-3 border-t border-primary/10 flex justify-between items-center">
-                      <div>
-                        <p className="text-[9px] uppercase text-muted-foreground font-bold tracking-wider">Deuda Pendiente</p>
-                        <p className="text-lg font-black text-red-500">${todayStats.pendingDebt.toFixed(2)}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-[9px] uppercase text-muted-foreground font-bold tracking-wider">Balance Neto</p>
-                        <p className={`text-lg font-black ${todayStats.netProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                          ${todayStats.netProfit.toFixed(2)}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </motion.div>
+              <SalesDomain
+                isMultipleMode={isMultipleMode}
+                setIsMultipleMode={setIsMultipleMode}
+                showMultiSelect={showMultiSelect}
+                setShowMultiSelect={setShowMultiSelect}
+                multiLottery={multiLottery}
+                setMultiLottery={setMultiLottery}
+                activeLotteries={activeLotteries}
+                selectedLottery={selectedLottery}
+                setSelectedLottery={setSelectedLottery}
+                cleanText={cleanText}
+                formatTime12h={formatTime12h}
+                globalSettings={globalSettings}
+                betType={betType}
+                setBetType={setBetType}
+                setNumber={setNumber}
+                setQuantity={setQuantity}
+                setPlAmount={setPlAmount}
+                setFocusedField={setFocusedField}
+                findActiveLotteryByName={findActiveLotteryByName}
+                focusedField={focusedField}
+                numberInputRef={numberInputRef}
+                amountInputRef={amountInputRef}
+                number={number}
+                quantity={quantity}
+                plAmount={plAmount}
+                isAmountSelected={isAmountSelected}
+                setIsAmountSelected={setIsAmountSelected}
+                handleKeyPress={handleKeyPress}
+                handleBackspace={handleBackspace}
+                handleClear={handleClear}
+                addToCart={addToCart}
+                canSell={canSell}
+                sellBlockedReason={salesAccessError}
+                cart={cart}
+                clearCart={clearCart}
+                updateCartItemAmount={updateCartItemAmount}
+                updateCartItemQuantity={updateCartItemQuantity}
+                removeFromCart={removeFromCart}
+                chancePrice={chancePrice}
+                editingTicketId={editingTicketId}
+                cancelEdit={cancelEdit}
+                cartTotal={cartTotal}
+                handleSell={handleSell}
+                setShowFastEntryModal={setShowFastEntryModal}
+                userProfile={userProfile}
+                todayStr={todayStr}
+                todayStats={todayStats}
+              />
             )}
-
             {activeTab === 'history' && (
               <HistorySection
                 historyDate={historyDate}
@@ -3573,7 +2939,7 @@ function App() {
 
         {/* Footer */}
         <footer className="h-auto min-h-12 glass border-t border-border px-3 sm:px-8 py-2 flex items-center justify-between gap-2 shrink-0 text-[8px] sm:text-[9px] font-mono text-muted-foreground uppercase tracking-[0.12em] sm:tracking-[0.2em]">
-          <p>Ãƒâ€šÃ‚Â© 2026 CHANCE PRO SYSTEMS ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ TERMINAL {user.uid.slice(0, 8)}</p>
+          <p>ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â© 2026 CHANCE PRO SYSTEMS ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ TERMINAL {user.uid.slice(0, 8)}</p>
           <div className="flex gap-3 sm:gap-8 flex-wrap justify-end">
             <span className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-green-500" /> SERVER: OK</span>
             <span>V1.2.0-STABLE</span>

@@ -12,8 +12,14 @@ export const SALES_DOMAIN_SPEC = {
   },
   expectedErrors: {
     missingSellerId: 'Perfil sin sellerId operativo. Contacta al administrador.',
+    inactiveSeller: 'Tu usuario esta inactivo. Contacta al administrador.',
     invalidBetInput: 'Completa numero y monto antes de agregar al carrito.',
+    invalidLotterySelection: 'Selecciona al menos un sorteo activo.',
+    emptyCart: 'Agrega al menos una jugada al carrito para generar ticket.',
+    saleInProgress: 'Ya hay una venta en proceso. Espera a que termine.',
     closedLottery: 'El sorteo seleccionado ya esta cerrado.',
+    lotteryWithResults: 'El sorteo seleccionado ya tiene resultados para hoy.',
+    lotteryNotFound: 'El sorteo seleccionado no existe.',
   },
   mobileRules: {
     keepPrimaryCtaVisible: true,
