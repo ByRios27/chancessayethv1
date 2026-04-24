@@ -182,7 +182,7 @@ export function AdminSection(props: AdminSectionProps) {
               let fixedCount = 0;
               for (const docSnap of snap.docs) {
                 const data = docSnap.data();
-                if (data.name && (data.name.includes('??') || data.name.includes('<') || data.name.includes('Ã'))) {
+                if (data.name && (data.name.includes('??') || data.name.includes('<') || data.name.includes('\u00C3'))) {
                   const newName = cleanText(data.name);
                   await updateDoc(doc(db, 'lotteries', docSnap.id), { name: newName });
                   fixedCount++;

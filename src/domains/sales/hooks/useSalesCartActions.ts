@@ -52,6 +52,8 @@ export function useSalesCartActions({
   setFocusedField,
   numberInputRef,
 }: UseSalesCartActionsParams) {
+  const BL_UNIT_PRICE = 1;
+
   const addToCart = useCallback(() => {
     const salesAccessError = validateSalesAccess({ userProfile, operationalSellerId });
     if (salesAccessError) {
@@ -117,11 +119,11 @@ export function useSalesCartActions({
     if (betType === 'CH') {
       calculatedAmount = qInt * chancePrice;
     } else if (betType === 'BL') {
-      calculatedAmount = parseFloat(plAmount);
-      if (isNaN(calculatedAmount) || calculatedAmount < 0.1) {
-        toast.error('Inversion minima para Billete (BL) es USD 0.10');
+      if (qInt > 5) {
+        toast.error('Maximo 5 billetes por jugada');
         return;
       }
+      calculatedAmount = qInt * BL_UNIT_PRICE;
     } else {
       const costPerUnit = parseFloat(plAmount);
       if (isNaN(costPerUnit) || costPerUnit < 0.1 || costPerUnit > 5) {
@@ -188,6 +190,7 @@ export function useSalesCartActions({
     number,
     numberInputRef,
     operationalSellerId,
+    BL_UNIT_PRICE,
     plAmount,
     quantity,
     selectedLottery,
@@ -231,10 +234,10 @@ export function useSalesCartActions({
 
     setCart((prev) => prev.map((item, i) => {
       if (i !== index) return item;
-      const unitAmount = item.amount / item.quantity;
+      const unitAmount = item.type === 'BL' ? BL_UNIT_PRICE : item.amount / item.quantity;
       return { ...item, quantity: newQty, amount: unitAmount * newQty };
     }));
-  }, [cart, setCart, tickets]);
+  }, [BL_UNIT_PRICE, cart, setCart, tickets]);
 
   const updateCartItemAmount = useCallback((index: number, newAmount: number) => {
     if (newAmount < 0) return;

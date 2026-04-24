@@ -1,9 +1,63 @@
-import React from 'react';
+﻿import React from 'react';
 import { motion } from 'motion/react';
 import { Calendar, ChevronDown, LayoutDashboard, Minus, Plus, Trash2, Zap } from 'lucide-react';
 import type { Bet } from '../../../types/bets';
 
-type SalesDomainProps = any;
+interface LotteryOption {
+  id: string;
+  name: string;
+  drawTime?: string;
+  isFourDigits?: boolean;
+}
+
+interface SalesDomainProps {
+  isMultipleMode: boolean;
+  setIsMultipleMode: (value: boolean) => void;
+  showMultiSelect: boolean;
+  setShowMultiSelect: (value: boolean) => void;
+  multiLottery?: string[];
+  setMultiLottery: (value: string[]) => void;
+  activeLotteries?: LotteryOption[];
+  selectedLottery: string;
+  setSelectedLottery: (value: string) => void;
+  cleanText: (value: string) => string;
+  formatTime12h: (value: string) => string;
+  globalSettings: { palesEnabled: boolean; billetesEnabled: boolean };
+  betType: 'CH' | 'PL' | 'BL';
+  setBetType: (value: 'CH' | 'PL' | 'BL') => void;
+  setNumber: (value: string) => void;
+  setQuantity: (value: string) => void;
+  setPlAmount: (value: string) => void;
+  setFocusedField: (value: 'number' | 'amount') => void;
+  findActiveLotteryByName: (name: string) => LotteryOption | undefined;
+  focusedField: 'number' | 'amount';
+  numberInputRef: React.RefObject<HTMLInputElement | null>;
+  amountInputRef: React.RefObject<HTMLInputElement | null>;
+  number: string;
+  quantity: string;
+  plAmount: string;
+  isAmountSelected: boolean;
+  setIsAmountSelected: (value: boolean) => void;
+  handleKeyPress: (key: string) => void;
+  handleBackspace: () => void;
+  handleClear: () => void;
+  addToCart: () => void;
+  canSell: boolean;
+  sellBlockedReason?: string | null;
+  cart?: Bet[];
+  clearCart: () => void;
+  updateCartItemQuantity: (index: number, newQty: number) => void;
+  removeFromCart: (index: number) => void;
+  chancePrice: number;
+  editingTicketId: string | null;
+  cancelEdit: () => void;
+  cartTotal: number;
+  handleSell: (e: React.FormEvent) => void;
+  setShowFastEntryModal: (value: boolean) => void;
+  userProfile?: { role?: string };
+  todayStr: string;
+  todayStats: { sales: number; injections: number; prizes: number; bankProfit: number; pendingDebt: number; netProfit: number };
+}
 
 const Cursor = () => <span className="w-[2px] h-6 bg-primary animate-blink inline-block align-middle ml-0.5" />;
 
@@ -75,7 +129,6 @@ export function SalesDomain(props: SalesDomainProps) {
     sellBlockedReason,
     cart,
     clearCart,
-    updateCartItemAmount,
     updateCartItemQuantity,
     removeFromCart,
     chancePrice,
@@ -89,7 +142,11 @@ export function SalesDomain(props: SalesDomainProps) {
     todayStats,
   } = props;
 
-  const hasActiveLotteries = activeLotteries.length > 0;
+  const safeActiveLotteries = activeLotteries ?? [];
+  const safeMultiLottery = multiLottery ?? [];
+  const safeCart = cart ?? [];
+
+  const hasActiveLotteries = safeActiveLotteries.length > 0;
   const canOperateSales = canSell && hasActiveLotteries;
 
   return (
@@ -127,18 +184,18 @@ export function SalesDomain(props: SalesDomainProps) {
                   onClick={() => setShowMultiSelect(!showMultiSelect)}
                   className="text-sm font-bold truncate flex items-center gap-1 w-full text-left"
                 >
-                  {multiLottery.length === 0 ? 'Seleccione Sorteos' : `${multiLottery.length} Sorteos`}
+                  {safeMultiLottery.length === 0 ? 'Seleccione Sorteos' : `${safeMultiLottery.length} Sorteos`}
                   <ChevronDown className={`w-3 h-3 transition-transform ${showMultiSelect ? 'rotate-180' : ''}`} />
                 </button>
                 {showMultiSelect && (
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setShowMultiSelect(false)} />
                     <div className="fixed inset-x-3 bottom-24 bg-background border border-border rounded-xl shadow-2xl z-50 p-2 space-y-1 max-h-[60vh] overflow-y-auto sm:absolute sm:top-full sm:left-0 sm:bottom-auto sm:inset-x-auto sm:mt-2 sm:w-full sm:min-w-[240px] sm:max-h-80">
-                      {activeLotteries.length > 0 ? (
+                      {safeActiveLotteries.length > 0 ? (
                         <>
                           <div className="flex items-center justify-between p-2 border-b border-white/10 mb-1">
                             <button
-                              onClick={() => setMultiLottery(activeLotteries.map((lottery: any) => lottery.name))}
+                              onClick={() => setMultiLottery(safeActiveLotteries.map((lottery) => lottery.name))}
                               className="text-[10px] font-bold uppercase text-primary hover:text-primary/80"
                             >
                               Todos
@@ -150,16 +207,16 @@ export function SalesDomain(props: SalesDomainProps) {
                               Ninguno
                             </button>
                           </div>
-                          {activeLotteries.map((lottery: any) => (
+                          {safeActiveLotteries.map((lottery) => (
                             <label key={lottery.id} className="flex items-center gap-2 p-2 hover:bg-white/5 rounded-lg cursor-pointer transition-colors">
                               <input
                                 type="checkbox"
-                                checked={multiLottery.includes(lottery.name)}
+                                checked={safeMultiLottery.includes(lottery.name)}
                                 onChange={(e) => {
                                   if (e.target.checked) {
-                                    setMultiLottery([...multiLottery, lottery.name]);
+                                    setMultiLottery([...safeMultiLottery, lottery.name]);
                                   } else {
-                                    setMultiLottery(multiLottery.filter((name: string) => name !== lottery.name));
+                                    setMultiLottery(safeMultiLottery.filter((name) => name !== lottery.name));
                                   }
                                 }}
                                 className="rounded border-border text-primary focus:ring-primary bg-transparent"
@@ -185,7 +242,7 @@ export function SalesDomain(props: SalesDomainProps) {
                 <option key="default" value="" className="bg-background">
                   {hasActiveLotteries ? 'Seleccione Sorteo' : 'Sin sorteos activos'}
                 </option>
-                {activeLotteries.map((lottery: any) => (
+                {safeActiveLotteries.map((lottery) => (
                   <option key={lottery.id} value={lottery.name} className="bg-background">
                     {cleanText(lottery.name)} {lottery.drawTime ? `(${formatTime12h(lottery.drawTime)})` : ''}
                   </option>
@@ -239,13 +296,12 @@ export function SalesDomain(props: SalesDomainProps) {
             Pale
           </button>
         )}
-        {globalSettings.billetesEnabled && (isMultipleMode ? multiLottery.some((name: string) => findActiveLotteryByName(name)?.isFourDigits) : findActiveLotteryByName(selectedLottery)?.isFourDigits) && (
+        {globalSettings.billetesEnabled && (isMultipleMode ? safeMultiLottery.some((name) => findActiveLotteryByName(name)?.isFourDigits) : findActiveLotteryByName(selectedLottery)?.isFourDigits) && (
           <button
             onClick={() => {
               setBetType('BL');
               setNumber('');
               setQuantity('1');
-              setPlAmount('1.00');
               setFocusedField('number');
             }}
             className={`flex-1 py-3 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all ${
@@ -319,17 +375,19 @@ export function SalesDomain(props: SalesDomainProps) {
             focusedField === 'amount' ? 'border-primary bg-primary/5' : 'border-transparent'
           }`}
         >
-          <span className="text-[11px] font-mono uppercase text-muted-foreground font-medium">{betType === 'CH' ? 'Cantidad' : 'Inversion'}</span>
+          <span className="text-[11px] font-mono uppercase text-muted-foreground font-medium">
+            {betType === 'PL' ? 'Inversion' : 'Cantidad'}
+          </span>
           <div className="flex items-center justify-center min-h-[32px] relative w-full">
             <input
               ref={amountInputRef}
               type="text"
               inputMode="none"
-              value={betType === 'CH' ? (quantity === 'NaN' ? '' : quantity) : (plAmount === 'NaN' ? '' : plAmount)}
+              value={(betType === 'CH' || betType === 'BL') ? (quantity === 'NaN' ? '' : quantity) : (plAmount === 'NaN' ? '' : plAmount)}
               onChange={(e) => {
                 const val = e.target.value.replace(/[^0-9.]/g, '');
                 setIsAmountSelected(false);
-                if (betType === 'CH') {
+                if (betType === 'CH' || betType === 'BL') {
                   setQuantity(val);
                 } else {
                   setPlAmount(val);
@@ -345,12 +403,14 @@ export function SalesDomain(props: SalesDomainProps) {
               className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
             />
             <span className={`text-2xl font-bold ${isAmountSelected && focusedField === 'amount' ? 'bg-primary/30 text-primary px-1 rounded' : ''}`}>
-              {betType === 'CH' ? quantity : plAmount}
+              {(betType === 'CH' || betType === 'BL') ? quantity : plAmount}
             </span>
             {focusedField === 'amount' && <Cursor />}
           </div>
           <span className="text-[10px] font-mono text-muted-foreground">
-            {betType === 'CH' ? `$${(parseFloat(quantity) * chancePrice || 0).toFixed(2)}` : 'USD'}
+            {betType === 'PL'
+              ? 'USD'
+              : `$${((parseFloat(quantity) || 0) * (betType === 'BL' ? 1 : chancePrice)).toFixed(2)}`}
           </span>
         </div>
       </div>
@@ -368,15 +428,15 @@ export function SalesDomain(props: SalesDomainProps) {
         Agregar al Ticket
       </button>
 
-      {cart.length > 0 && (
+      {safeCart.length > 0 && (
         <div className="glass-card p-3 space-y-2">
           <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
-            <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Carrito ({cart.length})</h3>
+            <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Carrito ({safeCart.length})</h3>
             <button onClick={clearCart} className="text-[11px] font-bold uppercase text-red-500">Vaciar</button>
           </div>
           <div className="max-h-32 overflow-y-auto space-y-2 custom-scrollbar pr-1">
             {Object.entries(
-              cart.reduce((acc: Record<string, (Bet & { originalIdx: number })[]>, bet: Bet, idx: number) => {
+              safeCart.reduce((acc: Record<string, (Bet & { originalIdx: number })[]>, bet: Bet, idx: number) => {
                 if (!acc[bet.lottery]) acc[bet.lottery] = [];
                 acc[bet.lottery].push({ ...bet, originalIdx: idx });
                 return acc;
@@ -400,21 +460,19 @@ export function SalesDomain(props: SalesDomainProps) {
                       <div className="flex items-center gap-2 shrink-0">
                         <div className="flex items-center gap-1 bg-white/10 rounded-lg px-1.5 py-0.5 border border-white/10">
                           <button
-                            onClick={() => bet.type === 'BL' ? updateCartItemAmount(bet.originalIdx, Math.max(0.1, bet.amount - 0.1)) : updateCartItemQuantity(bet.originalIdx, bet.quantity - 1)}
+                            onClick={() => updateCartItemQuantity(bet.originalIdx, bet.quantity - 1)}
                             className="p-1.5 text-muted-foreground hover:text-primary transition-colors active:scale-90"
                           >
                             <Minus className="w-3.5 h-3.5" />
                           </button>
                           <div className="flex flex-col items-center min-w-[50px] px-1">
-                            <span className="text-[8px] font-mono opacity-50 leading-none mb-0.5">
-                              {bet.type === 'BL' ? 'INV' : `QTY:${bet.quantity}`}
-                            </span>
+                            <span className="text-[8px] font-mono opacity-50 leading-none mb-0.5">{`QTY:${bet.quantity}`}</span>
                             <span className="font-black text-[11px] leading-none">
-                              ${(bet.type === 'CH' ? bet.quantity * chancePrice : bet.amount).toFixed(2)}
+                              ${(bet.type === 'PL' ? bet.amount : (bet.quantity * (bet.type === 'BL' ? 1 : chancePrice))).toFixed(2)}
                             </span>
                           </div>
                           <button
-                            onClick={() => bet.type === 'BL' ? updateCartItemAmount(bet.originalIdx, bet.amount + 0.1) : updateCartItemQuantity(bet.originalIdx, bet.quantity + 1)}
+                            onClick={() => updateCartItemQuantity(bet.originalIdx, bet.quantity + 1)}
                             className="p-1.5 text-muted-foreground hover:text-primary transition-colors active:scale-90"
                           >
                             <Plus className="w-3.5 h-3.5" />

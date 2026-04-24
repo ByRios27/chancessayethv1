@@ -235,7 +235,7 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   toast.error(
     `Error al ${operationLabel} (${target})`,
     {
-      description: `CÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³digo: ${firebaseCode} | Causa: ${firebaseMessage}`
+      description: `Código: ${firebaseCode} | Causa: ${firebaseMessage}`
     }
   );
 
@@ -672,13 +672,13 @@ function App() {
         localStorage.setItem(autoCleanupStorageKey, todayKey);
 
         if (result.deletedCount > 0 || !result.archiveAlreadyExists) {
-          toast.success(`Limpieza autom?tica 4:30 AM completada (${targetBusinessDay})`);
+          toast.success(`Limpieza automática 4:30 AM completada (${targetBusinessDay})`);
         } else {
-          toast.info(`Limpieza autom?tica validada (${targetBusinessDay}, sin cambios pendientes)`);
+          toast.info(`Limpieza automática validada (${targetBusinessDay}, sin cambios pendientes)`);
         }
       } catch (error) {
-        console.error('Error en limpieza autom?tica 4:30 AM:', error);
-        toast.error('Fall? la limpieza autom?tica de las 4:30 AM. Se reintentar? autom?ticamente.');
+        console.error('Error en limpieza automática 4:30 AM:', error);
+        toast.error('Falló la limpieza automática de las 4:30 AM. Se reintentará automáticamente.');
       } finally {
         autoCleanupRunningRef.current = false;
       }
@@ -1052,7 +1052,7 @@ function App() {
         setCustomerName('');
         setShowCheckoutModal(false);
         setShowTicketModal({ ticket: updatedTicket });
-        toast.success('ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡Venta actualizada con ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©xito!');
+        toast.success('¡Venta actualizada con éxito!');
       } else {
         // Create new ticket
         const sequenceNumber = getDailySequence();
@@ -1092,7 +1092,7 @@ function App() {
         setCustomerName('');
         setShowCheckoutModal(false);
         setShowTicketModal({ ticket: newTicket });
-        toast.success('ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡Venta realizada con ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©xito!');
+        toast.success('¡Venta realizada con éxito!');
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'tickets');
@@ -1110,14 +1110,14 @@ function App() {
     if (isNaN(ticketDate.getTime())) return true; // Treat invalid dates as closed
     const now = new Date();
     
-    // Definir el "dÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­a del sorteo" (que empieza a la 1 AM)
+    // Definir el "día del sorteo" (que empieza a la 1 AM)
     const getLotteryDay = (date: Date) => {
       const d = new Date(date);
       d.setHours(d.getHours() - 1);
       return format(d, 'yyyy-MM-dd');
     };
 
-    // Si no es el mismo "dÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­a de sorteo", estÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ cerrado
+    // Si no es el mismo "día de sorteo", está cerrado
     if (getLotteryDay(ticketDate) !== getLotteryDay(now)) return true;
 
     // Verificar cada apuesta del ticket
@@ -1221,7 +1221,6 @@ function App() {
     addToCart,
     removeFromCart,
     updateCartItemQuantity,
-    updateCartItemAmount,
     clearCart,
   } = useSalesCartActions({
     userProfile,
@@ -1313,7 +1312,7 @@ function App() {
     setConfirmModal({
       show: true,
       title: 'Borrar Venta',
-      message: 'ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿EstÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ seguro de borrar esta venta? Se eliminarÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ permanentemente de la base de datos.',
+      message: '¿Está seguro de borrar esta venta? Se eliminará permanentemente de la base de datos.',
       onConfirm: async () => {
         try {
           await deleteTicketById(id);
@@ -1333,7 +1332,7 @@ function App() {
       ? format(ticket.timestamp.toDate(), 'dd/MM/yyyy HH:mm') 
       : format(new Date(), 'dd/MM/yyyy HH:mm');
     
-    let message = `*CHANCE PRO - TICKET DE LOTERÃƒÆ’Ã†â€™Ãƒâ€šÃ‚ÂA*\n`;
+    let message = `*CHANCE PRO - TICKET DE LOTERÍA*\n`;
     message += `--------------------------------\n`;
     message += `*Ticket:* #${ticketId}\n`;
     message += `*Vendedor:* ${ticket.sellerCode || '---'}\n`;
@@ -1355,10 +1354,10 @@ function App() {
     message += `--------------------------------\n`;
     message += `*TOTAL:* $${totalAmount.toFixed(2)} USD\n`;
     message += `--------------------------------\n`;
-    message += `_ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡Buena Suerte!_`;
+    message += `_¡Buena Suerte!_`;
 
     const shareData = {
-      title: 'Ticket de LoterÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­a - Chance Pro',
+      title: 'Ticket de Lotería - Chance Pro',
       text: message
     };
 
@@ -1415,11 +1414,11 @@ function App() {
       return;
     }
     if (newPassword !== confirmPassword) {
-      toast.error('Las contraseÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â±as no coinciden');
+      toast.error('Las contraseñas no coinciden');
       return;
     }
     if (newPassword.length < 6) {
-      toast.error('La contraseÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â±a debe tener al menos 6 caracteres');
+      toast.error('La contraseña debe tener al menos 6 caracteres');
       return;
     }
 
@@ -1427,7 +1426,7 @@ function App() {
     try {
       if (auth.currentUser) {
         await updatePassword(auth.currentUser, newPassword);
-        toast.success('ContraseÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â±a actualizada correctamente');
+        toast.success('Contraseña actualizada correctamente');
         setNewPassword('');
         setConfirmPassword('');
       } else {
@@ -1436,9 +1435,9 @@ function App() {
     } catch (error: any) {
       console.error('Error updating password:', error);
       if (error.code === 'auth/requires-recent-login') {
-        toast.error('Por seguridad, debe cerrar sesiÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n e iniciarla de nuevo para cambiar su contraseÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â±a.');
+        toast.error('Por seguridad, debe cerrar sesión e iniciarla de nuevo para cambiar su contraseña.');
       } else {
-        toast.error(`Error: ${error.message || 'No se pudo actualizar la contraseÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â±a'}`);
+        toast.error(`Error: ${error.message || 'No se pudo actualizar la contraseña'}`);
       }
     } finally {
       setIsUpdatingPassword(false);
@@ -1454,13 +1453,13 @@ function App() {
     }
 
      if (!canUpdatePersonalChancePrice) {
-      toast.error('Solo puedes cambiar este precio antes de tu primera venta del dÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­a o despuÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©s de ser liquidado');
+      toast.error('Solo puedes cambiar este precio antes de tu primera venta del día o después de ser liquidado');
       return;
     }
 
     const selectedConfig = globalSettings.chancePrices?.find(cp => Math.abs(cp.price - personalChancePrice) < 0.001);
     if (!selectedConfig) {
-      toast.error('Seleccione un precio de chance vÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡lido');
+      toast.error('Seleccione un precio de chance válido');
       return;
     }
 
@@ -1503,7 +1502,7 @@ function App() {
     setConfirmModal({
       show: true,
       title: 'Editar Venta',
-      message: 'Se cargarÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡n las apuestas al carrito para modificarlas. El ticket original se mantendrÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ hasta que confirmes los cambios. ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿Continuar?',
+      message: 'Se cargarán las apuestas al carrito para modificarlas. El ticket original se mantendrá hasta que confirmes los cambios. ¿Continuar?',
       onConfirm: () => {
         const uniqueTicketLotteries = Array.from(new Set(
           (ticket.bets || [])
@@ -1533,7 +1532,7 @@ function App() {
     setEditingTicketId(null);
     setCart([]);
     setCustomerName('');
-    toast.info('EdiciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n cancelada');
+    toast.info('Edición cancelada');
   };
 
   const editCartItem = (idx: number) => {
@@ -1657,8 +1656,8 @@ function App() {
 
     setConfirmModal({
       show: true,
-      title: 'Archivar y Limpiar DÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­a Operativo',
-      message: 'Se archivarÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡n los datos del dÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­a operativo actual y luego se limpiarÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡n tickets, resultados e inyecciones operativas. ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿Deseas continuar?',
+      title: 'Archivar y Limpiar Día Operativo',
+      message: 'Se archivarán los datos del día operativo actual y luego se limpiarán tickets, resultados e inyecciones operativas. ¿Deseas continuar?',
       onConfirm: async () => {
         try {
           const result = await runOperationalArchiveAndCleanup({
@@ -1669,11 +1668,11 @@ function App() {
           if (result.deletedCount > 0 || !result.archiveAlreadyExists) {
             toast.success('Archivo diario creado y limpieza operativa completada');
           } else {
-            toast.info('El archivo diario ya exist?a y no hab?a datos pendientes por limpiar');
+            toast.info('El archivo diario ya existía y no había datos pendientes por limpiar');
           }
         } catch (error) {
           console.error('Error archivando datos operativos:', error);
-          toast.error('No se pudo crear el archivo diario. No se realiz? limpieza.');
+          toast.error('No se pudo crear el archivo diario. No se realizó limpieza.');
         }
       }
     });
@@ -1682,7 +1681,7 @@ function App() {
   const applyLotteryToCart = (lotteryName: string) => {
     if (!lotteryName) return;
     setCart(cart.map(item => ({ ...item, lottery: lotteryName })));
-    toast.success(`LoterÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­a ${cleanText(lotteryName)} aplicada a todo el pedido`);
+    toast.success(`Lotería ${cleanText(lotteryName)} aplicada a todo el pedido`);
   };
 
   const downloadDataUrlFile = (dataUrl: string, fileName: string) => {
@@ -2032,7 +2031,7 @@ function App() {
       setSelectedUserToLiquidate(user.email.toLowerCase());
     }
 
-    toast.info(`Nuevo dÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â­a operativo iniciado: ${businessDayKey}`);
+    toast.info(`Nuevo día operativo iniciado: ${businessDayKey}`);
   }, [archiveDate, autoResetStateOnBusinessDayChange, businessDayKey, historyDate, liquidationDate, recoveryDate, user?.email, userProfile?.role, setInjections, setRecoveryDate, setSettlements, setTickets]);
 
   const saveRecoveryLotteryChange = useCallback(async (ticket: RecoveryTicketRecord) => {
@@ -2176,7 +2175,7 @@ function App() {
     setConfirmModal({
       show: true,
       title: 'Eliminar Ticket',
-      message: `Se eliminarÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡ el ticket ${ticket.id.slice(0, 8)} de ${ticket.source === 'tickets' ? 'LIVE' : `ARCHIVO ${ticket.archiveDate}`}. ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¿Deseas continuar?`,
+      message: `Se eliminará el ticket ${ticket.id.slice(0, 8)} de ${ticket.source === 'tickets' ? 'LIVE' : `ARCHIVO ${ticket.archiveDate}`}. ¿Deseas continuar?`,
       onConfirm: async () => {
         setRecoveryDeletingRowId(ticket.rowId);
         try {
@@ -2276,7 +2275,7 @@ function App() {
   }, [activeTab, businessDayKey, users, tickets, historyTickets, injections, historyInjections, historyDate, getTicketPrizes]);
   const handleLogoutFromUi = useCallback(() => {
     handleLogout();
-    toast.info('SesiÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n cerrada');
+    toast.info('Sesión cerrada');
   }, [handleLogout]);
 
   const canAccessDashboard = currentUserRole === 'ceo' || currentUserRole === 'admin' || currentUserRole === 'programador';
@@ -2299,7 +2298,7 @@ function App() {
     { id: 'archivo', label: 'Archivo', icon: Archive, role: [...ARCHIVE_DOMAIN_SPEC.allowedRoles] as DomainRole[] },
     { id: 'admin', label: 'Configuracion general', icon: ShieldCheck, role: [...ADMIN_CONFIG_DOMAIN_SPEC.allowedRoles] as DomainRole[] },
     { id: 'liquidaciones', label: 'Liquidaciones', icon: DollarSign, role: [...LIQUIDATION_DOMAIN_SPEC.allowedRoles] as DomainRole[], permission: 'canLiquidate' },
-    { id: 'recovery', label: 'RecuperaciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n', icon: Database, role: ['programador'] },
+    { id: 'recovery', label: 'Recuperación', icon: Database, role: ['programador'] },
     { id: 'config', label: 'Mi cuenta', icon: Settings, role: [...SALES_DOMAIN_SPEC.allowedRoles] as DomainRole[] },
   ], []);
   const visibleNavigationItems = useMemo(
@@ -2338,7 +2337,7 @@ function App() {
               onClick={handleLogoutFromUi}
               className="w-full bg-white/10 text-white py-3 rounded-xl font-bold uppercase tracking-widest hover:bg-white/20 transition-all flex items-center justify-center gap-2"
             >
-              <LogOut className="w-4 h-4" /> Cerrar SesiÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n
+              <LogOut className="w-4 h-4" /> Cerrar Sesión
             </button>
           </div>
         </div>
@@ -2505,7 +2504,7 @@ function App() {
             {isSidebarOpen && (
               <div className="flex flex-col">
                 <span className="text-[11px] font-black uppercase tracking-widest leading-none">
-                  {isOnline ? 'Sincronizado' : 'Sin ConexiÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n'}
+                  {isOnline ? 'Sincronizado' : 'Sin Conexión'}
                 </span>
                 <span className="text-[9px] font-mono opacity-60 uppercase">
                   {isOnline ? 'Nube Activa' : 'Modo Local'}
@@ -2518,7 +2517,7 @@ function App() {
             className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-400 hover:bg-red-400/10 transition-all"
           >
             <LogOut className="w-5 h-5 flex-shrink-0" />
-            {isSidebarOpen && <span className="text-sm font-bold uppercase tracking-wider">Cerrar SesiÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n</span>}
+            {isSidebarOpen && <span className="text-sm font-bold uppercase tracking-wider">Cerrar Sesión</span>}
           </button>
         </div>
       </motion.aside>
@@ -2541,7 +2540,7 @@ function App() {
             </div>
             <div className="w-px h-6 bg-white/10 hidden sm:block"></div>
             <div className="flex flex-col items-center">
-              <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider">ComisiÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n</span>
+              <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider">Comisión</span>
               <span className="text-xs font-black text-primary">${todayStats.commissions.toFixed(2)}</span>
             </div>
             <div className="w-px h-6 bg-white/10 hidden sm:block"></div>
@@ -2562,7 +2561,7 @@ function App() {
             <button 
               onClick={handleLogoutFromUi}
               className="p-2 hover:bg-red-500/10 rounded-lg text-red-400"
-              title="Cerrar SesiÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n"
+              title="Cerrar Sesión"
             >
               <LogOut className="w-4 h-4" />
             </button>
@@ -2627,7 +2626,6 @@ function App() {
                 sellBlockedReason={salesAccessError}
                 cart={cart}
                 clearCart={clearCart}
-                updateCartItemAmount={updateCartItemAmount}
                 updateCartItemQuantity={updateCartItemQuantity}
                 removeFromCart={removeFromCart}
                 chancePrice={chancePrice}
@@ -2939,7 +2937,7 @@ function App() {
 
         {/* Footer */}
         <footer className="h-auto min-h-12 glass border-t border-border px-3 sm:px-8 py-2 flex items-center justify-between gap-2 shrink-0 text-[8px] sm:text-[9px] font-mono text-muted-foreground uppercase tracking-[0.12em] sm:tracking-[0.2em]">
-          <p>ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â© 2026 CHANCE PRO SYSTEMS ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ TERMINAL {user.uid.slice(0, 8)}</p>
+          <p>© 2026 CHANCE PRO SYSTEMS • TERMINAL {user.uid.slice(0, 8)}</p>
           <div className="flex gap-3 sm:gap-8 flex-wrap justify-end">
             <span className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-green-500" /> SERVER: OK</span>
             <span>V1.2.0-STABLE</span>
