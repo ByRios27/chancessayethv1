@@ -2407,7 +2407,7 @@ function App() {
     { id: 'results', label: 'Resultados', icon: CheckCircle2, role: [...RESULTS_DOMAIN_SPEC.allowedRoles] as DomainRole[] },
     { id: 'users', label: 'Usuarios', icon: Users, role: [...USERS_DOMAIN_SPEC.allowedRoles] as DomainRole[] },
     { id: 'archivo', label: 'Archivo', icon: Archive, role: [...ARCHIVE_DOMAIN_SPEC.allowedRoles] as DomainRole[] },
-    { id: 'admin', label: 'Configuracion general', icon: ShieldCheck, role: [...ADMIN_CONFIG_DOMAIN_SPEC.allowedRoles] as DomainRole[] },
+    { id: 'admin', label: 'Config. General', icon: ShieldCheck, role: [...ADMIN_CONFIG_DOMAIN_SPEC.allowedRoles] as DomainRole[] },
     { id: 'liquidaciones', label: 'Liquidaciones', icon: DollarSign, role: [...LIQUIDATION_DOMAIN_SPEC.allowedRoles] as DomainRole[], permission: 'canLiquidate' },
     
     { id: 'config', label: 'Mi cuenta', icon: Settings, role: [...SALES_DOMAIN_SPEC.allowedRoles] as DomainRole[] },
@@ -2574,9 +2574,9 @@ function App() {
           width: isMobile ? (isSidebarOpen ? 280 : 0) : (isSidebarOpen ? 280 : 80),
           x: isMobile && !isSidebarOpen ? -280 : 0
         }}
-        className={`surface border-r border-border h-screen flex flex-col z-50 ${isMobile ? 'fixed inset-y-0 left-0' : 'relative'}`}
+        className={`surface border-r border-border h-screen flex flex-col overflow-hidden z-50 ${isMobile ? 'fixed inset-y-0 left-0' : 'relative'}`}
       >
-        <div className="p-6 flex items-center gap-3">
+        <div className="px-4 py-4 flex items-center gap-3 shrink-0">
           <div className="bg-primary p-2 rounded-lg neon-border">
             <TicketIcon className="w-6 h-6 text-primary-foreground" />
           </div>
@@ -2591,44 +2591,54 @@ function App() {
           )}
         </div>
 
-        <nav className="flex-1 px-4 space-y-2 mt-4">
-          {visibleNavigationItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
-                activeTab === item.id 
-                  ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20' 
-                  : 'surface-soft text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <item.icon className="w-5 h-5 flex-shrink-0" />
-              {isSidebarOpen && <span className="text-sm font-bold uppercase tracking-wider">{item.label}</span>}
-            </button>
-          ))}
-        </nav>
+        <div className="flex-1 min-h-0 overflow-y-auto px-3 pt-2 pb-[max(12px,env(safe-area-inset-bottom))] custom-scrollbar">
+          <nav className="space-y-1.5">
+            {visibleNavigationItems.map((item) => (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={`w-full h-11 px-3 rounded-lg border flex items-center gap-2.5 transition-all ${
+                  activeTab === item.id
+                    ? 'bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/20'
+                    : 'text-muted-foreground border-white/10 hover:text-foreground hover:border-white/20'
+                }`}
+              >
+                <item.icon className="w-4 h-4 flex-shrink-0" />
+                {isSidebarOpen && (
+                  <span className="text-xs font-bold uppercase tracking-wide whitespace-nowrap truncate">
+                    {item.label}
+                  </span>
+                )}
+              </button>
+            ))}
+          </nav>
 
-        <div className="p-4 border-t border-border space-y-2">
-          <div className={`flex items-center gap-3 px-4 py-2 rounded-xl transition-all ${isOnline ? 'text-emerald-400' : 'text-red-400'}`}>
-            {isOnline ? <Cloud className="w-5 h-5 flex-shrink-0" /> : <CloudOff className="w-5 h-5 flex-shrink-0" />}
-            {isSidebarOpen && (
-              <div className="flex flex-col">
-                <span className="text-[11px] font-black uppercase tracking-widest leading-none">
-                  {isOnline ? 'Sincronizado' : 'Sin Conexión'}
+          <div className="mt-3 pt-3 border-t border-border space-y-1.5">
+            <div className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border border-white/10 transition-all ${isOnline ? 'text-emerald-400' : 'text-red-400'}`}>
+              {isOnline ? <Cloud className="w-4 h-4 flex-shrink-0" /> : <CloudOff className="w-4 h-4 flex-shrink-0" />}
+              {isSidebarOpen && (
+                <div className="flex flex-col min-w-0">
+                  <span className="text-[10px] font-black uppercase tracking-widest leading-none whitespace-nowrap truncate">
+                    {isOnline ? 'Sincronizado' : 'Sin Conexión'}
+                  </span>
+                  <span className="text-[9px] font-mono opacity-60 uppercase leading-none mt-0.5 whitespace-nowrap truncate">
+                    {isOnline ? 'Nube Activa' : 'Modo Local'}
+                  </span>
+                </div>
+              )}
+            </div>
+            <button
+              onClick={handleLogoutFromUi}
+              className="w-full h-11 px-3 rounded-lg border border-red-500/25 text-red-400 hover:bg-red-400/10 flex items-center gap-2.5 transition-all"
+            >
+              <LogOut className="w-4 h-4 flex-shrink-0" />
+              {isSidebarOpen && (
+                <span className="text-xs font-bold uppercase tracking-wide whitespace-nowrap truncate">
+                  Cerrar Sesión
                 </span>
-                <span className="text-[9px] font-mono opacity-60 uppercase">
-                  {isOnline ? 'Nube Activa' : 'Modo Local'}
-                </span>
-              </div>
-            )}
+              )}
+            </button>
           </div>
-          <button 
-            onClick={handleLogoutFromUi}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-400 hover:bg-red-400/10 transition-all"
-          >
-            <LogOut className="w-5 h-5 flex-shrink-0" />
-            {isSidebarOpen && <span className="text-sm font-bold uppercase tracking-wider">Cerrar Sesión</span>}
-          </button>
         </div>
       </motion.aside>
 
