@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import type { Bet, LotteryTicket } from '../../../types/bets';
 import type { GlobalSettings } from '../../../types/lotteries';
 import type { UserProfile } from '../../../types/users';
+import { toastSuccess } from '../../../utils/toast';
 import { unifyBets } from '../../../utils/bets';
 import { SALES_DOMAIN_SPEC } from '../domainSpec';
 import { validateSalesAccess } from '../helpers/validation';
@@ -170,7 +171,7 @@ export function useSalesCartActions({
       return unifyBets([...prevCart, ...newBets]);
     });
 
-    toast.success('Jugada agregada al carrito');
+    toastSuccess('Jugada agregada al carrito');
     setNumber('');
     setQuantity('1');
     setPlAmount('1.00');
@@ -247,7 +248,7 @@ export function useSalesCartActions({
   const clearCart = useCallback(() => {
     if (cart.length === 0) return;
     setCart([]);
-    toast.success('Carrito limpiado');
+    toastSuccess('Carrito limpiado');
   }, [cart.length, setCart]);
 
   return {

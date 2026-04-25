@@ -132,6 +132,7 @@ import FastEntryModal from './components/modals/FastEntryModal';
 import GlobalSettingsModal from './components/modals/GlobalSettingsModal';
 import LotteryModal from './components/modals/LotteryModal';
 import LotterySelectorModal from './components/modals/LotterySelectorModal';
+import MultiDeleteTicketModal from './components/modals/MultiDeleteTicketModal';
 import ResultModal from './components/modals/ResultModal';
 import TicketModal from './components/modals/TicketModal';
 import TransactionModal from './components/modals/TransactionModal';
@@ -162,6 +163,7 @@ import type { UserProfile } from './types/users';
 import { getBusinessDate, getEndOfBusinessDay } from './utils/dates';
 import { unifyBets } from './utils/bets';
 import { cleanText, normalizeLotteryName, normalizePlainText } from './utils/text';
+import { toastSuccess } from './utils/toast';
 import { formatTime12h } from './utils/time';
 import { getVisibleNavItems, type NavItem } from './config/navigation';
 // --- Error Boundary ---
@@ -467,6 +469,15 @@ function App() {
     message: string;
     onConfirm: () => void;
   }>({ show: false, title: '', message: '', onConfirm: () => {} });
+  const [multiDeleteModal, setMultiDeleteModal] = useState<{
+    show: boolean;
+    onDeleteLottery: () => void;
+    onDeleteAll: () => void;
+  }>({
+    show: false,
+    onDeleteLottery: () => {},
+    onDeleteAll: () => {},
+  });
   const [reuseModal, setReuseModal] = useState<{
     show: boolean;
     ticket: LotteryTicket | null;
@@ -1160,7 +1171,7 @@ function App() {
         setCustomerName('');
         setShowCheckoutModal(false);
         setShowTicketModal({ ticket: updatedTicket });
-        toast.success('¡Venta actualizada con éxito!');
+        toastSuccess('¡Venta actualizada con éxito!');
       } else {
         // Create new ticket
         const sequenceNumber = getDailySequence();
@@ -1200,7 +1211,7 @@ function App() {
         setCustomerName('');
         setShowCheckoutModal(false);
         setShowTicketModal({ ticket: newTicket });
-        toast.success('¡Venta realizada con éxito!');
+        toastSuccess('¡Venta realizada con éxito!');
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, 'tickets');
@@ -1426,35 +1437,23 @@ function App() {
     const canDoPartialDelete = Boolean(lotKey) && uniqueLotteries.length > 1;
 
     if (canDoPartialDelete) {
-      const selectedBets = allBets.filter((bet) => normalizePlainText(bet?.lottery || '') === lotKey);
-      if (selectedBets.length === 0) {
+      const deleteCompleteTicket = () => {
         setConfirmModal({
           show: true,
-          title: 'Borrar Venta',
-          message: '¿Está seguro de borrar esta venta? Se eliminará permanentemente de la base de datos.',
+          title: 'Borrar Ticket Completo',
+          message: '¿Está seguro de borrar el ticket completo? Se eliminarán todos sus sorteos.',
           onConfirm: async () => {
             try {
               await deleteTicketById(id);
-              toast.success('Venta eliminada correctamente');
+              toastSuccess('Ticket completo eliminado correctamente');
             } catch (error) {
               handleFirestoreError(error, OperationType.DELETE, `tickets/${id}`);
             }
           }
         });
-        return;
-      }
+      };
 
-      const choice = window.prompt(
-        `Ticket multiple detectado para ${cleanText(selectedLotteryName || '')}.\n` +
-        `1 = Eliminar solo este sorteo\n` +
-        `2 = Eliminar ticket completo\n` +
-        `Escribe 1 o 2`
-      );
-
-      if (choice === null) return;
-      const normalizedChoice = choice.trim();
-
-      if (normalizedChoice === '1') {
+      const deleteSelectedLottery = async () => {
         const remainingBets = allBets.filter((bet) => normalizePlainText(bet?.lottery || '') !== lotKey);
         if (remainingBets.length === 0) {
           setConfirmModal({
@@ -1464,7 +1463,7 @@ function App() {
             onConfirm: async () => {
               try {
                 await deleteTicketById(id);
-                toast.success('Ticket eliminado correctamente');
+                toastSuccess('Ticket eliminado correctamente');
               } catch (error) {
                 handleFirestoreError(error, OperationType.DELETE, `tickets/${id}`);
               }
@@ -1494,31 +1493,21 @@ function App() {
           setHistoryTickets((prev) => patchLocalTicket(prev));
           setLiquidationTicketsSnapshot((prev) => patchLocalTicket(prev));
 
-          toast.success('Se eliminó solo el sorteo seleccionado del ticket');
+          toastSuccess('Se eliminó solo el sorteo seleccionado del ticket');
         } catch (error) {
           handleFirestoreError(error, OperationType.UPDATE, `tickets/${id}`);
         }
-        return;
-      }
+      };
 
-      if (normalizedChoice === '2') {
-        setConfirmModal({
-          show: true,
-          title: 'Borrar Ticket Completo',
-          message: '¿Está seguro de borrar el ticket completo? Se eliminarán todos sus sorteos.',
-          onConfirm: async () => {
-            try {
-              await deleteTicketById(id);
-              toast.success('Ticket completo eliminado correctamente');
-            } catch (error) {
-              handleFirestoreError(error, OperationType.DELETE, `tickets/${id}`);
-            }
-          }
-        });
-        return;
-      }
-
-      toast.error('Opcion invalida. Escribe 1 o 2.');
+      setMultiDeleteModal({
+        show: true,
+        onDeleteLottery: () => {
+          void deleteSelectedLottery();
+        },
+        onDeleteAll: () => {
+          deleteCompleteTicket();
+        },
+      });
       return;
     }
 
@@ -1529,7 +1518,7 @@ function App() {
       onConfirm: async () => {
         try {
           await deleteTicketById(id);
-          toast.success('Venta eliminada correctamente');
+          toastSuccess('Venta eliminada correctamente');
         } catch (error) {
           handleFirestoreError(error, OperationType.DELETE, `tickets/${id}`);
         }
@@ -1579,7 +1568,7 @@ function App() {
       window.open(whatsappUrl, '_blank');
       try {
         await navigator.clipboard.writeText(message);
-        toast.success('Abriendo WhatsApp... (Texto copiado)');
+        toastSuccess('Abriendo WhatsApp... (Texto copiado)');
       } catch (err) {
         // Ignore clipboard error
       }
@@ -1639,7 +1628,7 @@ function App() {
     try {
       if (auth.currentUser) {
         await updatePassword(auth.currentUser, newPassword);
-        toast.success('Contraseña actualizada correctamente');
+        toastSuccess('Contraseña actualizada correctamente');
         setNewPassword('');
         setConfirmPassword('');
       } else {
@@ -1688,7 +1677,7 @@ function App() {
       setUserProfile(updatedProfile);
       setChancePrice(selectedConfig.price);
       setPersonalChancePrice(selectedConfig.price);
-      toast.success('Precio de chance actualizado');
+      toastSuccess('Precio de chance actualizado');
     } catch (error: any) {
       console.error('Error updating chance price:', error);
       toast.error(`Error: ${error.message || 'No se pudo actualizar el precio de chance'}`);
@@ -1863,7 +1852,7 @@ function App() {
 
   const handleDeleteAllSalesData = () => {
     if (!userProfile || !['ceo', 'admin'].includes(userProfile.role)) {
-      alert('No tienes permisos para ejecutar limpieza operativa');
+      toast.error('No tienes permisos para ejecutar limpieza operativa');
       return;
     }
 
@@ -1879,7 +1868,7 @@ function App() {
           });
 
           if (result.deletedCount > 0 || !result.archiveAlreadyExists) {
-            toast.success('Archivo diario creado y limpieza operativa completada');
+            toastSuccess('Archivo diario creado y limpieza operativa completada');
           } else {
             toast.info('El archivo diario ya existía y no había datos pendientes por limpiar');
           }
@@ -1894,7 +1883,7 @@ function App() {
   const applyLotteryToCart = (lotteryName: string) => {
     if (!lotteryName) return;
     setCart(cart.map(item => ({ ...item, lottery: lotteryName })));
-    toast.success(`Lotería ${cleanText(lotteryName)} aplicada a todo el pedido`);
+    toastSuccess(`Lotería ${cleanText(lotteryName)} aplicada a todo el pedido`);
   };
 
   const downloadDataUrlFile = (dataUrl: string, fileName: string) => {
@@ -2367,9 +2356,9 @@ function App() {
       await fetchRecoveryData();
 
       if (singleTargetLottery) {
-        toast.success(`Ticket ${ticket.id.slice(0, 8)} movido a ${cleanText(singleTargetLottery.name)}`);
+        toastSuccess(`Ticket ${ticket.id.slice(0, 8)} movido a ${cleanText(singleTargetLottery.name)}`);
       } else {
-        toast.success(`Ticket ${ticket.id.slice(0, 8)} actualizado (multi-sorteo) y sistema recalculado`);
+        toastSuccess(`Ticket ${ticket.id.slice(0, 8)} actualizado (multi-sorteo) y sistema recalculado`);
       }
     } catch (error) {
       console.error('Error updating recovery ticket:', error);
@@ -2427,7 +2416,7 @@ function App() {
           closedLotteryCardsCacheRef.current.clear();
           await fetchRecoveryData();
 
-          toast.success(`Ticket ${ticket.id.slice(0, 8)} eliminado correctamente`);
+          toastSuccess(`Ticket ${ticket.id.slice(0, 8)} eliminado correctamente`);
         } catch (error) {
           console.error('Error deleting recovery ticket:', error);
           toast.error('No se pudo eliminar el ticket');
@@ -2562,7 +2551,7 @@ function App() {
             onSave={async (data) => {
               try {
                 await setDoc(doc(db, 'settings', 'global'), data);
-                toast.success('Ajustes globales guardados');
+                toastSuccess('Ajustes globales guardados');
                 setShowSettingsModal(false);
               } catch (error) {
                 handleFirestoreError(error, OperationType.WRITE, 'settings/global');
@@ -2578,7 +2567,7 @@ function App() {
             const combined = [...prevCart, ...bets];
             return unifyBets(combined);
           });
-          toast.success('Apuestas agregadas y unificadas');
+          toastSuccess('Apuestas agregadas y unificadas');
         }}
         onClose={() => setShowFastEntryModal(false)}
         selectedLotteries={isMultipleMode ? multiLottery : (selectedLottery ? [selectedLottery] : [])}
@@ -2604,6 +2593,12 @@ function App() {
         message={confirmModal.message}
         onConfirm={confirmModal.onConfirm}
         onClose={() => setConfirmModal(prev => ({ ...prev, show: false }))}
+      />
+      <MultiDeleteTicketModal
+        show={multiDeleteModal.show}
+        onDeleteLottery={multiDeleteModal.onDeleteLottery}
+        onDeleteAll={multiDeleteModal.onDeleteAll}
+        onClose={() => setMultiDeleteModal(prev => ({ ...prev, show: false }))}
       />
 
       <LotterySelectorModal 

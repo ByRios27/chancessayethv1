@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { jsPDF } from 'jspdf';
 import { toast } from 'sonner';
+import { toastSuccess } from '../../../utils/toast';
 import {
   addDoc,
   collection,
@@ -106,7 +107,7 @@ export function useLiquidationDomain(params: any) {
   const handleLiquidate = async () => {
     if (!selectedUserToLiquidate) return;
     if (!userProfile || !['ceo', 'admin'].includes(userProfile.role)) {
-      alert('No tienes permisos para liquidar');
+      toast.error('No tienes permisos para liquidar');
       return;
     }
     if (liquidationDate !== businessDayKey && isLiquidationDataLoading) {
@@ -280,7 +281,7 @@ export function useLiquidationDomain(params: any) {
           };
 
           setLiquidationSettlementsSnapshot((prev: Settlement[]) => upsertSettlement(prev));
-          toast.success(existingSettlement ? 'Liquidacion actualizada correctamente' : 'Liquidacion guardada correctamente');
+          toastSuccess(existingSettlement ? 'Liquidacion actualizada correctamente' : 'Liquidacion guardada correctamente');
           setAmountPaid(String(paid));
         } catch (error) {
           onError(error, 'write', 'settlements');
@@ -467,7 +468,7 @@ export function useLiquidationDomain(params: any) {
       writeLine(`Neto global estimado: USD ${globalNet.toFixed(2)}`, 'bold', 10);
 
       pdf.save(`Reporte-Consolidado-${reportStartDate}-a-${reportEndDate}.pdf`);
-      toast.success(`Reporte consolidado listo (${reportStartDate} -> ${reportEndDate})`, { id: toastId });
+      toastSuccess(`Reporte consolidado listo (${reportStartDate} -> ${reportEndDate})`, { id: toastId });
     } catch (error) {
       toast.error('No se pudo generar el reporte consolidado', { id: toastId });
     } finally {

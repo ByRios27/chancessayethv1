@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import type { Lottery } from '../../../types/lotteries';
 import type { LotteryResult } from '../../../types/results';
 import type { LotteryTicket } from '../../../types/bets';
+import { toastSuccess } from '../../../utils/toast';
 import { RESULTS_DOMAIN_SPEC, canExecuteResultsAction } from '../domainSpec';
 
 interface ConfirmModalState {
@@ -186,13 +187,13 @@ export function useResultsDomain({
           ...resultData,
           timestamp: serverTimestamp(),
         });
-        toast.success('Resultado actualizado');
+        toastSuccess('Resultado actualizado');
       } else {
         await createResult({
           ...resultData,
           timestamp: serverTimestamp(),
         });
-        toast.success('Resultado ingresado');
+        toastSuccess('Resultado ingresado');
       }
 
       setEditingResult(null);
@@ -266,7 +267,7 @@ export function useResultsDomain({
       onConfirm: async () => {
         try {
           await deleteResultById(id);
-          toast.success('Resultado eliminado');
+          toastSuccess('Resultado eliminado');
         } catch (error) {
           onError(error, 'delete', `results/${id}`);
         }
