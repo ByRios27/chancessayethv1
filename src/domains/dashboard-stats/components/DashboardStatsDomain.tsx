@@ -26,6 +26,9 @@ export function DashboardStatsDomain(props: any) {
     formatTime12h,
   } = props;
 
+  const role = String(userProfile?.role ?? '').toLowerCase();
+  const canViewInjections = role === 'ceo' || role === 'admin';
+
   const {
     expandedStats,
     setExpandedStats,
@@ -45,59 +48,44 @@ export function DashboardStatsDomain(props: any) {
 
   if (mode === 'dashboard') {
     return (
-      <motion.div key="dashboard" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-        <div className="space-y-2">
-          <div className="grid grid-cols-2 gap-2">
-            <div className="glass-card p-3 border-white/5 bg-white/[0.02]">
-              <p className="text-[9px] text-muted-foreground uppercase tracking-widest mb-0.5">Ventas del dia</p>
-              <p className="text-lg font-medium text-white">${todayStats.sales.toFixed(2)}</p>
-            </div>
-            <div className="glass-card p-3 border-white/5 bg-white/[0.02]">
-              <p className="text-[9px] text-muted-foreground uppercase tracking-widest mb-0.5">Utilidad neta</p>
-              <p className={`text-lg font-medium ${todayStats.netProfit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                ${todayStats.netProfit.toFixed(2)}
-              </p>
-            </div>
+      <motion.div key="dashboard" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-2">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="card-mini">
+            <div className="value text-white">${todayStats.sales.toFixed(2)}</div>
+            <div className="label">Ventas</div>
           </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div className="glass-card p-3 border-white/5 bg-white/[0.02]">
-              <p className="text-[9px] text-muted-foreground uppercase tracking-widest mb-0.5">Premios pagados</p>
-              <p className="text-lg font-medium text-white">${todayStats.prizes.toFixed(2)}</p>
-            </div>
-            <div className="glass-card p-3 border-white/5 bg-white/[0.02]">
-              <p className="text-[9px] text-muted-foreground uppercase tracking-widest mb-0.5">Balance actual</p>
-              <p className="text-lg font-medium text-white">${todayStats.netProfit.toFixed(2)}</p>
-            </div>
+          <div className="card-mini">
+            <div className="value text-white">${todayStats.prizes.toFixed(2)}</div>
+            <div className="label">Premios</div>
           </div>
+          <div className="card-mini">
+            <div className={`value ${todayStats.netProfit > 0 ? 'text-green-400' : todayStats.netProfit < 0 ? 'text-red-400' : 'text-white'}`}>
+              ${todayStats.netProfit.toFixed(2)}
+            </div>
+            <div className="label">Utilidad</div>
+          </div>
+          <div className="card-mini">
+            <div className={`value ${todayStats.netProfit > 0 ? 'text-green-400' : todayStats.netProfit < 0 ? 'text-red-400' : 'text-white'}`}>
+              ${todayStats.netProfit.toFixed(2)}
+            </div>
+            <div className="label">Balance</div>
+          </div>
+          {canViewInjections && recentInjections.length > 0 && (
+            <div className="card-mini col-span-2 sm:col-span-1">
+              <div className="value text-yellow-400">
+                ${recentInjections.reduce((sum: number, inj: any) => sum + (inj.amount || 0), 0).toFixed(2)}
+              </div>
+              <div className="label flex items-center gap-1">
+                <Zap className="w-3 h-3 text-yellow-500" />
+                Inyecciones
+              </div>
+            </div>
+          )}
         </div>
 
-        <div className={`${userProfile?.role === 'seller' ? 'xl:col-span-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6' : 'space-y-6'}`}>
-          <div className="glass-card p-6 border-white/5 bg-white/[0.02]">
-            <h3 className="text-xs font-black text-white uppercase tracking-widest mb-6 flex items-center gap-2">
-              <Zap className="w-4 h-4 text-yellow-500" />
-              Inyecciones Recibidas
-            </h3>
-            <div className="space-y-3">
-              {recentInjections.map((inj: any) => (
-                <div key={inj.id} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/10">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-black text-white uppercase tracking-tighter">Inyeccion Recibida</span>
-                    <span className="text-[9px] text-muted-foreground font-mono">
-                      {inj.timestamp?.toDate ? formatTime12h(`${inj.timestamp.toDate().getHours().toString().padStart(2, '0')}:${inj.timestamp.toDate().getMinutes().toString().padStart(2, '0')}`) : ''}
-                    </span>
-                  </div>
-                  <span className={`text-xs font-black ${inj.type === 'injection' ? 'text-yellow-400' : 'text-blue-400'}`}>
-                    {inj.type === 'injection' ? '+' : '-'}${inj.amount.toFixed(2)}
-                  </span>
-                </div>
-              ))}
-              {((injections || []).filter((i: any) => i.date === todayStr && (!!operationalSellerId && i.sellerId === operationalSellerId)).length === 0) && (
-                <p className="text-center py-4 text-[10px] text-muted-foreground uppercase font-bold">No hay inyecciones hoy</p>
-              )}
-            </div>
-          </div>
-        </div>
+        {canViewInjections && recentInjections.length === 0 && (
+          <span className="block px-1 text-[11px] text-muted-foreground">Sin inyecciones hoy</span>
+        )}
       </motion.div>
     );
   }

@@ -113,6 +113,29 @@
     min-height: 44px;
   }
 
+  .card-mini {
+    height: 75px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(10, 15, 25, 0.6);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .value {
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1.1;
+  }
+
+  .label {
+    font-size: 11px;
+    opacity: 0.6;
+    margin-top: 2px;
+  }
+
   /* Backwards-compatible aliases to avoid breaking existing JSX */
   .glass {
     background: rgba(15, 23, 42, 0.6);
