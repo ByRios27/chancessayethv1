@@ -522,15 +522,12 @@ function App() {
   const punctualDataLoading = resultsLoading || injectionsLoading || settlementsLoading;
   const [isAutoRefreshing, setIsAutoRefreshing] = useState(false);
 
-  const runAutoRefresh = useCallback((silent = true) => {
+  const runAutoRefresh = useCallback(() => {
     if (!tabNeedsPunctualRefresh) return;
     setIsAutoRefreshing(true);
     refreshResults();
     refreshInjections();
     refreshSettlements();
-    if (!silent) {
-      toast.info('Actualizando datos...');
-    }
     window.setTimeout(() => setIsAutoRefreshing(false), 600);
   }, [refreshInjections, refreshResults, refreshSettlements, tabNeedsPunctualRefresh]);
 
@@ -548,16 +545,16 @@ function App() {
 
   useEffect(() => {
     if (!tabNeedsPunctualRefresh) return;
-    runAutoRefresh(true);
+    runAutoRefresh();
   }, [activeTab, tabNeedsPunctualRefresh, runAutoRefresh]);
 
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState === 'visible') {
-        runAutoRefresh(true);
+        runAutoRefresh();
       }
     };
-    const onOnlineRefresh = () => runAutoRefresh(true);
+    const onOnlineRefresh = () => runAutoRefresh();
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('online', onOnlineRefresh);
     return () => {
@@ -568,7 +565,7 @@ function App() {
 
   useEffect(() => {
     if (!confirmModal.show) {
-      runAutoRefresh(true);
+      runAutoRefresh();
     }
   }, [confirmModal.show, runAutoRefresh]);
 
@@ -598,7 +595,7 @@ function App() {
     if (!canUsePullToRefresh || isPullRefreshing) return;
     if (pullDistanceRef.current > 72) {
       setIsPullRefreshing(true);
-      runAutoRefresh(false);
+      runAutoRefresh();
       window.setTimeout(() => setIsPullRefreshing(false), 700);
     }
     pullStartYRef.current = 0;
@@ -1401,9 +1398,12 @@ function App() {
     },
   });
 
-  const cancelTicket = async (id: string) => {
-    const ticket = tickets.find(t => t.id === id);
+  const cancelTicket = async (ticketOrId: LotteryTicket | string, selectedLotteryName?: string) => {
+    const ticket = typeof ticketOrId === 'string'
+      ? tickets.find(t => t.id === ticketOrId)
+      : ticketOrId;
     if (!ticket) return;
+    const id = ticket.id;
 
     if (ticket.sellerEmail?.toLowerCase() !== user?.email?.toLowerCase()) {
       toast.error('No tienes permiso para borrar esta venta. Solo el vendedor original puede hacerlo.');
@@ -1417,6 +1417,108 @@ function App() {
 
     if (isTicketHasResults(ticket)) {
       toast.error('No se puede borrar esta venta: El sorteo ya tiene resultados.');
+      return;
+    }
+
+    const allBets = ticket.bets || [];
+    const lotKey = normalizePlainText(selectedLotteryName || '');
+    const uniqueLotteries = Array.from(new Set(allBets.map((bet) => normalizePlainText(bet?.lottery || '')).filter(Boolean)));
+    const canDoPartialDelete = Boolean(lotKey) && uniqueLotteries.length > 1;
+
+    if (canDoPartialDelete) {
+      const selectedBets = allBets.filter((bet) => normalizePlainText(bet?.lottery || '') === lotKey);
+      if (selectedBets.length === 0) {
+        setConfirmModal({
+          show: true,
+          title: 'Borrar Venta',
+          message: '¿Está seguro de borrar esta venta? Se eliminará permanentemente de la base de datos.',
+          onConfirm: async () => {
+            try {
+              await deleteTicketById(id);
+              toast.success('Venta eliminada correctamente');
+            } catch (error) {
+              handleFirestoreError(error, OperationType.DELETE, `tickets/${id}`);
+            }
+          }
+        });
+        return;
+      }
+
+      const choice = window.prompt(
+        `Ticket multiple detectado para ${cleanText(selectedLotteryName || '')}.\n` +
+        `1 = Eliminar solo este sorteo\n` +
+        `2 = Eliminar ticket completo\n` +
+        `Escribe 1 o 2`
+      );
+
+      if (choice === null) return;
+      const normalizedChoice = choice.trim();
+
+      if (normalizedChoice === '1') {
+        const remainingBets = allBets.filter((bet) => normalizePlainText(bet?.lottery || '') !== lotKey);
+        if (remainingBets.length === 0) {
+          setConfirmModal({
+            show: true,
+            title: 'Borrar Ticket',
+            message: 'Al eliminar este sorteo, el ticket queda sin apuestas. ¿Deseas eliminar el ticket completo?',
+            onConfirm: async () => {
+              try {
+                await deleteTicketById(id);
+                toast.success('Ticket eliminado correctamente');
+              } catch (error) {
+                handleFirestoreError(error, OperationType.DELETE, `tickets/${id}`);
+              }
+            }
+          });
+          return;
+        }
+
+        const recalculatedTotal = remainingBets.reduce((sum, bet) => sum + (bet?.amount || 0), 0);
+        try {
+          await updateTicket(id, {
+            bets: remainingBets,
+            totalAmount: recalculatedTotal,
+            updatedAt: serverTimestamp(),
+            updateReason: `partial-delete:${lotKey}`,
+          } as any);
+
+          const patchLocalTicket = (prev: LotteryTicket[]) => prev.map((row) => {
+            if (row.id !== id) return row;
+            return {
+              ...row,
+              bets: remainingBets,
+              totalAmount: recalculatedTotal,
+            };
+          });
+          setTickets((prev) => patchLocalTicket(prev));
+          setHistoryTickets((prev) => patchLocalTicket(prev));
+          setLiquidationTicketsSnapshot((prev) => patchLocalTicket(prev));
+
+          toast.success('Se eliminó solo el sorteo seleccionado del ticket');
+        } catch (error) {
+          handleFirestoreError(error, OperationType.UPDATE, `tickets/${id}`);
+        }
+        return;
+      }
+
+      if (normalizedChoice === '2') {
+        setConfirmModal({
+          show: true,
+          title: 'Borrar Ticket Completo',
+          message: '¿Está seguro de borrar el ticket completo? Se eliminarán todos sus sorteos.',
+          onConfirm: async () => {
+            try {
+              await deleteTicketById(id);
+              toast.success('Ticket completo eliminado correctamente');
+            } catch (error) {
+              handleFirestoreError(error, OperationType.DELETE, `tickets/${id}`);
+            }
+          }
+        });
+        return;
+      }
+
+      toast.error('Opcion invalida. Escribe 1 o 2.');
       return;
     }
 
@@ -2698,14 +2800,6 @@ function App() {
           onTouchEnd={handleMainTouchEnd}
           className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 md:p-8 custom-scrollbar min-w-0"
         >
-          {tabNeedsPunctualRefresh && (
-            <div className="mb-3 px-1">
-              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
-                {(punctualDataLoading || isAutoRefreshing || isPullRefreshing) ? 'Actualizando...' : 'Datos al día'}
-              </p>
-            </div>
-          )}
-
           <AnimatePresence mode="wait">
             {activeTab === 'dashboard' && canAccessDashboard && (
               <Suspense fallback={<div className="text-xs text-muted-foreground">Cargando dashboard...</div>}>

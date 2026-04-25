@@ -125,6 +125,7 @@ export function HistorySection(props: HistorySectionProps) {
                       lot,
                       resultForLottery,
                       sales,
+                      prizes,
                       netProfit,
                       isLoss,
                       paginatedTickets,
@@ -132,9 +133,17 @@ export function HistorySection(props: HistorySectionProps) {
                       currentPage
                     } = card;
                     const isExpanded = expandedLotteries.includes(lot.id);
+                    const hasPositivePrizes = (prizes || 0) > 0;
+                    const isHardLoss = isLoss || (prizes || 0) > (sales || 0);
+                    const isWinningPositive = !isHardLoss && hasPositivePrizes;
+                    const cardToneClass = isHardLoss
+                      ? 'bg-red-900/20 border-red-900/50'
+                      : isWinningPositive
+                        ? 'bg-emerald-900/20 border-emerald-900/50'
+                        : 'bg-[#111827] border-gray-800';
 
                     return (
-                      <div key={lot.id} className={`overflow-hidden rounded-xl border transition-all ${isLoss ? 'bg-red-900/20 border-red-900/50' : 'bg-[#111827] border-gray-800'} group`}>
+                      <div key={lot.id} className={`overflow-hidden rounded-xl border transition-all ${cardToneClass} group`}>
                         <div 
                           onClick={() => {
                             setExpandedLotteries(prev => 
@@ -176,8 +185,12 @@ export function HistorySection(props: HistorySectionProps) {
                               <span className="text-xs font-black text-white">${sales.toFixed(2)}</span>
                             </div>
                             <div className="flex flex-col items-end">
+                              <span className="text-[8px] font-bold text-muted-foreground uppercase">Premios</span>
+                              <span className={`text-xs font-black ${hasPositivePrizes ? 'text-emerald-400' : 'text-white/80'}`}>${(prizes || 0).toFixed(2)}</span>
+                            </div>
+                            <div className="flex flex-col items-end">
                               <span className="text-[8px] font-bold text-muted-foreground uppercase">Utilidad</span>
-                              <span className={`text-xs font-black ${isLoss ? 'text-red-500' : 'text-green-500'}`}>${netProfit.toFixed(2)}</span>
+                              <span className={`text-xs font-black ${isHardLoss ? 'text-red-500' : 'text-green-500'}`}>${netProfit.toFixed(2)}</span>
                             </div>
                           </div>
                         </div>
@@ -238,7 +251,7 @@ export function HistorySection(props: HistorySectionProps) {
                                               </button>
                                               {ticket.status === 'active' && !isTicketClosed(ticket) && !isTicketHasResults(ticket) && ticket.sellerEmail?.toLowerCase() === user?.email?.toLowerCase() && (
                                                 <button 
-                                                  onClick={() => cancelTicket(ticket.id)}
+                                                  onClick={() => cancelTicket(ticket, lot.name)}
                                                   className="p-1.5 bg-red-500/10 hover:bg-red-500/20 rounded-lg text-red-400 transition-colors"
                                                 >
                                                   <XCircle className="w-3 h-3" />
