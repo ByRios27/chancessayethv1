@@ -18,7 +18,7 @@ export function useUsers({
 
   useEffect(() => {
     if (!enabled) return;
-    if (role !== 'ceo' && role !== 'admin' && role !== 'programador') return;
+    if (role !== 'ceo' && role !== 'admin') return;
 
     let cancelled = false;
     const run = async () => {

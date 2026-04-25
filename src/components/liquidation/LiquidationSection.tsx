@@ -181,7 +181,7 @@ export function LiquidationSection(props: LiquidationSectionProps) {
                   <option key="default" value="" className="bg-gray-900">Seleccionar...</option>
                   {users.filter((u: any) => {
                     if (!u || !u.email || !u.name || u.name.trim() === '') return false;
-                    if (userProfile?.role === 'ceo' || userProfile?.role === 'admin' || userProfile?.role === 'programador') return true;
+                    if (userProfile?.role === 'ceo' || userProfile?.role === 'admin') return true;
                     return u.email === userProfile?.email;
                   }).map((u: any, i: number) => (
                     <option key={u.email || `liq-${i}`} value={u.email} className="bg-gray-900">{u.name} ({u.email?.split('@')[0] || ''})</option>

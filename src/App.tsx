@@ -15,7 +15,6 @@ import {
   Cloud,
   CloudOff,
   Copy,
-  Database,
   DollarSign,
   Edit2,
   Flag,
@@ -30,7 +29,6 @@ import {
   Plus,
   PlusCircle,
   Printer,
-  Repeat,
   Search,
   Settings,
   Share2,
@@ -270,7 +268,7 @@ function App() {
   const { user, userProfile, setUserProfile, loading, handleLogout } = useAuthSession(enforceSessionByOperationalDay);
   const { tick, businessDayKey, getQuickOperationalDate, applyOperationalQuickDate } = useOperationalClock();
   const currentUserRole = userProfile?.role;
-  const canUseGlobalScope = userProfile?.role === 'ceo' || userProfile?.role === 'programador' || !!userProfile?.canLiquidate;
+  const canUseGlobalScope = userProfile?.role === 'ceo' || !!userProfile?.canLiquidate;
   const [showGlobalScope, setShowGlobalScope] = useState(false);
 
   // Top-level app state
@@ -310,7 +308,6 @@ function App() {
     canAccessManagedUsersData,
     canAccessAllUsers,
     shouldLoadUsersList,
-    needsRealtimeOperationalData,
     shouldLoadResults,
     shouldLoadLotteries,
   } = useAppDataScopes({
@@ -370,12 +367,12 @@ function App() {
       const currentEmail = userProfile?.email?.toLowerCase();
       const targetEmail = u.email?.toLowerCase();
 
-      if (userProfile?.role === 'ceo' || userProfile?.role === 'programador') {
-        return ['ceo', 'admin', 'seller', 'programador'].includes(u.role) && targetEmail !== currentEmail;
+      if (userProfile?.role === 'ceo') {
+        return ['ceo', 'admin', 'seller'].includes(u.role) && targetEmail !== currentEmail;
       }
 
       if (userProfile?.role === 'admin') {
-        return ['ceo', 'admin', 'seller', 'programador'].includes(u.role) && targetEmail !== currentEmail;
+        return ['ceo', 'admin', 'seller'].includes(u.role) && targetEmail !== currentEmail;
       }
 
       return false;
@@ -416,10 +413,9 @@ function App() {
     netProfit: number;
     sortedTicketsForLot: Array<{ t: LotteryTicket; prize: number }>;
   }>>(new Map());
-  const baseRealtimeEnabled = !!user?.uid && !!userProfile?.role && needsRealtimeOperationalData;
-  const ticketsRealtimeEnabled = baseRealtimeEnabled;
-  const injectionsRealtimeEnabled = baseRealtimeEnabled && activeTab !== 'sales';
-  const settlementsRealtimeEnabled = baseRealtimeEnabled && activeTab !== 'sales';
+  const ticketsRealtimeEnabled = !!user?.uid && !!userProfile?.role && activeTab === 'sales';
+  const injectionsRealtimeEnabled = false;
+  const settlementsRealtimeEnabled = false;
 
   const { tickets, setTickets } = useTickets({
     enabled: ticketsRealtimeEnabled,
@@ -491,6 +487,7 @@ function App() {
   const [number, setNumber] = useState('');
   const [quantity, setQuantity] = useState('1');
   const [isAmountSelected, setIsAmountSelected] = useState(false);
+  const [amountEntryStarted, setAmountEntryStarted] = useState(false);
   const [plAmount, setPlAmount] = useState('1.00');
   const [betType, setBetType] = useState<'CH' | 'PL' | 'BL'>('CH');
   const [chancePrice, setChancePrice] = useState<number>(0.20);
@@ -517,18 +514,25 @@ function App() {
     onError: handleOperationalHookError
   });
 
-  const tabNeedsPunctualRefresh = useMemo(() => (
-    ['results', 'stats', 'dashboard', 'history', 'liquidaciones', 'archivo', 'cierres'] as AppTabId[]
-  ).includes(activeTab), [activeTab]);
-
+  const queryTabs = useMemo(
+    () => (['results', 'stats', 'dashboard', 'history', 'liquidaciones', 'archivo', 'cierres'] as AppTabId[]),
+    []
+  );
+  const tabNeedsPunctualRefresh = queryTabs.includes(activeTab);
   const punctualDataLoading = resultsLoading || injectionsLoading || settlementsLoading;
+  const [isAutoRefreshing, setIsAutoRefreshing] = useState(false);
 
-  const handleRefreshPunctualData = useCallback(() => {
+  const runAutoRefresh = useCallback((silent = true) => {
+    if (!tabNeedsPunctualRefresh) return;
+    setIsAutoRefreshing(true);
     refreshResults();
     refreshInjections();
     refreshSettlements();
-    toast.success('Actualizando datos puntuales...');
-  }, [refreshInjections, refreshResults, refreshSettlements]);
+    if (!silent) {
+      toast.info('Actualizando datos...');
+    }
+    window.setTimeout(() => setIsAutoRefreshing(false), 600);
+  }, [refreshInjections, refreshResults, refreshSettlements, tabNeedsPunctualRefresh]);
 
   useEffect(() => {
     if (resultsError) toast.error(`Resultados: ${resultsError}`);
@@ -541,6 +545,65 @@ function App() {
   useEffect(() => {
     if (settlementsError) toast.error(`Liquidaciones: ${settlementsError}`);
   }, [settlementsError]);
+
+  useEffect(() => {
+    if (!tabNeedsPunctualRefresh) return;
+    runAutoRefresh(true);
+  }, [activeTab, tabNeedsPunctualRefresh, runAutoRefresh]);
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        runAutoRefresh(true);
+      }
+    };
+    const onOnlineRefresh = () => runAutoRefresh(true);
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('online', onOnlineRefresh);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('online', onOnlineRefresh);
+    };
+  }, [runAutoRefresh]);
+
+  useEffect(() => {
+    if (!confirmModal.show) {
+      runAutoRefresh(true);
+    }
+  }, [confirmModal.show, runAutoRefresh]);
+
+  const mainScrollRef = useRef<HTMLElement | null>(null);
+  const pullStartYRef = useRef(0);
+  const pullDistanceRef = useRef(0);
+  const [isPullRefreshing, setIsPullRefreshing] = useState(false);
+  const canUsePullToRefresh = tabNeedsPunctualRefresh && activeTab !== 'sales';
+  const handleMainTouchStart = useCallback((event: React.TouchEvent<HTMLElement>) => {
+    if (!canUsePullToRefresh || isPullRefreshing) return;
+    const el = mainScrollRef.current;
+    if (!el || el.scrollTop > 0) return;
+    pullStartYRef.current = event.touches[0]?.clientY ?? 0;
+    pullDistanceRef.current = 0;
+  }, [canUsePullToRefresh, isPullRefreshing]);
+
+  const handleMainTouchMove = useCallback((event: React.TouchEvent<HTMLElement>) => {
+    if (!canUsePullToRefresh || isPullRefreshing || !pullStartYRef.current) return;
+    const currentY = event.touches[0]?.clientY ?? 0;
+    const delta = currentY - pullStartYRef.current;
+    if (delta > 0) {
+      pullDistanceRef.current = delta;
+    }
+  }, [canUsePullToRefresh, isPullRefreshing]);
+
+  const handleMainTouchEnd = useCallback(() => {
+    if (!canUsePullToRefresh || isPullRefreshing) return;
+    if (pullDistanceRef.current > 72) {
+      setIsPullRefreshing(true);
+      runAutoRefresh(false);
+      window.setTimeout(() => setIsPullRefreshing(false), 700);
+    }
+    pullStartYRef.current = 0;
+    pullDistanceRef.current = 0;
+  }, [canUsePullToRefresh, isPullRefreshing, runAutoRefresh]);
 
   const [cart, setCart] = useState<Bet[]>([]);
   const cartTotal = useMemo(() => {
@@ -585,35 +648,41 @@ function App() {
         setNumber(newNumber);
         if (newNumber.length === maxLen) {
           setFocusedField('amount');
-          setIsAmountSelected(true);
+          setAmountEntryStarted(false);
           setTimeout(() => {
             amountInputRef.current?.focus();
-            amountInputRef.current?.select();
           }, 0);
         }
       }
     } else {
       // For amount/quantity
+      const useQuantity = betType === 'CH' || betType === 'BL';
       if (key === '.') {
-        const currentVal = betType === 'CH' ? quantity : plAmount;
+        const currentVal = useQuantity ? quantity : plAmount;
         if (currentVal.includes('.') || currentVal === '') return;
       }
       
-      if (betType === 'CH') {
-        if (isAmountSelected) {
+      if (useQuantity) {
+        if (betType === 'BL' && key === '.') return;
+        if (!amountEntryStarted) {
           setQuantity(key === '.' ? '0.' : key);
-          setIsAmountSelected(false);
+          setAmountEntryStarted(true);
         } else {
-          setQuantity(quantity + key);
+          const nextQuantity = quantity + key;
+          if (betType === 'BL') {
+            const parsed = parseInt(nextQuantity, 10);
+            if (!isNaN(parsed) && parsed > 5) return;
+          }
+          setQuantity(nextQuantity);
+          setAmountEntryStarted(true);
         }
       } else {
-        if (isAmountSelected) {
+        if (!amountEntryStarted) {
           setPlAmount(key === '.' ? '0.' : key);
-          setIsAmountSelected(false);
-        } else if (plAmount === '1.00' && key !== '.') {
-          setPlAmount(key);
+          setAmountEntryStarted(true);
         } else {
           setPlAmount(plAmount + key);
+          setAmountEntryStarted(true);
         }
       }
     }
@@ -623,26 +692,23 @@ function App() {
     if (focusedField === 'number') {
       setNumber(number.slice(0, -1));
     } else {
-      if (isAmountSelected) {
-        if (betType === 'CH') setQuantity('');
-        else setPlAmount('');
-        setIsAmountSelected(false);
-        return;
-      }
-      if (betType === 'CH') {
+      if (betType === 'CH' || betType === 'BL') {
         const newVal = quantity.slice(0, -1);
         setQuantity(newVal || '');
+        setAmountEntryStarted(newVal.length > 0);
       } else {
         const newVal = plAmount.slice(0, -1);
-        setPlAmount(newVal || '1.00');
+        setPlAmount(newVal || '');
+        setAmountEntryStarted(newVal.length > 0);
       }
     }
   };
 
   const handleClear = () => {
     setNumber('');
-    if (betType === 'CH') setQuantity('1');
+    if (betType === 'CH' || betType === 'BL') setQuantity('1');
     else setPlAmount('1.00');
+    setAmountEntryStarted(false);
     setFocusedField('number');
   };
 
@@ -723,14 +789,9 @@ function App() {
 
         localStorage.setItem(autoCleanupStorageKey, todayKey);
 
-        if (result.deletedCount > 0 || !result.archiveAlreadyExists) {
-          toast.success(`Limpieza automática 4:30 AM completada (${targetBusinessDay})`);
-        } else {
-          toast.info(`Limpieza automática validada (${targetBusinessDay}, sin cambios pendientes)`);
-        }
+        // Silencioso: no mostrar notificaciones operativas de limpieza automática al usuario.
       } catch (error) {
         console.error('Error en limpieza automática 4:30 AM:', error);
-        toast.error('Falló la limpieza automática de las 4:30 AM. Se reintentará automáticamente.');
       } finally {
         autoCleanupRunningRef.current = false;
       }
@@ -1271,6 +1332,7 @@ function App() {
     addToCart,
     removeFromCart,
     updateCartItemQuantity,
+    updateCartItemAmount,
     clearCart,
   } = useSalesCartActions({
     userProfile,
@@ -1698,7 +1760,7 @@ function App() {
   });
 
   const handleDeleteAllSalesData = () => {
-    if (!userProfile || !['ceo', 'admin', 'programador'].includes(userProfile.role)) {
+    if (!userProfile || !['ceo', 'admin'].includes(userProfile.role)) {
       alert('No tienes permisos para ejecutar limpieza operativa');
       return;
     }
@@ -2084,8 +2146,8 @@ function App() {
   }, [archiveDate, autoResetStateOnBusinessDayChange, businessDayKey, historyDate, liquidationDate, recoveryDate, user?.email, userProfile?.role, setInjections, setRecoveryDate, setSettlements, setTickets]);
 
   const saveRecoveryLotteryChange = useCallback(async (ticket: RecoveryTicketRecord) => {
-    if (userProfile?.role !== 'programador') {
-      toast.error('Acceso restringido a rol programador');
+    if (userProfile?.role !== 'ceo') {
+      toast.error('Acceso restringido');
       return;
     }
 
@@ -2216,8 +2278,8 @@ function App() {
   }, [fetchRecoveryData, getRecoveryTicketLotteryNames, recoveryAvailableLotteries, recoveryTargetLotteryByRow, recoveryTargetLotteryMapByRow, userProfile?.email, userProfile?.role]);
 
   const deleteRecoveryTicket = useCallback((ticket: RecoveryTicketRecord) => {
-    if (userProfile?.role !== 'programador') {
-      toast.error('Acceso restringido a rol programador');
+    if (userProfile?.role !== 'ceo') {
+      toast.error('Acceso restringido');
       return;
     }
 
@@ -2327,8 +2389,8 @@ function App() {
     toast.info('Sesión cerrada');
   }, [handleLogout]);
 
-  const canAccessDashboard = currentUserRole === 'ceo' || currentUserRole === 'admin' || currentUserRole === 'programador';
-  const canAccessStats = currentUserRole === 'ceo' || currentUserRole === 'admin' || currentUserRole === 'programador';
+  const canAccessDashboard = currentUserRole === 'ceo' || currentUserRole === 'admin';
+  const canAccessStats = currentUserRole === 'ceo' || currentUserRole === 'admin';
   const canAccessCierres = canAccessCierresDomain(currentUserRole);
   const canAccessResults = canAccessResultsDomain(currentUserRole);
   const canAccessUsers = canAccessUsersDomain(currentUserRole);
@@ -2337,17 +2399,17 @@ function App() {
   const canAccessLiquidation = canAccessLiquidationDomain(currentUserRole, userProfile?.canLiquidate);
 
   const navigationItems = useMemo<NavItem[]>(() => [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, role: ['ceo', 'admin', 'programador'] },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, role: ['ceo', 'admin'] },
     { id: 'sales', label: 'Nueva Venta', icon: Plus },
     { id: 'history', label: 'Resumen de ventas', icon: History },
-    { id: 'stats', label: 'Estadisticas', icon: BarChart3, role: ['ceo', 'admin', 'programador'] },
+    { id: 'stats', label: 'Estadisticas', icon: BarChart3, role: ['ceo', 'admin'] },
     { id: 'cierres', label: 'Cierres', icon: Printer, role: [...CIERRES_DOMAIN_SPEC.allowedRoles] as DomainRole[] },
     { id: 'results', label: 'Resultados', icon: CheckCircle2, role: [...RESULTS_DOMAIN_SPEC.allowedRoles] as DomainRole[] },
     { id: 'users', label: 'Usuarios', icon: Users, role: [...USERS_DOMAIN_SPEC.allowedRoles] as DomainRole[] },
     { id: 'archivo', label: 'Archivo', icon: Archive, role: [...ARCHIVE_DOMAIN_SPEC.allowedRoles] as DomainRole[] },
     { id: 'admin', label: 'Configuracion general', icon: ShieldCheck, role: [...ADMIN_CONFIG_DOMAIN_SPEC.allowedRoles] as DomainRole[] },
     { id: 'liquidaciones', label: 'Liquidaciones', icon: DollarSign, role: [...LIQUIDATION_DOMAIN_SPEC.allowedRoles] as DomainRole[], permission: 'canLiquidate' },
-    { id: 'recovery', label: 'Recuperación', icon: Database, role: ['programador'] },
+    
     { id: 'config', label: 'Mi cuenta', icon: Settings, role: [...SALES_DOMAIN_SPEC.allowedRoles] as DomainRole[] },
   ], []);
   const visibleNavigationItems = useMemo(
@@ -2384,7 +2446,7 @@ function App() {
             </p>
             <button 
               onClick={handleLogoutFromUi}
-              className="w-full bg-white/10 text-white py-3 rounded-xl font-bold uppercase tracking-widest hover:bg-white/20 transition-all flex items-center justify-center gap-2"
+              className="w-full btn-secondary py-3 font-bold uppercase tracking-widest hover:bg-white/10 transition-all flex items-center justify-center gap-2"
             >
               <LogOut className="w-4 h-4" /> Cerrar Sesión
             </button>
@@ -2472,7 +2534,6 @@ function App() {
         onSave={saveUser}
         onClose={() => { setShowUserModal(false); setEditingUser(null); }}
         currentUserRole={userProfile?.role}
-        canCreateProgramador={isPrimaryCeoUser}
       />
 
       <TransactionModal
@@ -2513,7 +2574,7 @@ function App() {
           width: isMobile ? (isSidebarOpen ? 280 : 0) : (isSidebarOpen ? 280 : 80),
           x: isMobile && !isSidebarOpen ? -280 : 0
         }}
-        className={`glass border-r border-border h-screen flex flex-col z-50 ${isMobile ? 'fixed inset-y-0 left-0' : 'relative'}`}
+        className={`surface border-r border-border h-screen flex flex-col z-50 ${isMobile ? 'fixed inset-y-0 left-0' : 'relative'}`}
       >
         <div className="p-6 flex items-center gap-3">
           <div className="bg-primary p-2 rounded-lg neon-border">
@@ -2538,7 +2599,7 @@ function App() {
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
                 activeTab === item.id 
                   ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20' 
-                  : 'hover:bg-white/5 text-muted-foreground hover:text-foreground'
+                  : 'surface-soft text-muted-foreground hover:text-foreground'
               }`}
             >
               <item.icon className="w-5 h-5 flex-shrink-0" />
@@ -2574,10 +2635,10 @@ function App() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col h-screen overflow-hidden relative min-w-0">
         {/* Top Header */}
-        <header className="h-16 glass border-b border-border px-3 flex items-center justify-between shrink-0 gap-2">
+        <header className="h-16 surface border-b border-border px-3 flex items-center justify-between shrink-0 gap-2">
           <button 
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="p-2 hover:bg-white/5 rounded-lg text-muted-foreground shrink-0"
+            className="p-2 surface-soft rounded-lg text-muted-foreground shrink-0"
           >
             <Menu className="w-5 h-5" />
           </button>
@@ -2618,23 +2679,20 @@ function App() {
         </header>
 
         {/* Scrollable Area */}
-        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-8 custom-scrollbar min-w-0">
+        <main
+          ref={(node) => {
+            mainScrollRef.current = node;
+          }}
+          onTouchStart={handleMainTouchStart}
+          onTouchMove={handleMainTouchMove}
+          onTouchEnd={handleMainTouchEnd}
+          className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-4 md:p-8 custom-scrollbar min-w-0"
+        >
           {tabNeedsPunctualRefresh && (
-            <div className="mb-4 glass-card p-3 flex items-center justify-between gap-3">
-              <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Datos puntuales</p>
-                <p className="text-xs text-muted-foreground">
-                  {punctualDataLoading ? 'Actualizando datos...' : 'Sin tiempo real en esta vista. Usa refrescar cuando lo necesites.'}
-                </p>
-              </div>
-              <button
-                onClick={handleRefreshPunctualData}
-                disabled={punctualDataLoading}
-                className="px-3 py-2 rounded-lg border border-border text-xs font-black uppercase tracking-widest hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-              >
-                <Repeat className={`w-3.5 h-3.5 ${punctualDataLoading ? 'animate-spin' : ''}`} />
-                Refrescar
-              </button>
+            <div className="mb-3 px-1">
+              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                {(punctualDataLoading || isAutoRefreshing || isPullRefreshing) ? 'Actualizando...' : 'Datos al día'}
+              </p>
             </div>
           )}
 
@@ -2684,6 +2742,8 @@ function App() {
                 number={number}
                 quantity={quantity}
                 plAmount={plAmount}
+                amountEntryStarted={amountEntryStarted}
+                setAmountEntryStarted={setAmountEntryStarted}
                 isAmountSelected={isAmountSelected}
                 setIsAmountSelected={setIsAmountSelected}
                 handleKeyPress={handleKeyPress}
@@ -2695,6 +2755,7 @@ function App() {
                 cart={cart}
                 clearCart={clearCart}
                 updateCartItemQuantity={updateCartItemQuantity}
+                updateCartItemAmount={updateCartItemAmount}
                 removeFromCart={removeFromCart}
                 chancePrice={chancePrice}
                 editingTicketId={editingTicketId}
@@ -2948,7 +3009,7 @@ function App() {
                 />
               </Suspense>
             )}
-            {activeTab === 'recovery' && userProfile?.role === 'programador' && (
+            {false && activeTab === 'recovery' && (
               <RecoverySection
                 fetchRecoveryData={fetchRecoveryData}
                 isRecoveryLoading={isRecoveryLoading}
@@ -3004,7 +3065,7 @@ function App() {
         </main>
 
         {/* Footer */}
-        <footer className="h-auto min-h-12 glass border-t border-border px-3 sm:px-8 py-2 flex items-center justify-between gap-2 shrink-0 text-[8px] sm:text-[9px] font-mono text-muted-foreground uppercase tracking-[0.12em] sm:tracking-[0.2em]">
+        <footer className="h-auto min-h-12 surface border-t border-border px-3 sm:px-8 py-2 flex items-center justify-between gap-2 shrink-0 text-[8px] sm:text-[9px] font-mono text-muted-foreground uppercase tracking-[0.12em] sm:tracking-[0.2em]">
           <p>© 2026 CHANCE PRO SYSTEMS • TERMINAL {user.uid.slice(0, 8)}</p>
           <div className="flex gap-3 sm:gap-8 flex-wrap justify-end">
             <span className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-green-500" /> SERVER: OK</span>

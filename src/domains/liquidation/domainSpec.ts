@@ -5,7 +5,7 @@ export const LIQUIDATION_DOMAIN_SPEC = {
   primaryAction: 'liquidateDailyBalance',
   secondaryActions: ['updatePaymentAmount', 'viewSellerSummary', 'generateConsolidatedReport'],
   prohibitedActions: ['manageUsers', 'manageLotteries', 'editArchiveData'],
-  allowedRoles: ['ceo', 'admin', 'programador'] as const,
+  allowedRoles: ['ceo', 'admin'] as const,
   emptyStates: {
     noUserSelected: 'Seleccione un usuario para liquidar.',
     noDataAvailable: 'No hay datos disponibles para liquidar en la fecha seleccionada.',

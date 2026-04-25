@@ -5,7 +5,7 @@ export const ADMIN_CONFIG_DOMAIN_SPEC = {
   primaryAction: 'manageLotteries',
   secondaryActions: ['createLottery', 'editLottery', 'toggleLotteryActive', 'deleteLottery', 'updateGlobalSettings'],
   prohibitedActions: ['manageUsers', 'sellTickets', 'runLiquidation'],
-  allowedRoles: ['ceo', 'admin', 'programador'] as const,
+  allowedRoles: ['ceo', 'admin'] as const,
   emptyStates: {
     noLotteries: 'No hay sorteos configurados.',
   },
@@ -20,12 +20,12 @@ export const ADMIN_CONFIG_DOMAIN_SPEC = {
 } as const;
 
 export const ADMIN_CONFIG_ACTION_PERMISSIONS = {
-  createLottery: ['ceo', 'programador'] as const,
-  editLottery: ['ceo', 'programador'] as const,
-  deleteLottery: ['ceo', 'programador'] as const,
-  updateGlobalSettings: ['ceo', 'programador'] as const,
-  toggleLotteryActive: ['ceo', 'admin', 'programador'] as const,
-  accessDangerZone: ['ceo', 'programador'] as const,
+  createLottery: ['ceo'] as const,
+  editLottery: ['ceo'] as const,
+  deleteLottery: ['ceo'] as const,
+  updateGlobalSettings: ['ceo'] as const,
+  toggleLotteryActive: ['ceo', 'admin'] as const,
+  accessDangerZone: ['ceo'] as const,
 } as const;
 
 type AdminConfigAction = keyof typeof ADMIN_CONFIG_ACTION_PERMISSIONS;

@@ -5,7 +5,7 @@ export const USERS_DOMAIN_SPEC = {
   primaryAction: 'manageUserProfiles',
   secondaryActions: ['createUser', 'editUser', 'deleteUser', 'injectCapital'],
   prohibitedActions: ['sellTickets', 'manageLotteries', 'manageResults', 'runLiquidation'],
-  allowedRoles: ['ceo', 'programador'] as const,
+  allowedRoles: ['ceo'] as const,
   emptyStates: {
     noSelection: 'Seleccione un usuario para ver su perfil.',
     noUsers: 'No hay usuarios disponibles para administrar.',
@@ -21,10 +21,10 @@ export const USERS_DOMAIN_SPEC = {
 } as const;
 
 export const USERS_ACTION_PERMISSIONS = {
-  createUser: ['ceo', 'programador'] as const,
-  editUser: ['ceo', 'programador'] as const,
-  deleteUser: ['ceo', 'programador'] as const,
-  injectCapital: ['ceo', 'admin', 'programador'] as const,
+  createUser: ['ceo'] as const,
+  editUser: ['ceo'] as const,
+  deleteUser: ['ceo'] as const,
+  injectCapital: ['ceo', 'admin'] as const,
 } as const;
 
 type UsersAction = keyof typeof USERS_ACTION_PERMISSIONS;

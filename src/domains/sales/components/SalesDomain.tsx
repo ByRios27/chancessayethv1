@@ -1,6 +1,6 @@
 ﻿import React from 'react';
 import { motion } from 'motion/react';
-import { Calendar, ChevronDown, LayoutDashboard, Minus, Plus, Trash2, Zap } from 'lucide-react';
+import { Calendar, ChevronDown, LayoutDashboard, Plus, Trash2, Zap } from 'lucide-react';
 import type { Bet } from '../../../types/bets';
 
 interface LotteryOption {
@@ -31,6 +31,8 @@ interface SalesDomainProps {
   setFocusedField: (value: 'number' | 'amount') => void;
   findActiveLotteryByName: (name: string) => LotteryOption | undefined;
   focusedField: 'number' | 'amount';
+  amountEntryStarted: boolean;
+  setAmountEntryStarted: (value: boolean) => void;
   numberInputRef: React.RefObject<HTMLInputElement | null>;
   amountInputRef: React.RefObject<HTMLInputElement | null>;
   number: string;
@@ -47,6 +49,7 @@ interface SalesDomainProps {
   cart?: Bet[];
   clearCart: () => void;
   updateCartItemQuantity: (index: number, newQty: number) => void;
+  updateCartItemAmount: (index: number, newAmount: number) => void;
   removeFromCart: (index: number) => void;
   chancePrice: number;
   editingTicketId: string | null;
@@ -72,12 +75,12 @@ function NumericKeyboard({
 }) {
   const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', '⌫'];
   return (
-    <div className="grid grid-cols-3 gap-2">
+    <div className="grid grid-cols-3 gap-2 w-full">
       {keys.map((key) => (
         <button
           key={key}
           onClick={() => (key === '⌫' ? onBackspace() : onKeyPress(key))}
-          className="py-3 rounded-xl surface-panel text-sm font-black active:scale-95 transition-transform"
+          className="h-[60px] rounded-2xl border border-white/10 bg-black/30 text-2xl font-black flex items-center justify-center active:scale-[0.98] transition-transform"
         >
           {key}
         </button>
@@ -112,6 +115,8 @@ export function SalesDomain(props: SalesDomainProps) {
     setQuantity,
     setPlAmount,
     setFocusedField,
+    amountEntryStarted,
+    setAmountEntryStarted,
     findActiveLotteryByName,
     focusedField,
     numberInputRef,
@@ -130,6 +135,7 @@ export function SalesDomain(props: SalesDomainProps) {
     cart,
     clearCart,
     updateCartItemQuantity,
+    updateCartItemAmount,
     removeFromCart,
     chancePrice,
     editingTicketId,
@@ -157,6 +163,7 @@ export function SalesDomain(props: SalesDomainProps) {
       cancelEdit,
       setShowFastEntryModal,
       updateCartItemQuantity,
+      updateCartItemAmount,
       removeFromCart,
     };
 
@@ -173,7 +180,7 @@ export function SalesDomain(props: SalesDomainProps) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="max-w-md mx-auto space-y-4 pb-24"
+      className="w-full max-w-md mx-auto px-1 sm:px-0 space-y-2.5 pb-24"
     >
       {!canSell && (
         <div className="surface-card p-4 border border-red-500/30 bg-red-500/10">
@@ -189,72 +196,69 @@ export function SalesDomain(props: SalesDomainProps) {
         </div>
       )}
 
-      <div className="section-frame flex items-center justify-between relative z-30">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
-            <Calendar className="w-4 h-4 text-primary" />
+      <div className="surface-panel border border-white/10 rounded-xl px-2.5 py-2 flex items-center justify-between relative z-30 gap-2">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <div className="w-6 h-6 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
+            <Calendar className="w-3 h-3 text-primary" />
           </div>
-          <div className="flex-1">
-            <p className="text-[11px] font-mono uppercase text-muted-foreground leading-none mb-1">Sorteo Activo</p>
+          <div className="flex-1 min-w-0">
+            <p className="text-[9px] font-mono uppercase text-muted-foreground leading-none mb-0.5">Sorteo activo</p>
             {isMultipleMode ? (
-              <div className="relative">
+              <div className="relative w-full">
                 <button
                   onClick={() => setShowMultiSelect(!showMultiSelect)}
-                  className="text-sm font-bold truncate flex items-center gap-1 w-full text-left"
+                  className="w-full text-left text-xs font-bold truncate flex items-center justify-between gap-1.5 min-h-[28px]"
                 >
                   {safeMultiLottery.length === 0 ? 'Seleccione Sorteos' : `${safeMultiLottery.length} Sorteos`}
                   <ChevronDown className={`w-3 h-3 transition-transform ${showMultiSelect ? 'rotate-180' : ''}`} />
                 </button>
                 {showMultiSelect && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setShowMultiSelect(false)} />
-                    <div className="fixed inset-x-3 bottom-24 surface-panel shadow-2xl z-50 p-2 space-y-1 max-h-[60vh] overflow-y-auto sm:absolute sm:top-full sm:left-0 sm:bottom-auto sm:inset-x-auto sm:mt-2 sm:w-full sm:min-w-[240px] sm:max-h-80">
-                      {safeActiveLotteries.length > 0 ? (
-                        <>
-                          <div className="flex items-center justify-between p-2 border-b border-white/10 mb-1">
-                            <button
-                              onClick={() => setMultiLottery(safeActiveLotteries.map((lottery) => lottery.name))}
-                              className="text-[10px] font-bold uppercase text-primary hover:text-primary/80"
-                            >
-                              Todos
-                            </button>
-                            <button
-                              onClick={() => setMultiLottery([])}
-                              className="text-[10px] font-bold uppercase text-red-500 hover:text-red-400"
-                            >
-                              Ninguno
-                            </button>
-                          </div>
-                          {safeActiveLotteries.map((lottery) => (
-                            <label key={lottery.id} className="flex items-center gap-2 p-2 hover:bg-white/10 rounded-lg cursor-pointer transition-colors">
-                              <input
-                                type="checkbox"
-                                checked={safeMultiLottery.includes(lottery.name)}
-                                onChange={(e) => {
-                                  if (e.target.checked) {
-                                    setMultiLottery([...safeMultiLottery, lottery.name]);
-                                  } else {
-                                    setMultiLottery(safeMultiLottery.filter((name) => name !== lottery.name));
-                                  }
-                                }}
-                                className="rounded border-border text-primary focus:ring-primary bg-transparent"
-                              />
-                              <span className="text-xs font-medium">{cleanText(lottery.name)}</span>
-                            </label>
-                          ))}
-                        </>
-                      ) : (
-                        <div className="p-4 text-center text-xs text-muted-foreground">No hay sorteos disponibles</div>
-                      )}
-                    </div>
-                  </>
+                  <div className="absolute top-full left-0 mt-1 w-full surface-card border border-white/12 rounded-xl p-2 space-y-1.5 max-h-56 overflow-y-auto custom-scrollbar z-40">
+                    {safeActiveLotteries.length > 0 ? (
+                      <>
+                        <div className="flex items-center justify-between pb-1 border-b border-white/10">
+                          <button
+                            onClick={() => setMultiLottery(safeActiveLotteries.map((lottery) => lottery.name))}
+                            className="px-2 py-1 text-[10px] font-bold uppercase text-primary hover:text-primary/80"
+                          >
+                            Todos
+                          </button>
+                          <button
+                            onClick={() => setMultiLottery([])}
+                            className="px-2 py-1 text-[10px] font-bold uppercase text-red-500 hover:text-red-400"
+                          >
+                            Ninguno
+                          </button>
+                        </div>
+                        {safeActiveLotteries.map((lottery) => (
+                          <label key={lottery.id} className="flex items-center gap-2 px-1.5 py-1.5 rounded-lg cursor-pointer hover:bg-white/5">
+                            <input
+                              type="checkbox"
+                              checked={safeMultiLottery.includes(lottery.name)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setMultiLottery([...safeMultiLottery, lottery.name]);
+                                } else {
+                                  setMultiLottery(safeMultiLottery.filter((name) => name !== lottery.name));
+                                }
+                              }}
+                              className="rounded border-border text-primary focus:ring-primary bg-transparent"
+                            />
+                            <span className="text-xs font-medium truncate">{cleanText(lottery.name)}</span>
+                          </label>
+                        ))}
+                      </>
+                    ) : (
+                      <div className="py-3 text-center text-xs text-muted-foreground">No hay sorteos disponibles</div>
+                    )}
+                  </div>
                 )}
               </div>
             ) : (
               <select
                 value={selectedLottery}
                 onChange={(e) => setSelectedLottery(e.target.value)}
-                className="bg-transparent border-none p-0 font-bold text-sm focus:outline-none w-full truncate"
+                className="bg-transparent border-none p-0 font-bold text-xs sm:text-sm focus:outline-none w-full truncate min-h-[28px]"
                 disabled={!hasActiveLotteries}
               >
                 <option key="default" value="" className="bg-background">
@@ -273,9 +277,9 @@ export function SalesDomain(props: SalesDomainProps) {
           onClick={() => {
             const next = !isMultipleMode;
             setIsMultipleMode(next);
-            if (next) setShowMultiSelect(true);
+            setShowMultiSelect(next);
           }}
-          className={`px-4 py-2.5 rounded-xl text-[10px] font-bold uppercase transition-all border ${
+          className={`px-2.5 py-1.5 min-h-[30px] rounded-lg text-[9px] font-bold uppercase transition-all border shrink-0 ${
             isMultipleMode ? 'bg-primary border-primary text-primary-foreground' : 'surface-panel text-muted-foreground'
           }`}
           disabled={!hasActiveLotteries}
@@ -284,7 +288,7 @@ export function SalesDomain(props: SalesDomainProps) {
         </button>
       </div>
 
-      <div className="surface-panel rounded-2xl p-1.5 flex gap-1">
+      <div className="surface p-2 flex gap-1.5">
         <button
           onClick={() => {
             setBetType('CH');
@@ -292,7 +296,7 @@ export function SalesDomain(props: SalesDomainProps) {
             setQuantity('1');
             setFocusedField('number');
           }}
-          className={`flex-1 py-3 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all ${
+          className={`flex-1 min-w-0 py-3 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all ${
             betType === 'CH' ? 'bg-primary text-primary-foreground shadow-lg' : 'text-muted-foreground hover:text-foreground'
           }`}
         >
@@ -307,7 +311,7 @@ export function SalesDomain(props: SalesDomainProps) {
               setPlAmount('1.00');
               setFocusedField('number');
             }}
-            className={`flex-1 py-3 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all ${
+            className={`flex-1 min-w-0 py-3 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all ${
               betType === 'PL' ? 'bg-primary text-primary-foreground shadow-lg' : 'text-muted-foreground hover:text-foreground'
             }`}
           >
@@ -322,7 +326,7 @@ export function SalesDomain(props: SalesDomainProps) {
               setQuantity('1');
               setFocusedField('number');
             }}
-            className={`flex-1 py-3 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all ${
+            className={`flex-1 min-w-0 py-3 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all ${
               betType === 'BL' ? 'bg-primary text-primary-foreground shadow-lg' : 'text-muted-foreground hover:text-foreground'
             }`}
           >
@@ -331,18 +335,18 @@ export function SalesDomain(props: SalesDomainProps) {
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="surface p-2.5 grid grid-cols-2 gap-2">
         <div
           onClick={() => {
             setFocusedField('number');
             numberInputRef.current?.focus();
           }}
-          className={`surface-card p-2.5 flex flex-col items-center justify-center gap-0.5 transition-all border-2 cursor-pointer ${
+          className={`surface-card p-2 flex flex-col items-center justify-center gap-0.5 transition-all border-2 cursor-pointer ${
             focusedField === 'number' ? 'border-primary bg-primary/10' : 'border-white/10'
           }`}
         >
           <span className="text-[11px] font-mono uppercase text-muted-foreground font-medium">Numero</span>
-          <div className="flex items-center justify-center min-h-[32px] relative w-full">
+          <div className="flex items-center justify-center min-h-[28px] relative w-full">
             <input
               ref={numberInputRef}
               type="text"
@@ -355,10 +359,9 @@ export function SalesDomain(props: SalesDomainProps) {
                   setNumber(val);
                   if (val.length === maxLen) {
                     setFocusedField('amount');
-                    setIsAmountSelected(true);
+                    setAmountEntryStarted(false);
                     setTimeout(() => {
                       amountInputRef.current?.focus();
-                      amountInputRef.current?.select();
                     }, 0);
                   }
                 }
@@ -366,10 +369,9 @@ export function SalesDomain(props: SalesDomainProps) {
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && number.length === (betType === 'CH' ? 2 : 4)) {
                   setFocusedField('amount');
-                  setIsAmountSelected(true);
+                  setAmountEntryStarted(false);
                   setTimeout(() => {
                     amountInputRef.current?.focus();
-                    amountInputRef.current?.select();
                   }, 0);
                 }
               }}
@@ -383,20 +385,19 @@ export function SalesDomain(props: SalesDomainProps) {
         <div
           onClick={() => {
             setFocusedField('amount');
-            setIsAmountSelected(true);
+            setAmountEntryStarted(false);
             setTimeout(() => {
               amountInputRef.current?.focus();
-              amountInputRef.current?.select();
             }, 0);
           }}
-          className={`surface-card p-2.5 flex flex-col items-center justify-center gap-0.5 transition-all border-2 cursor-pointer ${
-            focusedField === 'amount' ? 'border-primary bg-primary/10' : 'border-white/10'
+          className={`surface-card p-2 flex flex-col items-center justify-center gap-0.5 transition-all border-2 cursor-pointer ${
+            focusedField === 'amount' ? 'border-primary' : 'border-white/10'
           }`}
         >
           <span className="text-[11px] font-mono uppercase text-muted-foreground font-medium">
             {betType === 'PL' ? 'Inversion' : 'Cantidad'}
           </span>
-          <div className="flex items-center justify-center min-h-[32px] relative w-full">
+          <div className="flex items-center justify-center min-h-[28px] relative w-full">
             <input
               ref={amountInputRef}
               type="text"
@@ -404,8 +405,12 @@ export function SalesDomain(props: SalesDomainProps) {
               value={(betType === 'CH' || betType === 'BL') ? (quantity === 'NaN' ? '' : quantity) : (plAmount === 'NaN' ? '' : plAmount)}
               onChange={(e) => {
                 const val = e.target.value.replace(/[^0-9.]/g, '');
-                setIsAmountSelected(false);
+                setAmountEntryStarted(val.length > 0);
                 if (betType === 'CH' || betType === 'BL') {
+                  if (betType === 'BL') {
+                    const parsed = parseInt(val, 10);
+                    if (!Number.isNaN(parsed) && parsed > 5) return;
+                  }
                   setQuantity(val);
                 } else {
                   setPlAmount(val);
@@ -416,12 +421,16 @@ export function SalesDomain(props: SalesDomainProps) {
               }}
               onFocus={() => {
                 setFocusedField('amount');
-                setIsAmountSelected(true);
+                if (focusedField !== 'amount') {
+                  setAmountEntryStarted(false);
+                }
               }}
               className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
             />
-            <span className={`text-2xl font-bold ${isAmountSelected && focusedField === 'amount' ? 'bg-primary/30 text-primary px-1 rounded' : ''}`}>
-              {(betType === 'CH' || betType === 'BL') ? quantity : plAmount}
+            <span className="text-2xl font-bold">
+              {(betType === 'CH' || betType === 'BL')
+                ? (focusedField === 'amount' && !amountEntryStarted ? '' : quantity)
+                : (focusedField === 'amount' && !amountEntryStarted ? '' : plAmount)}
             </span>
             {focusedField === 'amount' && <Cursor />}
           </div>
@@ -433,7 +442,7 @@ export function SalesDomain(props: SalesDomainProps) {
         </div>
       </div>
 
-      <div className="py-2">
+      <div className="w-full -mx-1 sm:mx-0 py-0.5">
         <NumericKeyboard onKeyPress={handleKeyPress} onBackspace={handleBackspace} onClear={handleClear} />
       </div>
 
@@ -447,12 +456,12 @@ export function SalesDomain(props: SalesDomainProps) {
       </button>
 
       {safeCart.length > 0 && (
-        <div className="section-frame space-y-2">
+        <div className="surface-card p-2.5 space-y-2">
           <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
             <h3 className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Carrito ({safeCart.length})</h3>
             <button onClick={clearCart} className="text-[11px] font-bold uppercase text-red-500">Vaciar</button>
           </div>
-          <div className="max-h-32 overflow-y-auto space-y-2 custom-scrollbar pr-1">
+          <div className="max-h-[42vh] overflow-y-auto space-y-0 custom-scrollbar pr-0.5">
             {Object.entries(
               safeCart.reduce((acc: Record<string, (Bet & { originalIdx: number })[]>, bet: Bet, idx: number) => {
                 if (!acc[bet.lottery]) acc[bet.lottery] = [];
@@ -462,44 +471,72 @@ export function SalesDomain(props: SalesDomainProps) {
             ).map(([lotteryName, bets]) => {
               const betList = bets as (Bet & { originalIdx: number })[];
               return (
-              <div key={lotteryName} className="space-y-1.5 surface-panel p-2">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-primary flex items-center gap-1.5">
+              <div key={lotteryName} className="border-b border-white/10 pb-0 last:border-b-0">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-primary flex items-center gap-1 py-1 leading-none">
                   <span className="w-1.5 h-1.5 bg-primary rounded-full"></span>
                   {cleanText(lotteryName)}
-                  <span className="text-muted-foreground ml-auto bg-white/10 px-1.5 py-0.5 rounded">({betList.length})</span>
+                  <span className="text-muted-foreground ml-auto">({betList.length})</span>
                 </div>
-                <div className="space-y-1">
+                <div>
                   {betList.map((bet) => (
-                    <div key={`${bet.lottery}-${bet.number}-${bet.type}-${bet.originalIdx}`} className="flex items-center justify-between text-xs surface-soft p-1.5">
-                      <div className="flex items-center gap-2 overflow-hidden">
-                        <span className="font-mono font-bold text-primary shrink-0">{bet.type}</span>
-                        <span className="font-bold tracking-widest shrink-0">{bet.number}</span>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <div className="flex items-center gap-1 bg-white/10 rounded-lg px-1.5 py-0.5 border border-white/10">
-                          <button
-                            onClick={() => updateCartItemQuantity(bet.originalIdx, bet.quantity - 1)}
-                            className="p-1.5 text-muted-foreground hover:text-primary transition-colors active:scale-90"
-                          >
-                            <Minus className="w-3.5 h-3.5" />
-                          </button>
-                          <div className="flex flex-col items-center min-w-[50px] px-1">
-                            <span className="text-[8px] font-mono opacity-50 leading-none mb-0.5">{`QTY:${bet.quantity}`}</span>
-                            <span className="font-black text-[11px] leading-none">
-                              ${(bet.type === 'PL' ? bet.amount : (bet.quantity * (bet.type === 'BL' ? 1 : chancePrice))).toFixed(2)}
-                            </span>
-                          </div>
-                          <button
-                            onClick={() => updateCartItemQuantity(bet.originalIdx, bet.quantity + 1)}
-                            className="p-1.5 text-muted-foreground hover:text-primary transition-colors active:scale-90"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                        <button onClick={() => removeFromCart(bet.originalIdx)} className="text-red-500/70 hover:text-red-500 p-1.5 transition-colors">
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                    <div key={`${bet.lottery}-${bet.number}-${bet.type}-${bet.originalIdx}`} className="grid grid-cols-[34px_minmax(0,1fr)_44px_64px_26px] items-center gap-1.5 h-8 border-b border-white/5">
+                      <span className="font-mono font-bold text-primary text-[10px] leading-none">{bet.type}</span>
+                      <span className="font-bold tracking-widest text-[11px] truncate leading-none">{bet.number}</span>
+                      <input
+                        type="text"
+                        inputMode={bet.type === 'PL' ? 'decimal' : 'numeric'}
+                        aria-label={bet.type === 'PL' ? 'Monto' : 'Cantidad'}
+                        defaultValue={bet.type === 'PL' ? bet.amount.toFixed(2) : String(bet.quantity)}
+                        onBlur={(event) => {
+                          const raw = event.currentTarget.value.trim();
+
+                          if (bet.type === 'PL') {
+                            if (raw === '') {
+                              event.currentTarget.value = bet.amount.toFixed(2);
+                              return;
+                            }
+                            const parsed = Number.parseFloat(raw.replace(',', '.'));
+                            if (!Number.isFinite(parsed) || Number.isNaN(parsed) || parsed < 0) {
+                              event.currentTarget.value = bet.amount.toFixed(2);
+                              return;
+                            }
+                            const minAmount = 0.1 * bet.quantity;
+                            const maxAmount = 5 * bet.quantity;
+                            const nextAmount = Math.max(minAmount, Math.min(maxAmount, parsed));
+                            if (typeof updateCartItemAmount !== 'function') {
+                              console.error('[SalesDomain] updateCartItemAmount is not a function', updateCartItemAmount);
+                              return;
+                            }
+                            updateCartItemAmount(bet.originalIdx, nextAmount);
+                            return;
+                          }
+
+                          if (raw === '') {
+                            event.currentTarget.value = String(bet.quantity);
+                            return;
+                          }
+                          const parsedQty = Number.parseInt(raw, 10);
+                          if (!Number.isFinite(parsedQty) || Number.isNaN(parsedQty) || parsedQty < 1) {
+                            event.currentTarget.value = String(bet.quantity);
+                            return;
+                          }
+                          const clampedQty = bet.type === 'BL' ? Math.min(5, parsedQty) : parsedQty;
+                          if (typeof updateCartItemQuantity !== 'function') {
+                            console.error('[SalesDomain] updateCartItemQuantity is not a function', updateCartItemQuantity);
+                            return;
+                          }
+                          updateCartItemQuantity(bet.originalIdx, clampedQty);
+                        }}
+                        className={`w-10 h-7 bg-transparent border-b border-white/20 text-center text-sm font-bold text-foreground leading-none outline-none focus:border-primary ${
+                          bet.type === 'PL' ? 'pr-0.5' : ''
+                        }`}
+                      />
+                      <span className="text-sm font-bold leading-none text-right">
+                        ${(bet.type === 'PL' ? bet.amount : (bet.quantity * (bet.type === 'BL' ? 1 : chancePrice))).toFixed(2)}
+                      </span>
+                      <button onClick={() => removeFromCart(bet.originalIdx)} className="text-red-500/70 hover:text-red-500 p-1 transition-colors flex items-center justify-center">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   ))}
                 </div>

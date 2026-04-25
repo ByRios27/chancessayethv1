@@ -53,7 +53,7 @@ export function useResultsDomain({
   const [resultFormThirdPrize, setResultFormThirdPrize] = useState('');
 
   const canManageResults = canExecuteResultsAction(userRole, 'createResult');
-  const isCeoUser = userRole === 'ceo' || userRole === 'programador';
+  const isCeoUser = userRole === 'ceo';
 
   const sortedResults = useMemo(() => {
     return [...results].sort((a, b) => {

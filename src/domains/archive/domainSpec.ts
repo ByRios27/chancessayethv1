@@ -5,7 +5,7 @@ export const ARCHIVE_DOMAIN_SPEC = {
   primaryAction: 'consultHistoricalData',
   secondaryActions: ['filterByDateAndUser', 'openLiquidationFromArchive', 'viewHistoricalSummary'],
   prohibitedActions: ['editHistoricalTickets', 'manageUsers', 'manageLotteries'],
-  allowedRoles: ['ceo', 'admin', 'programador'] as const,
+  allowedRoles: ['ceo', 'admin'] as const,
   emptyStates: {
     noFilters: 'Seleccione fecha y usuario para consultar el archivo.',
     noHistoricalData: 'No hay datos historicos para los filtros seleccionados.',

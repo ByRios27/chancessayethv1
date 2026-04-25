@@ -61,7 +61,7 @@ export function UsersSection({
               <option key="default" value="" className="bg-gray-900">Seleccionar usuario...</option>
               {(() => {
                 const validUsers = users.filter(u => u && u.email && u.name && u.name.trim() !== '');
-                if ((userProfile?.role === 'ceo' || userProfile?.role === 'programador') && !validUsers.some(u => u.email === userProfile.email)) {
+                if (userProfile?.role === 'ceo' && !validUsers.some(u => u.email === userProfile.email)) {
                   validUsers.unshift(userProfile);
                 }
                 return validUsers.map((u, i) => {
@@ -95,7 +95,7 @@ export function UsersSection({
 
         {selectedManageUserEmail ? (() => {
           const validUsers = users.filter(u => u && u.email && u.name && u.name.trim() !== '');
-          if ((userProfile?.role === 'ceo' || userProfile?.role === 'programador') && !validUsers.some(u => u.email === userProfile.email)) {
+          if (userProfile?.role === 'ceo' && !validUsers.some(u => u.email === userProfile.email)) {
             validUsers.unshift(userProfile);
           }
           const u = validUsers.find(user => user.email === selectedManageUserEmail);
@@ -172,7 +172,7 @@ export function UsersSection({
                       setEditingUser(u);
                       setShowUserModal(true);
                     }}
-                    disabled={u.role === 'ceo' && role !== 'ceo' && role !== 'programador'}
+                    disabled={u.role === 'ceo' && role !== 'ceo'}
                     className="flex-1 min-w-0 bg-white/5 hover:bg-white/10 text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                   >
                     <Settings className="w-4 h-4" /> Configurar
@@ -193,7 +193,7 @@ export function UsersSection({
                   </button>
                 )}
 
-                {canDeleteUser && u.role !== 'ceo' && u.role !== 'programador' && (
+                {canDeleteUser && u.role !== 'ceo' && (
                   <button
                     onClick={() => deleteUser(u.email)}
                     className="p-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl transition-all"

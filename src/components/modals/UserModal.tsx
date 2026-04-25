@@ -4,22 +4,20 @@ import { toast } from 'sonner';
 import { X } from 'lucide-react';
 import type { UserProfile } from '../../types/users';
 
-const UserModal = ({ show, userProfile, onSave, onClose, currentUserRole, canCreateProgramador = false }: {
+const UserModal = ({ show, userProfile, onSave, onClose, currentUserRole }: {
   show: boolean;
   userProfile: UserProfile | null;
   onSave: (user: UserProfile, password?: string) => void;
   onClose: () => void;
   currentUserRole: string | undefined;
-  canCreateProgramador?: boolean;
 }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
-  const [role, setRole] = useState<'admin' | 'seller' | 'ceo' | 'programador'>('seller');
+  const [role, setRole] = useState<'admin' | 'seller' | 'ceo'>('seller');
   const [commissionRate, setCommissionRate] = useState(10);
   const [status, setStatus] = useState<'active' | 'inactive'>('active');
   const [canLiquidate, setCanLiquidate] = useState(false);
-  const [sessionTimeoutMinutes, setSessionTimeoutMinutes] = useState(60);
   const [sellerId, setSellerId] = useState('');
 
   useEffect(() => {
@@ -27,11 +25,10 @@ const UserModal = ({ show, userProfile, onSave, onClose, currentUserRole, canCre
       setEmail(userProfile.email);
       setPassword('');
       setName(userProfile.name);
-      setRole(userProfile?.role as 'admin' | 'seller' | 'ceo' | 'programador');
+      setRole(userProfile?.role as 'admin' | 'seller' | 'ceo');
       setCommissionRate(userProfile.commissionRate);
       setStatus(userProfile.status);
       setCanLiquidate(userProfile.canLiquidate || false);
-      setSessionTimeoutMinutes(userProfile.sessionTimeoutMinutes || 60);
       setSellerId(userProfile.sellerId || '');
     } else {
       setEmail('');
@@ -41,7 +38,6 @@ const UserModal = ({ show, userProfile, onSave, onClose, currentUserRole, canCre
       setCommissionRate(10);
       setStatus('active');
       setCanLiquidate(false);
-      setSessionTimeoutMinutes(60);
       setSellerId('');
     }
   }, [userProfile, show]);
@@ -121,14 +117,13 @@ const UserModal = ({ show, userProfile, onSave, onClose, currentUserRole, canCre
             <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Rol</label>
             <select 
               value={role}
-              onChange={(e) => setRole(e.target.value as 'admin' | 'seller' | 'ceo' | 'programador')}
-              disabled={currentUserRole !== 'ceo' && currentUserRole !== 'admin' && currentUserRole !== 'programador'}
+              onChange={(e) => setRole(e.target.value as 'admin' | 'seller' | 'ceo')}
+              disabled={currentUserRole !== 'ceo' && currentUserRole !== 'admin'}
               className="w-full bg-black border border-border p-3 rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all disabled:opacity-50"
             >
               <option key="seller" value="seller" className="bg-gray-900">Vendedor</option>
               {(currentUserRole === 'ceo' || currentUserRole === 'admin') && <option key="admin" value="admin" className="bg-gray-900">Administrador</option>}
               {currentUserRole === 'ceo' && <option key="ceo" value="ceo" className="bg-gray-900">CEO</option>}
-              {canCreateProgramador && <option key="programador" value="programador" className="bg-gray-900">Programador</option>}
             </select>
           </div>
 
@@ -172,19 +167,6 @@ const UserModal = ({ show, userProfile, onSave, onClose, currentUserRole, canCre
             </div>
           )}
 
-          {role === 'ceo' && (
-            <div className="space-y-2">
-              <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Tiempo de inactividad (minutos)</label>
-              <input 
-                type="number" 
-                value={Number.isNaN(sessionTimeoutMinutes) ? '' : sessionTimeoutMinutes}
-                onChange={(e) => setSessionTimeoutMinutes(Number(e.target.value))}
-                min="1"
-                className="w-full bg-white/5 border border-border p-3 rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all"
-              />
-            </div>
-          )}
-
           <button 
             onClick={() => {
               if (!email) {
@@ -203,7 +185,6 @@ const UserModal = ({ show, userProfile, onSave, onClose, currentUserRole, canCre
                 status,
                 canLiquidate: role === 'admin' ? canLiquidate : false,
                 currentDebt: userProfile?.currentDebt || 0,
-                sessionTimeoutMinutes: role === 'ceo' ? sessionTimeoutMinutes : undefined,
                 sellerId
               }, password);
             }}

@@ -50,16 +50,16 @@ export function useUsersDomain({
 
     if (userProfileData.role === 'admin') {
       const adminCount = users.filter(u => u.role === 'admin' && u.email !== authEmail).length;
-      if (adminCount >= 5) {
-        toast.error('Limite maximo de 5 administradores alcanzado');
+      if (adminCount >= 10) {
+        toast.error('Limite maximo de 10 administradores alcanzado');
         return;
       }
     }
 
     if (userProfileData.role === 'ceo') {
       const ceoCount = users.filter(u => u.role === 'ceo' && u.email !== authEmail).length;
-      if (ceoCount >= 3) {
-        toast.error('Limite maximo de 3 CEO alcanzado');
+      if (ceoCount >= 4) {
+        toast.error('Limite maximo de 4 CEO alcanzado');
         return;
       }
     }

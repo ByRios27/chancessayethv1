@@ -76,7 +76,7 @@ export function useRecovery({
   }, [getOperationalTimeSortValue, lotteries]);
 
   const fetchRecoveryData = useCallback(async () => {
-    if (userRole !== 'programador' || !recoveryDate) return;
+    if (userRole !== 'ceo' || !recoveryDate) return;
     setIsRecoveryLoading(true);
     try {
       const { start, end } = getBusinessDayRange(recoveryDate);
@@ -153,7 +153,7 @@ export function useRecovery({
   }, [getBusinessDayRange, getRecoveryTicketLotteryNames, normalizePlainText, parseTicketTimestampMs, recoveryAvailableLotteries, recoveryDate, userRole]);
 
   useEffect(() => {
-    if (activeTab !== 'recovery' || userRole !== 'programador') return;
+    if (activeTab !== 'recovery' || userRole !== 'ceo') return;
     fetchRecoveryData();
   }, [activeTab, fetchRecoveryData, userRole]);
 

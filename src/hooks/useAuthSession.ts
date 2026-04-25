@@ -124,6 +124,12 @@ export function useAuthSession(enforceSessionByOperationalDay: boolean) {
             const userDoc = await getDoc(doc(db, 'users', email));
             if (userDoc.exists()) {
               const data = userDoc.data() as UserProfile;
+              if (!['ceo', 'admin', 'seller'].includes(String(data.role || '').toLowerCase())) {
+                toast.error('Tu rol ya no es válido en el sistema. Contacta al administrador.');
+                setUserProfile(null);
+                setLoading(false);
+                return;
+              }
               const normalizedSellerId = (data.sellerId || '').trim() || email.split('@')[0].toUpperCase();
               setUserProfile({
                 ...data,

@@ -1,11 +1,11 @@
-export type DomainRole = 'ceo' | 'admin' | 'seller' | 'programador';
+export type DomainRole = 'ceo' | 'admin' | 'seller';
 
 export const SALES_DOMAIN_SPEC = {
   id: 'sales',
   primaryAction: 'createTicket',
   secondaryActions: ['addBetToCart', 'removeBetFromCart', 'shareTicket', 'viewTicketDetail'],
   prohibitedActions: ['manageUsers', 'manageLotteries', 'manageResults', 'runLiquidation', 'viewGlobalReports'],
-  allowedRoles: ['ceo', 'admin', 'seller', 'programador'] as const,
+  allowedRoles: ['ceo', 'admin', 'seller'] as const,
   emptyStates: {
     noActiveLotteries: 'No hay sorteos activos para vender.',
     emptyCart: 'Agrega una jugada para confirmar el ticket.',

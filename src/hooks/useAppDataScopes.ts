@@ -34,9 +34,9 @@ export function useAppDataScopes({
   archiveDate,
 }: UseAppDataScopesParams) {
   return useMemo(() => {
-    const hasPrivilegedRole = userRole === 'ceo' || userRole === 'admin' || userRole === 'programador';
+    const hasPrivilegedRole = userRole === 'ceo' || userRole === 'admin';
     const canAccessManagedUsersData =
-      canUseGlobalScope && (activeTab === 'users' || activeTab === 'liquidaciones' || activeTab === 'archivo' || activeTab === 'recovery');
+      canUseGlobalScope && (activeTab === 'users' || activeTab === 'liquidaciones' || activeTab === 'archivo');
     const canAccessAllUsers =
       canAccessManagedUsersData || (canUseGlobalScope && showGlobalScope && (activeTab === 'stats' || activeTab === 'cierres'));
 
@@ -46,7 +46,6 @@ export function useAppDataScopes({
         activeTab === 'users' ||
         activeTab === 'liquidaciones' ||
         activeTab === 'archivo' ||
-        activeTab === 'recovery' ||
         ((activeTab === 'stats' || activeTab === 'cierres') && showGlobalScope)
       );
 
@@ -58,7 +57,7 @@ export function useAppDataScopes({
       (activeTab === 'archivo' && archiveDate === businessDayKey);
 
     const shouldLoadResults = ['sales', 'history', 'stats', 'cierres', 'results', 'dashboard', 'liquidaciones'].includes(activeTab);
-    const shouldLoadLotteries = activeTab !== 'recovery';
+    const shouldLoadLotteries = true;
 
     return {
       canAccessManagedUsersData,

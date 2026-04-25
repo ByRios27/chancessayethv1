@@ -105,7 +105,7 @@ export function useLiquidationDomain(params: any) {
 
   const handleLiquidate = async () => {
     if (!selectedUserToLiquidate) return;
-    if (!userProfile || !['ceo', 'admin', 'programador'].includes(userProfile.role)) {
+    if (!userProfile || !['ceo', 'admin'].includes(userProfile.role)) {
       alert('No tienes permisos para liquidar');
       return;
     }

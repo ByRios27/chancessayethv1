@@ -112,7 +112,7 @@ const TransactionModal = ({ show, onClose, users, currentUser, userProfile, targ
               className="w-full bg-black border border-border p-3 rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all"
             >
               <option key="default" value="" className="bg-gray-900">Seleccionar usuario...</option>
-              {allUsers.filter(u => u.role === 'seller' || u.role === 'admin' || u.role === 'ceo' || u.role === 'programador').map((u, i) => {
+              {allUsers.filter(u => u.role === 'seller' || u.role === 'admin' || u.role === 'ceo').map((u, i) => {
                 const username = u.email?.split('@')[0] || '';
                 const displayName = `${u.name} (${username})`;
                 return (

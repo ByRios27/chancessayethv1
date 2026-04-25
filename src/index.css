@@ -48,56 +48,96 @@
 
 @layer components {
   .surface {
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.14);
-    border-radius: 16px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.18);
     backdrop-filter: blur(6px);
+  }
+
+  .surface-card {
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 14px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
   }
 
   .surface-soft {
     background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 14px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.16);
-  }
-
-  .surface-card {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.045) 0%, rgba(255, 255, 255, 0.025) 100%);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 18px;
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.14);
   }
 
   .surface-panel {
-    background: rgba(8, 11, 18, 0.86);
+    background: rgba(10, 14, 24, 0.86);
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 12px;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 4px 14px rgba(0, 0, 0, 0.2);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 4px 12px rgba(0, 0, 0, 0.18);
   }
 
   .section-frame {
-    border: 1px solid rgba(255, 255, 255, 0.16);
-    border-radius: 20px;
-    background: rgba(0, 0, 0, 0.28);
-    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.24);
-    padding: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 14px;
+    background: rgba(15, 23, 42, 0.7);
+    box-shadow: 0 5px 16px rgba(0, 0, 0, 0.2);
+    padding: 14px;
   }
 
-  /* Backwards-compatible aliases */
-  .glass {
-    background: rgba(255, 255, 255, 0.04);
+  .input-base {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    padding: 12px;
+    min-height: 44px;
+    color: #ffffff;
+  }
+
+  .input-base::placeholder {
+    color: rgba(255, 255, 255, 0.45);
+  }
+
+  .btn-primary {
+    background: #3b82f6;
     border: 1px solid rgba(255, 255, 255, 0.14);
-    border-radius: 16px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
+    color: #ffffff;
+    border-radius: 12px;
+    min-height: 44px;
+  }
+
+  .btn-secondary {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    color: #ffffff;
+    border-radius: 12px;
+    min-height: 44px;
+  }
+
+  /* Backwards-compatible aliases to avoid breaking existing JSX */
+  .glass {
+    background: rgba(15, 23, 42, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.18);
     backdrop-filter: blur(6px);
   }
 
   .glass-card {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.045) 0%, rgba(255, 255, 255, 0.025) 100%);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 18px;
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+    background: rgba(15, 23, 42, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 14px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+  }
+
+  /* Global mobile-friendly form controls */
+  input[type='text'],
+  input[type='password'],
+  input[type='email'],
+  input[type='number'],
+  select,
+  textarea {
+    min-height: 44px;
+    border-color: rgba(255, 255, 255, 0.12);
   }
 }
 

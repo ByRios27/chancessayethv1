@@ -29,9 +29,7 @@ export const reserveNextSellerId = async (role: UserProfile['role']) => {
         ? 'CEO'
         : role === 'admin'
           ? 'ADM'
-          : role === 'programador'
-            ? 'DEV'
-            : 'VEND';
+          : 'VEND';
 
     const sellerId = `${rolePrefix}${nextNum.toString().padStart(2, '0')}`;
     transaction.update(settingsRef, { nextSellerNumber: nextNum + 1 });

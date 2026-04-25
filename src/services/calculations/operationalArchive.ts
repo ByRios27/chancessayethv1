@@ -69,7 +69,7 @@ export const shouldRunAutoCleanupNow = ({
   todayKey: string;
 }) => {
   if (!userUid || !userRole) return false;
-  if (!['ceo', 'admin', 'programador'].includes(userRole)) return false;
+  if (!['ceo', 'admin'].includes(userRole)) return false;
   if (isAlreadyRunning) return false;
   if (currentMinutes < executionMinutes) return false;
   if (lastRunDate === todayKey) return false;
