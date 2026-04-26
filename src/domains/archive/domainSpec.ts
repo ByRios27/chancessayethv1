@@ -3,16 +3,16 @@
 export const ARCHIVE_DOMAIN_SPEC = {
   id: 'archive',
   primaryAction: 'consultHistoricalData',
-  secondaryActions: ['filterByDateAndUser', 'openLiquidationFromArchive', 'viewHistoricalSummary'],
+  secondaryActions: ['filterByDateAndUser', 'searchTickets', 'viewDailyAuditLogs', 'reviewLiquidations'],
   prohibitedActions: ['editHistoricalTickets', 'manageUsers', 'manageLotteries'],
-  allowedRoles: ['ceo', 'admin'] as const,
+  allowedRoles: ['ceo', 'admin', 'seller'] as const,
   emptyStates: {
-    noFilters: 'Seleccione fecha y usuario para consultar el archivo.',
+    noFilters: 'Define filtros y consulta para cargar datos del archivo.',
     noHistoricalData: 'No hay datos historicos para los filtros seleccionados.',
   },
   expectedErrors: {
     unauthorizedAction: 'No tienes permisos para consultar archivo global.',
-    missingFilters: 'Debe seleccionar fecha y usuario para consultar.',
+    missingFilters: 'Debe seleccionar al menos una fecha para consultar.',
   },
   mobileRules: {
     keepFiltersOnTop: true,

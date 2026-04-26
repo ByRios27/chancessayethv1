@@ -2279,7 +2279,7 @@ function App() {
     };
   }, [activeTab, buildFinancialSummary, filteredTickets, historyDate, historyInjections]);
 
-  const { fetchArchiveData, fetchUserOperationalDataByDate } = useArchiveDomain({
+  const { fetchArchiveData, fetchUserOperationalDataByDate, fetchArchiveSalesReport, searchArchiveTickets, fetchArchiveLiquidations } = useArchiveDomain({
     activeTab,
     archiveDate,
     archiveUserEmail,
@@ -3258,7 +3258,11 @@ function App() {
                   archiveInjections={archiveInjections}
                   auditLogs={dailyAuditLogs}
                   auditLogsLoading={auditLogsLoading}
+                  refreshAuditLogs={refreshAuditLogs}
                   buildFinancialSummary={buildFinancialSummary}
+                  fetchArchiveSalesReport={fetchArchiveSalesReport}
+                  searchArchiveTickets={searchArchiveTickets}
+                  fetchArchiveLiquidations={fetchArchiveLiquidations}
                   setSelectedUserToLiquidate={setSelectedUserToLiquidate}
                   setLiquidationDate={setLiquidationDate}
                   setActiveTab={setActiveTab}

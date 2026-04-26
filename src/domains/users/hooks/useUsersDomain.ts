@@ -1,7 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { createUserWithEmailAndPassword, secondaryAuth, signOut } from '../../../firebase';
+import { auth, createUserWithEmailAndPassword, db, doc, secondaryAuth, serverTimestamp, signOut, updateDoc } from '../../../firebase';
 import { logDailyAuditEvent } from '../../../services/repositories/auditLogsRepo';
 import { deleteUserProfile, reserveNextSellerId, saveUserProfile } from '../../../services/repositories/usersRepo';
 import type { UserProfile } from '../../../types/users';
@@ -79,6 +79,25 @@ export function useUsersDomain({
       }
     }
 
+    const buildPermissionDeniedMessage = (targetEmail: string) => {
+      const normalizedTarget = targetEmail.toLowerCase();
+      const normalizedCurrent = (currentUserEmail || '').toLowerCase();
+      const isSelfUpdate = action === 'editUser' && normalizedTarget === normalizedCurrent;
+      const isCommissionUpdate = action === 'editUser'
+        && editingUser != null
+        && Number(editingUser.commissionRate || 0) !== Number(userProfileData.commissionRate || 0);
+
+      if (isSelfUpdate && isCommissionUpdate) {
+        return `Permiso insuficiente para actualizar tu propia comisión en users/${normalizedTarget}. Revisa reglas: ownerProfileUpdateIsSafe/canManageUserUpdate.`;
+      }
+
+      if (isSelfUpdate) {
+        return `Permiso insuficiente para actualizar tu propio perfil en users/${normalizedTarget}. Revisa reglas: ownerProfileUpdateIsSafe.`;
+      }
+
+      return `Permiso insuficiente para ${action === 'createUser' ? 'crear' : 'actualizar'} users/${normalizedTarget}. Verifica permisos de rol en reglas Firestore.`;
+    };
+
     try {
       if (!userProfileData.sellerId) {
         const newSellerId = await reserveNextSellerId(userProfileData.role);
@@ -112,15 +131,68 @@ export function useUsersDomain({
       }
 
       const normalizedFirestoreEmail = (userProfileData.email || authEmail).toLowerCase();
+      const normalizedCurrentUserEmail = (currentUserEmail || '').toLowerCase();
+      const isSelfEdit = Boolean(
+        editingUser && normalizedCurrentUserEmail !== '' && normalizedCurrentUserEmail === normalizedFirestoreEmail
+      );
       userProfileData.email = normalizedFirestoreEmail;
       const cleanData = Object.fromEntries(
         Object.entries(userProfileData).filter(([_, v]) => v !== undefined)
-      );
+      ) as Record<string, unknown>;
 
-      await saveUserProfile(normalizedFirestoreEmail, cleanData);
+      // Preserve immutable primary-ceo marker when editing an existing doc.
+      if (editingUser && (editingUser as any).isPrimaryCeo !== undefined && cleanData.isPrimaryCeo === undefined) {
+        cleanData.isPrimaryCeo = Boolean((editingUser as any).isPrimaryCeo);
+      }
+
+      const selfUpdatePayload = isSelfEdit
+        ? {
+            name: String(cleanData.name || '').trim(),
+            commissionRate: Number.isFinite(Number(cleanData.commissionRate)) ? Number(cleanData.commissionRate) : 0,
+            updatedAt: serverTimestamp(),
+            updatedByEmail: normalizedCurrentUserEmail,
+          }
+        : null;
+
+      console.log('[saveUser debug]', {
+        mode: editingUser ? 'edit' : 'create',
+        authEmail: auth.currentUser?.email,
+        authUid: auth.currentUser?.uid,
+        currentUserProfile,
+        targetEmail: normalizedFirestoreEmail,
+        payload: isSelfEdit ? selfUpdatePayload : cleanData,
+      });
+      console.log('[saveUser FULL PAYLOAD]', JSON.stringify(isSelfEdit ? selfUpdatePayload : cleanData, null, 2));
+      console.log('[saveUser KEYS]', Object.keys(isSelfEdit ? (selfUpdatePayload || {}) : cleanData));
+
+      try {
+        if (isSelfEdit && selfUpdatePayload) {
+          await updateDoc(doc(db, 'users', normalizedFirestoreEmail), selfUpdatePayload);
+        } else {
+          await saveUserProfile(normalizedFirestoreEmail, cleanData);
+        }
+      } catch (error) {
+        const typedError = error as any;
+        console.error('[FIRESTORE ERROR CODE]', typedError?.code);
+        console.error('[FIRESTORE ERROR MESSAGE]', typedError?.message);
+        console.error('[FIRESTORE FULL ERROR]', typedError);
+        console.error('[saveUser users write failed]', {
+          path: `users/${normalizedFirestoreEmail}`,
+          error,
+        });
+        throw error;
+      }
 
       if (editingUser?.email?.toLowerCase() === currentUserEmail?.toLowerCase()) {
-        setUserProfile(cleanData as UserProfile);
+        if (isSelfEdit && selfUpdatePayload) {
+          setUserProfile({
+            ...(currentUserProfile || editingUser || ({} as UserProfile)),
+            name: String(selfUpdatePayload.name || ''),
+            commissionRate: Number(selfUpdatePayload.commissionRate || 0),
+          } as UserProfile);
+        } else {
+          setUserProfile(cleanData as unknown as UserProfile);
+        }
       }
 
       if (normalizedRole === 'ceo' || normalizedRole === 'admin') {
@@ -150,6 +222,9 @@ export function useUsersDomain({
       setShowUserModal(false);
       setEditingUser(null);
     } catch (error: any) {
+      const firebaseCode = error?.code || 'unknown';
+      const targetEmail = (userProfileData.email || authEmail || '').toLowerCase();
+
       if (error.code === 'auth/email-already-in-use') {
         toast.error('El usuario ya existe');
       } else if (error.code === 'auth/invalid-email') {
@@ -160,9 +235,20 @@ export function useUsersDomain({
         toast.error('Registro de usuarios restringido en Firebase Authentication');
       } else if (error.code === 'auth/operation-not-allowed') {
         toast.error('El registro de usuarios no esta habilitado en Firebase');
+      } else if (firebaseCode === 'permission-denied') {
+        toast.error(buildPermissionDeniedMessage(targetEmail));
       } else {
         toast.error(`Error: ${error.message || 'No se pudo guardar el usuario'}`);
       }
+
+      console.error('Users save error', {
+        code: firebaseCode,
+        action,
+        role: userRole,
+        currentUserEmail: currentUserEmail || '',
+        targetPath: `users/${targetEmail}`,
+        message: error?.message || '',
+      });
     }
   };
 

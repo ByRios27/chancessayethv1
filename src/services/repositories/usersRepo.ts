@@ -2,7 +2,7 @@ import { deleteDoc, db, doc, runTransaction, setDoc, updateDoc } from '../fireba
 import type { UserProfile } from '../../types/users';
 
 export const saveUserProfile = async (email: string, payload: Partial<UserProfile> & Record<string, any>) => {
-  return setDoc(doc(db, 'users', email.toLowerCase()), payload);
+  return setDoc(doc(db, 'users', email.toLowerCase()), payload, { merge: true });
 };
 
 export const deleteUserProfile = async (email: string) => {
