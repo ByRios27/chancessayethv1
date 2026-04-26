@@ -95,6 +95,7 @@ import {
 } from './firebase';
 
 import { useAuthSession } from './hooks/useAuthSession';
+import { useDailyAuditLogs } from './hooks/useDailyAuditLogs';
 import { useInjections } from './hooks/useInjections';
 import { useLotteries } from './hooks/useLotteries';
 import { useAppDataScopes, type AppTabId } from './hooks/useAppDataScopes';
@@ -122,6 +123,7 @@ import {
 } from './services/repositories/recoveryRepo';
 import { createTicket, deleteTicket as deleteTicketById, updateTicket } from './services/repositories/ticketsRepo';
 import { updatePreferredChancePrice } from './services/repositories/usersRepo';
+import { logDailyAuditEvent } from './services/repositories/auditLogsRepo';
 
 import { GeneralConfigDomain } from './domains/admin-config/components/GeneralConfigDomain';
 import { ConfigSection } from './components/config/ConfigSection';
@@ -416,7 +418,8 @@ function App() {
     sortedTicketsForLot: Array<{ t: LotteryTicket; prize: number }>;
   }>>(new Map());
   const ticketsRealtimeEnabled = !!user?.uid && !!userProfile?.role && activeTab === 'sales';
-  const injectionsRealtimeEnabled = false;
+  const punctualFinanceTabs: AppTabId[] = ['users', 'results', 'stats', 'dashboard', 'history', 'liquidaciones', 'archivo', 'cierres'];
+  const injectionsRealtimeEnabled = !!user?.uid && !!userProfile?.role && punctualFinanceTabs.includes(activeTab);
   const settlementsRealtimeEnabled = false;
 
   const { tickets, setTickets } = useTickets({
@@ -486,6 +489,7 @@ function App() {
     users,
     userRole: userProfile?.role,
     currentUserEmail: userProfile?.email,
+    currentUserProfile: userProfile ?? null,
     editingUser,
     setEditingUser,
     setShowUserModal,
@@ -493,6 +497,132 @@ function App() {
     setConfirmModal,
     onDeleteError: (error, path) => handleFirestoreError(error, OperationType.DELETE, path),
   });
+
+  const canMutateInjection = useCallback((injection: Injection) => {
+    if (!userProfile || !user) return false;
+    const normalizedRole = String(userProfile.role || '').toLowerCase();
+    if (normalizedRole !== 'ceo' && normalizedRole !== 'admin') return false;
+
+    const actorEmail = String(userProfile.email || '').toLowerCase();
+    const actorSellerId = String(userProfile.sellerId || '').toLowerCase();
+    const actorUid = String(user.uid || '');
+
+    const createdByEmail = String(injection.createdByEmail || injection.actorEmail || '').toLowerCase();
+    const createdBySellerId = String(injection.createdBySellerId || injection.actorSellerId || '').toLowerCase();
+    const createdByUid = String(injection.createdBy || injection.addedBy || '');
+    const hasAuthor = !!createdByEmail || !!createdBySellerId || !!createdByUid;
+
+    if (!hasAuthor) {
+      return !!isPrimaryCeoUser;
+    }
+
+    return (
+      (createdByEmail && createdByEmail === actorEmail) ||
+      (createdBySellerId && createdBySellerId === actorSellerId) ||
+      (createdByUid && createdByUid === actorUid)
+    );
+  }, [isPrimaryCeoUser, user, userProfile]);
+
+  const updateInjectionAmount = useCallback(async (injection: Injection, nextAmount: number) => {
+    if (!canMutateInjection(injection)) {
+      toast.error('No tienes permiso para editar esta inyeccion');
+      return;
+    }
+    const normalizedAmount = Number(nextAmount);
+    if (!Number.isFinite(normalizedAmount) || normalizedAmount < 0) {
+      toast.error('Monto invalido para inyeccion');
+      return;
+    }
+
+    try {
+      await updateDoc(doc(db, 'injections', injection.id), {
+        amount: normalizedAmount,
+        updatedAt: serverTimestamp(),
+        updatedByEmail: String(userProfile?.email || '').toLowerCase(),
+      });
+      setInjections((prev) => prev.map((item) => (
+        item.id === injection.id
+          ? { ...item, amount: normalizedAmount, updatedByEmail: String(userProfile?.email || '').toLowerCase(), updatedAt: new Date() }
+          : item
+      )));
+
+      if (userProfile?.role === 'admin' || userProfile?.role === 'ceo') {
+        await logDailyAuditEvent({
+          type: 'INJECTION_UPDATED',
+          actor: {
+            email: userProfile?.email,
+            sellerId: userProfile?.sellerId,
+            name: userProfile?.name,
+            role: userProfile?.role,
+          },
+          target: {
+            email: injection.userEmail,
+            sellerId: injection.sellerId,
+            name: users.find((u) => String(u.email || '').toLowerCase() === String(injection.userEmail || '').toLowerCase())?.name || '',
+          },
+          details: {
+            injectionId: injection.id,
+            previousAmount: Number(injection.amount || 0),
+            nextAmount: normalizedAmount,
+          },
+          date: injection.date || businessDayKey,
+        }).catch((error) => {
+          console.error('Daily audit log failed (injection update):', error);
+        });
+      }
+
+      toastSuccess('Inyeccion actualizada');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, `injections/${injection.id}`);
+    }
+  }, [businessDayKey, canMutateInjection, setInjections, userProfile, users]);
+
+  const deleteInjection = useCallback((injection: Injection) => {
+    if (!canMutateInjection(injection)) {
+      toast.error('No tienes permiso para borrar esta inyeccion');
+      return;
+    }
+
+    setConfirmModal({
+      show: true,
+      title: 'Eliminar Inyeccion',
+      message: 'Esta accion eliminara la inyeccion seleccionada. Desea continuar?',
+      onConfirm: async () => {
+        try {
+          await deleteDoc(doc(db, 'injections', injection.id));
+          setInjections((prev) => prev.filter((item) => item.id !== injection.id));
+
+          if (userProfile?.role === 'admin' || userProfile?.role === 'ceo') {
+            await logDailyAuditEvent({
+              type: 'INJECTION_DELETED',
+              actor: {
+                email: userProfile?.email,
+                sellerId: userProfile?.sellerId,
+                name: userProfile?.name,
+                role: userProfile?.role,
+              },
+              target: {
+                email: injection.userEmail,
+                sellerId: injection.sellerId,
+                name: users.find((u) => String(u.email || '').toLowerCase() === String(injection.userEmail || '').toLowerCase())?.name || '',
+              },
+              details: {
+                injectionId: injection.id,
+                removedAmount: Number(injection.amount || 0),
+              },
+              date: injection.date || businessDayKey,
+            }).catch((error) => {
+              console.error('Daily audit log failed (injection delete):', error);
+            });
+          }
+
+          toastSuccess('Inyeccion eliminada');
+        } catch (error) {
+          handleFirestoreError(error, OperationType.DELETE, `injections/${injection.id}`);
+        }
+      },
+    });
+  }, [businessDayKey, canMutateInjection, setInjections, userProfile, users]);
 
   // Form state
   const [number, setNumber] = useState('');
@@ -524,9 +654,22 @@ function App() {
     businessDayKey,
     onError: handleOperationalHookError
   });
+  const auditLogsDateScope = activeTab === 'archivo' ? archiveDate : businessDayKey;
+  const canReadAuditLogs = userProfile?.role === 'ceo';
+  const auditLogsEnabled = !!user?.uid && !!userProfile?.role && canReadAuditLogs && (activeTab === 'dashboard' || activeTab === 'archivo');
+  const {
+    logs: dailyAuditLogs,
+    loading: auditLogsLoading,
+    error: auditLogsError,
+    refresh: refreshAuditLogs,
+  } = useDailyAuditLogs({
+    enabled: auditLogsEnabled,
+    date: auditLogsDateScope,
+    onError: handleOperationalHookError,
+  });
 
   const queryTabs = useMemo(
-    () => (['results', 'stats', 'dashboard', 'history', 'liquidaciones', 'archivo', 'cierres'] as AppTabId[]),
+    () => (['users', 'results', 'stats', 'dashboard', 'history', 'liquidaciones', 'archivo', 'cierres'] as AppTabId[]),
     []
   );
   const tabNeedsPunctualRefresh = queryTabs.includes(activeTab);
@@ -539,8 +682,9 @@ function App() {
     refreshResults();
     refreshInjections();
     refreshSettlements();
+    refreshAuditLogs();
     window.setTimeout(() => setIsAutoRefreshing(false), 600);
-  }, [refreshInjections, refreshResults, refreshSettlements, tabNeedsPunctualRefresh]);
+  }, [refreshAuditLogs, refreshInjections, refreshResults, refreshSettlements, tabNeedsPunctualRefresh]);
 
   useEffect(() => {
     if (resultsError) toast.error(`Resultados: ${resultsError}`);
@@ -553,6 +697,10 @@ function App() {
   useEffect(() => {
     if (settlementsError) toast.error(`Liquidaciones: ${settlementsError}`);
   }, [settlementsError]);
+
+  useEffect(() => {
+    if (auditLogsError) toast.error(`Auditoria: ${auditLogsError}`);
+  }, [auditLogsError]);
 
   useEffect(() => {
     if (!tabNeedsPunctualRefresh) return;
@@ -1369,8 +1517,6 @@ function App() {
     isCeoUser,
     editingResult,
     setEditingResult,
-    resultFormDate,
-    setResultFormDate,
     resultFormLotteryId,
     setResultFormLotteryId,
     resultFormFirstPrize,
@@ -1399,6 +1545,7 @@ function App() {
     getTicketDateKey,
     getTicketPrizesFromSource,
     setConfirmModal,
+    onResultsMutated: refreshResults,
     onError: (error, operation, path) => {
       const op = operation === 'create'
         ? OperationType.CREATE
@@ -2480,7 +2627,7 @@ function App() {
     toast.info('Sesión cerrada');
   }, [handleLogout]);
 
-  const canAccessDashboard = currentUserRole === 'ceo' || currentUserRole === 'admin';
+  const canAccessDashboard = currentUserRole === 'ceo' || currentUserRole === 'admin' || currentUserRole === 'seller';
   const canAccessStats = currentUserRole === 'ceo' || currentUserRole === 'admin';
   const canAccessCierres = canAccessCierresDomain(currentUserRole);
   const canAccessResults = canAccessResultsDomain(currentUserRole);
@@ -2490,7 +2637,7 @@ function App() {
   const canAccessLiquidation = canAccessLiquidationDomain(currentUserRole, userProfile?.canLiquidate);
 
   const navigationItems = useMemo<NavItem[]>(() => [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, role: ['ceo', 'admin'] },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, role: ['ceo', 'admin', 'seller'] },
     { id: 'sales', label: 'Nueva Venta', icon: Plus },
     { id: 'history', label: 'Resumen de ventas', icon: History },
     { id: 'stats', label: 'Estadisticas', icon: BarChart3, role: ['ceo', 'admin'] },
@@ -2520,13 +2667,13 @@ function App() {
     <>
       <Toaster position="top-right" richColors duration={2000} />
       {loading || (user && userProfile === undefined) ? (
-        <div key="loading" className="min-h-screen bg-background flex items-center justify-center font-mono">
+        <div key="loading" className="app-shell min-h-screen flex items-center justify-center font-mono">
           <span>CARGANDO SISTEMA...</span>
         </div>
       ) : !user ? (
         <Login key="login" />
       ) : !userProfile ? (
-        <div key="access-denied" className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+        <div key="access-denied" className="app-shell min-h-screen flex flex-col items-center justify-center p-4">
           <div className="glass-card p-8 max-w-md w-full text-center space-y-6">
             <ShieldCheck className="w-16 h-16 text-destructive mx-auto" />
             <h1 className="text-2xl font-black italic tracking-tighter">
@@ -2544,7 +2691,7 @@ function App() {
           </div>
         </div>
       ) : (
-        <div className="min-h-screen bg-background text-foreground font-sans flex flex-col lg:flex-row overflow-hidden">
+        <div className="app-shell min-h-screen text-foreground font-sans flex flex-col lg:flex-row overflow-hidden">
           <GlobalSettingsModal 
             show={showSettingsModal}
             settings={globalSettings}
@@ -2649,6 +2796,10 @@ function App() {
         defaultType={injectionDefaultType}
         initialAmount={injectionInitialAmount}
         allowOnlyInjection={isInjectionOnly}
+        onInjectionSaved={(payload) => {
+          setInjections((prev) => ([payload as unknown as Injection, ...prev]));
+          refreshAuditLogs();
+        }}
       />
 
       {/* Sidebar Overlay for Mobile */}
@@ -2659,7 +2810,7 @@ function App() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => setIsSidebarOpen(false)}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
+            className="fixed inset-0 bg-slate-900/55 backdrop-blur-[2px] z-40"
           />
         )}
       </AnimatePresence>
@@ -2671,7 +2822,7 @@ function App() {
           width: isMobile ? (isSidebarOpen ? 280 : 0) : (isSidebarOpen ? 280 : 80),
           x: isMobile && !isSidebarOpen ? -280 : 0
         }}
-        className={`surface border-r border-border h-screen flex flex-col overflow-hidden z-50 ${isMobile ? 'fixed inset-y-0 left-0' : 'relative'}`}
+        className={`surface-dark border-r border-border h-screen flex flex-col overflow-hidden z-50 ${isMobile ? 'fixed inset-y-0 left-0' : 'relative'}`}
       >
         <div className="px-4 py-4 flex items-center gap-3 shrink-0">
           <div className="bg-primary p-2 rounded-lg neon-border">
@@ -2742,7 +2893,7 @@ function App() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col h-screen overflow-hidden relative min-w-0">
         {/* Top Header */}
-        <header className="h-16 surface border-b border-border px-3 flex items-center justify-between shrink-0 gap-2">
+        <header className="h-16 surface-dark border-b border-border px-3 flex items-center justify-between shrink-0 gap-2">
           <button 
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
             className="p-2 surface-soft rounded-lg text-muted-foreground shrink-0"
@@ -2804,12 +2955,16 @@ function App() {
                   todayStr={todayStr}
                   userProfile={userProfile}
                   injections={injections}
+                  results={results}
+                  users={users}
+                  userStats={userStats}
                   operationalSellerId={operationalSellerId}
                   historyTickets={historyTickets}
                   ticketMatchesGlobalChancePrice={ticketMatchesGlobalChancePrice}
                   lotteries={lotteries}
                   cleanText={cleanText}
                   formatTime12h={formatTime12h}
+                  auditLogs={dailyAuditLogs}
                 />
               </Suspense>
             )}
@@ -2985,8 +3140,6 @@ function App() {
                 editingResult={editingResult}
                 cancelResultEdition={cancelResultEdition}
                 isCeoUser={isCeoUser}
-                resultFormDate={resultFormDate}
-                setResultFormDate={setResultFormDate}
                 setResultFormLotteryId={setResultFormLotteryId}
                 businessDayKey={businessDayKey}
                 resultFormLotteryId={resultFormLotteryId}
@@ -3046,6 +3199,11 @@ function App() {
                 setIsInjectionOnly={setIsInjectionOnly}
                 setShowInjectionModal={setShowInjectionModal}
                 deleteUser={deleteUser}
+                injections={injections}
+                businessDayKey={businessDayKey}
+                canMutateInjection={canMutateInjection}
+                updateInjectionAmount={updateInjectionAmount}
+                deleteInjection={deleteInjection}
               />
             )}
             {activeTab === 'liquidaciones' && canAccessLiquidation && (
@@ -3098,6 +3256,8 @@ function App() {
                   isArchiveLoading={isArchiveLoading}
                   archiveTickets={archiveTickets}
                   archiveInjections={archiveInjections}
+                  auditLogs={dailyAuditLogs}
+                  auditLogsLoading={auditLogsLoading}
                   buildFinancialSummary={buildFinancialSummary}
                   setSelectedUserToLiquidate={setSelectedUserToLiquidate}
                   setLiquidationDate={setLiquidationDate}
@@ -3164,7 +3324,7 @@ function App() {
         </main>
 
         {/* Footer */}
-        <footer className="h-auto min-h-12 surface border-t border-border px-3 sm:px-8 py-2 flex items-center justify-between gap-2 shrink-0 text-[8px] sm:text-[9px] font-mono text-muted-foreground uppercase tracking-[0.12em] sm:tracking-[0.2em]">
+        <footer className="h-auto min-h-12 surface-dark border-t border-border px-3 sm:px-8 py-2 flex items-center justify-between gap-2 shrink-0 text-[8px] sm:text-[9px] font-mono text-muted-foreground uppercase tracking-[0.12em] sm:tracking-[0.2em]">
           <p>© 2026 CHANCE PRO SYSTEMS • TERMINAL {user.uid.slice(0, 8)}</p>
           <div className="flex gap-3 sm:gap-8 flex-wrap justify-end">
             <span className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-green-500" /> SERVER: OK</span>

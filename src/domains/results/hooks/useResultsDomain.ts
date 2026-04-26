@@ -29,6 +29,7 @@ interface UseResultsDomainParams {
   getTicketPrizesFromSource: (ticket: LotteryTicket, source: LotteryResult[], lotteryName: string) => { totalPrize: number };
   setConfirmModal: (updater: (prev: ConfirmModalState) => ConfirmModalState) => void;
   onError: (error: unknown, operation: 'create' | 'update' | 'delete', path: string) => void;
+  onResultsMutated?: () => void;
 }
 
 export function useResultsDomain({
@@ -45,9 +46,9 @@ export function useResultsDomain({
   getTicketPrizesFromSource,
   setConfirmModal,
   onError,
+  onResultsMutated,
 }: UseResultsDomainParams) {
   const [editingResult, setEditingResult] = useState<LotteryResult | null>(null);
-  const [resultFormDate, setResultFormDate] = useState(businessDayKey);
   const [resultFormLotteryId, setResultFormLotteryId] = useState('');
   const [resultFormFirstPrize, setResultFormFirstPrize] = useState('');
   const [resultFormSecondPrize, setResultFormSecondPrize] = useState('');
@@ -89,12 +90,12 @@ export function useResultsDomain({
   const takenResultLotteryIdsForDate = useMemo(() => {
     const used = new Set<string>();
     sortedResults.forEach(result => {
-      if (result.date === resultFormDate && result.lotteryId) {
+      if (result.date === businessDayKey && result.lotteryId) {
         used.add(result.lotteryId);
       }
     });
     return used;
-  }, [resultFormDate, sortedResults]);
+  }, [businessDayKey, sortedResults]);
 
   const availableResultLotteries = useMemo(() => {
     return sortedLotteries.filter(lottery =>
@@ -105,18 +106,17 @@ export function useResultsDomain({
 
   const resultStatusMap = useMemo(() => {
     const map = new Map<string, { sales: number; prizes: number; hasWinners: boolean }>();
-    if (!canManageResults || !currentSellerId) return map;
-
-    const ownTickets = tickets.filter(ticket =>
-      (ticket.status === 'active' || ticket.status === 'winner') &&
-      ticket.sellerId === currentSellerId
-    );
+    const relevantTickets = tickets.filter(ticket => {
+      if (ticket.status !== 'active' && ticket.status !== 'winner') return false;
+      if (canManageResults) return true;
+      return currentSellerId ? ticket.sellerId === currentSellerId : true;
+    });
 
     visibleResults.forEach(result => {
       let sales = 0;
       let prizes = 0;
 
-      ownTickets.forEach(ticket => {
+      relevantTickets.forEach(ticket => {
         if (getTicketDateKey(ticket) !== result.date) return;
         const matchingBets = (ticket.bets || []).filter(bet => cleanText(bet.lottery) === cleanText(result.lotteryName));
         if (!matchingBets.length) return;
@@ -139,34 +139,20 @@ export function useResultsDomain({
 
   const cancelResultEdition = useCallback(() => {
     setEditingResult(null);
-    setResultFormDate(businessDayKey);
     resetResultForm();
-  }, [businessDayKey, resetResultForm]);
+  }, [resetResultForm]);
 
   useEffect(() => {
     if (!editingResult) return;
     setResultFormLotteryId(editingResult.lotteryId);
-    setResultFormDate(isCeoUser ? editingResult.date : businessDayKey);
     setResultFormFirstPrize(editingResult.firstPrize);
     setResultFormSecondPrize(editingResult.secondPrize);
     setResultFormThirdPrize(editingResult.thirdPrize);
-  }, [businessDayKey, editingResult, isCeoUser]);
-
-  useEffect(() => {
-    if (!canManageResults) return;
-    if (!isCeoUser && resultFormDate !== businessDayKey) {
-      setResultFormDate(businessDayKey);
-    }
-  }, [businessDayKey, canManageResults, isCeoUser, resultFormDate]);
+  }, [editingResult]);
 
   const saveResult = useCallback(async (resultData: Partial<LotteryResult>) => {
     if (!canManageResults) {
       toast.error(RESULTS_DOMAIN_SPEC.expectedErrors.unauthorizedAction);
-      return false;
-    }
-
-    if (!isCeoUser && resultData.date !== businessDayKey) {
-      toast.error('Solo el CEO puede guardar resultados fuera de la fecha operativa');
       return false;
     }
 
@@ -187,12 +173,14 @@ export function useResultsDomain({
           ...resultData,
           timestamp: serverTimestamp(),
         });
+        onResultsMutated?.();
         toastSuccess('Resultado actualizado');
       } else {
         await createResult({
           ...resultData,
           timestamp: serverTimestamp(),
         });
+        onResultsMutated?.();
         toastSuccess('Resultado ingresado');
       }
 
@@ -202,7 +190,7 @@ export function useResultsDomain({
       onError(error, editingResult ? 'update' : 'create', 'results');
       return false;
     }
-  }, [businessDayKey, canManageResults, editingResult, isCeoUser, onError, results]);
+  }, [canManageResults, editingResult, onError, onResultsMutated, results]);
 
   const handleCreateResultFromForm = useCallback(async () => {
     if (!canManageResults) {
@@ -210,14 +198,8 @@ export function useResultsDomain({
       return;
     }
 
-    if (!resultFormLotteryId || !resultFormDate || !resultFormFirstPrize || !resultFormSecondPrize || !resultFormThirdPrize) {
+    if (!resultFormLotteryId || !resultFormFirstPrize || !resultFormSecondPrize || !resultFormThirdPrize) {
       toast.error(RESULTS_DOMAIN_SPEC.expectedErrors.incompleteForm);
-      return;
-    }
-
-    if (!isCeoUser && resultFormDate !== businessDayKey) {
-      toast.error('Solo el CEO puede trabajar resultados fuera de la fecha operativa');
-      setResultFormDate(businessDayKey);
       return;
     }
 
@@ -229,7 +211,7 @@ export function useResultsDomain({
 
     const alreadyExists = results.some(result =>
       result.lotteryId === resultFormLotteryId &&
-      result.date === resultFormDate &&
+      result.date === businessDayKey &&
       result.id !== editingResult?.id
     );
     if (alreadyExists) {
@@ -240,18 +222,17 @@ export function useResultsDomain({
     const saved = await saveResult({
       lotteryId: resultFormLotteryId,
       lotteryName: cleanText(selectedLottery.name),
-      date: resultFormDate,
+      date: businessDayKey,
       firstPrize: resultFormFirstPrize,
       secondPrize: resultFormSecondPrize,
       thirdPrize: resultFormThirdPrize,
     });
 
     if (saved) {
-      setResultFormDate(businessDayKey);
       resetResultForm();
       setEditingResult(null);
     }
-  }, [businessDayKey, canManageResults, cleanText, editingResult?.id, isCeoUser, resetResultForm, resultFormDate, resultFormFirstPrize, resultFormLotteryId, resultFormSecondPrize, resultFormThirdPrize, results, saveResult, sortedLotteries]);
+  }, [businessDayKey, canManageResults, cleanText, editingResult?.id, resetResultForm, resultFormFirstPrize, resultFormLotteryId, resultFormSecondPrize, resultFormThirdPrize, results, saveResult, sortedLotteries]);
 
   const deleteResult = async (id: string) => {
     if (!canManageResults) {
@@ -267,6 +248,7 @@ export function useResultsDomain({
       onConfirm: async () => {
         try {
           await deleteResultById(id);
+          onResultsMutated?.();
           toastSuccess('Resultado eliminado');
         } catch (error) {
           onError(error, 'delete', `results/${id}`);
@@ -280,8 +262,6 @@ export function useResultsDomain({
     isCeoUser,
     editingResult,
     setEditingResult,
-    resultFormDate,
-    setResultFormDate,
     resultFormLotteryId,
     setResultFormLotteryId,
     resultFormFirstPrize,

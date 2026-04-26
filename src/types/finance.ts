@@ -7,6 +7,16 @@ export interface Injection {
   date: string;
   timestamp: any;
   addedBy: string;
+  createdBy?: string;
+  createdByEmail?: string;
+  createdBySellerId?: string;
+  createdByName?: string;
+  actorEmail?: string;
+  actorSellerId?: string;
+  actorName?: string;
+  createdAt?: any;
+  updatedAt?: any;
+  updatedByEmail?: string;
   liquidated?: boolean;
   settlementId?: string;
 }

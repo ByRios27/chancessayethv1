@@ -179,22 +179,22 @@ const Login = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4 relative overflow-hidden">
+    <div className="app-shell min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
       {/* Background Accents */}
-      <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-primary/20 rounded-full blur-[120px]" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-primary/10 rounded-full blur-[120px]" />
+      <div className="absolute top-[-8%] left-[-8%] w-[38%] h-[38%] bg-primary/15 rounded-full blur-[64px]" />
+      <div className="absolute bottom-[-8%] right-[-8%] w-[38%] h-[38%] bg-primary/10 rounded-full blur-[64px]" />
 
       <motion.div 
         key="login-form-container"
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
-        className="max-w-md w-full glass-card p-8 sm:p-10 relative z-10 neon-border"
+        className="max-w-md w-full surface-panel p-6 sm:p-8 relative z-10"
       >
         <div className="flex flex-col items-center text-center mb-8">
-          <div className="w-16 h-16 bg-primary/20 rounded-2xl flex items-center justify-center mb-4 border border-primary/30">
-            <TicketIcon className="w-8 h-8 text-primary neon-text" />
+          <div className="w-14 h-14 bg-primary/20 rounded-2xl flex items-center justify-center mb-3 border border-primary/30">
+            <TicketIcon className="w-7 h-7 text-primary" />
           </div>
-          <h1 className="text-3xl font-black italic tracking-tighter uppercase neon-text">
+          <h1 className="text-3xl font-black tracking-tight uppercase text-white">
             <span>Chance Pro</span>
           </h1>
           <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-[0.2em] mt-2">
@@ -213,7 +213,7 @@ const Login = () => {
                 type="text" 
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-xl font-mono text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all placeholder:text-muted-foreground/30"
+                className="input-surface w-full p-4 pl-12 font-mono text-sm placeholder:text-muted-foreground/40"
                 placeholder="vendedor01"
               />
             </div>
@@ -228,7 +228,7 @@ const Login = () => {
                 type="password" 
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-white/5 border border-white/10 p-4 pl-12 rounded-xl font-mono text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all placeholder:text-muted-foreground/30"
+                className="input-surface w-full p-4 pl-12 font-mono text-sm placeholder:text-muted-foreground/40"
                 placeholder="••••••••"
               />
             </div>
@@ -247,7 +247,7 @@ const Login = () => {
           <button 
             type="submit"
             disabled={loading}
-            className="w-full bg-primary text-primary-foreground py-4 rounded-xl font-black uppercase tracking-[0.2em] text-xs shadow-lg shadow-primary/20 hover:brightness-110 active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+            className="btn-primary w-full py-4 font-black uppercase tracking-[0.2em] text-xs hover:bg-blue-400 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {loading ? (
               <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -260,7 +260,7 @@ const Login = () => {
             type="button"
             onClick={handleGoogleLogin}
             disabled={loading}
-            className="w-full bg-white/5 border border-white/15 text-foreground py-4 rounded-xl font-black uppercase tracking-[0.2em] text-xs hover:bg-white/10 active:scale-[0.98] transition-all disabled:opacity-50"
+            className="btn-secondary w-full py-4 font-black uppercase tracking-[0.2em] text-xs hover:bg-white/10 active:scale-[0.98] disabled:opacity-50"
           >
             Iniciar con Google
           </button>

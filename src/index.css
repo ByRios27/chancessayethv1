@@ -4,24 +4,24 @@
   --font-sans: system-ui, -apple-system, "Segoe UI", "Inter", ui-sans-serif, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
   
-  --color-background: #000000;
-  --color-foreground: #ffffff;
+  --color-background: #0B1220;
+  --color-foreground: #E5E7EB;
   --color-card: #111827;
-  --color-card-foreground: #ffffff;
+  --color-card-foreground: #E5E7EB;
   --color-popover: #111827;
-  --color-popover-foreground: #ffffff;
+  --color-popover-foreground: #E5E7EB;
   --color-primary: #3b82f6;
   --color-primary-foreground: #ffffff;
-  --color-secondary: #1F2937;
-  --color-secondary-foreground: #ffffff;
-  --color-muted: #1F2937;
+  --color-secondary: #1E293B;
+  --color-secondary-foreground: #E5E7EB;
+  --color-muted: #1E293B;
   --color-muted-foreground: #9CA3AF;
-  --color-accent: #1F2937;
-  --color-accent-foreground: #ffffff;
+  --color-accent: #1E293B;
+  --color-accent-foreground: #E5E7EB;
   --color-destructive: #ef4444;
   --color-destructive-foreground: #ffffff;
-  --color-border: #1F2937;
-  --color-input: #1F2937;
+  --color-border: #334155;
+  --color-input: #334155;
   --color-ring: #3B82F6;
   
   --radius-lg: 0.5rem;
@@ -30,6 +30,31 @@
 }
 
 @layer base {
+  :root {
+    --app-bg-start: #0a0f1a;
+    --app-bg-end: #0a0f1a;
+
+    --surface: rgba(15, 23, 42, 0.78);
+    --surface-soft: rgba(15, 23, 42, 0.68);
+    --surface-strong: rgba(15, 23, 42, 0.88);
+
+    --surface-border: rgba(15, 23, 42, 0.16);
+    --surface-border-light: rgba(255, 255, 255, 0.10);
+
+    --primary: #3B82F6;
+    --primary-soft: rgba(59, 130, 246, 0.16);
+
+    --success: #22C55E;
+    --danger: #EF4444;
+    --warning: #FACC15;
+    --orange: #FB923C;
+
+    --text-on-light: #0F172A;
+    --text-on-dark: #E5E7EB;
+    --text-muted-dark: #94A3B8;
+    --text-muted-light: #64748B;
+  }
+
   * {
     @apply border-border;
   }
@@ -39,41 +64,83 @@
     width: 100%;
     max-width: 100%;
     overflow-x: hidden;
+    min-height: 100%;
+    background-color: #0a0f1a;
+    background-image:
+      radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.03), transparent 40%),
+      radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.02), transparent 50%),
+      radial-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+    background-size: auto, auto, 3px 3px;
+    background-position: center, center, 0 0;
   }
   body {
     @apply bg-background text-foreground font-sans antialiased;
     font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: var(--text-on-light);
   }
 }
 
 @layer components {
+  .app-shell {
+    min-height: 100dvh;
+    background-color: #0a0f1a;
+    background-image:
+      radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.03), transparent 40%),
+      radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.02), transparent 50%),
+      radial-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px);
+    background-size: auto, auto, 3px 3px;
+    background-position: center, center, 0 0;
+    color: var(--text-on-light);
+  }
+
+  .surface-dark {
+    background: var(--surface);
+    border: 1px solid var(--surface-border-light);
+    color: var(--text-on-dark);
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+    backdrop-filter: blur(6px);
+  }
+
+  .surface-dark-soft {
+    background: var(--surface-soft);
+    border: 1px solid var(--surface-border-light);
+    color: var(--text-on-dark);
+  }
+
+  .surface-light {
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(15, 23, 42, 0.10);
+    color: var(--text-on-light);
+  }
+
   .surface {
-    background: rgba(15, 23, 42, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--surface);
+    border: 1px solid var(--surface-border-light);
     border-radius: 12px;
-    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.18);
+    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08);
     backdrop-filter: blur(6px);
   }
 
   .surface-card {
-    background: rgba(15, 23, 42, 0.8);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: var(--surface-strong);
+    border: 1px solid rgba(255, 255, 255, 0.10);
     border-radius: 14px;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
   }
 
   .surface-soft {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(15, 23, 42, 0.58);
+    border: 1px solid rgba(255, 255, 255, 0.10);
     border-radius: 12px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.14);
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
   }
 
   .surface-panel {
-    background: rgba(10, 14, 24, 0.86);
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    border-radius: 12px;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03), 0 4px 12px rgba(0, 0, 0, 0.18);
+    background: rgba(15, 23, 42, 0.82);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    color: var(--text-on-dark);
+    border-radius: 18px;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
   }
 
   .section-frame {
@@ -85,12 +152,12 @@
   }
 
   .input-base {
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(15, 23, 42, 0.72);
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 10px;
     padding: 12px;
     min-height: 44px;
-    color: #ffffff;
+    color: #E5E7EB;
   }
 
   .input-base::placeholder {
@@ -98,26 +165,57 @@
   }
 
   .btn-primary {
-    background: #3b82f6;
+    background: #3B82F6;
     border: 1px solid rgba(255, 255, 255, 0.14);
     color: #ffffff;
     border-radius: 12px;
     min-height: 44px;
+    transition: background-color 120ms ease, border-color 120ms ease, transform 80ms ease;
   }
 
   .btn-secondary {
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(15, 23, 42, 0.62);
     border: 1px solid rgba(255, 255, 255, 0.14);
-    color: #ffffff;
+    color: #E5E7EB;
     border-radius: 12px;
     min-height: 44px;
+    transition: background-color 120ms ease, border-color 120ms ease, transform 80ms ease;
+  }
+
+  .btn-danger {
+    background: rgba(239, 68, 68, 0.14);
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    color: #FCA5A5;
+    border-radius: 12px;
+    transition: background-color 120ms ease, border-color 120ms ease, transform 80ms ease;
+  }
+
+  .btn-success {
+    background: rgba(34, 197, 94, 0.14);
+    border: 1px solid rgba(34, 197, 94, 0.35);
+    color: #86EFAC;
+    border-radius: 12px;
+    transition: background-color 120ms ease, border-color 120ms ease, transform 80ms ease;
+  }
+
+  .input-surface {
+    background: rgba(15, 23, 42, 0.72);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    color: #E5E7EB;
+    border-radius: 12px;
+  }
+
+  .input-surface:focus {
+    border-color: #3B82F6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.18);
+    outline: none;
   }
 
   .card-mini {
-    height: 75px;
-    border-radius: 14px;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(10, 15, 25, 0.6);
+    height: 56px;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    background: rgba(10, 15, 26, 0.95);
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -125,31 +223,69 @@
   }
 
   .value {
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 700;
     line-height: 1.1;
   }
 
   .label {
-    font-size: 11px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
     opacity: 0.6;
     margin-top: 2px;
   }
 
+  .dashboard-panel {
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 12px;
+    background: rgba(10, 15, 26, 0.94);
+  }
+
+  .dashboard-result-chip {
+    min-width: 26px;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 18px;
+    text-align: center;
+    border: 1px solid transparent;
+  }
+
+  .dashboard-result-chip-first {
+    background: rgba(250, 204, 21, 0.2);
+    color: #fde047;
+    border-color: rgba(250, 204, 21, 0.35);
+  }
+
+  .dashboard-result-chip-second {
+    background: rgba(251, 146, 60, 0.2);
+    color: #fdba74;
+    border-color: rgba(251, 146, 60, 0.35);
+  }
+
+  .dashboard-result-chip-third {
+    background: rgba(148, 163, 184, 0.2);
+    color: #cbd5e1;
+    border-color: rgba(148, 163, 184, 0.35);
+  }
+
   /* Backwards-compatible aliases to avoid breaking existing JSX */
   .glass {
-    background: rgba(15, 23, 42, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: var(--surface);
+    border: 1px solid var(--surface-border-light);
     border-radius: 12px;
-    box-shadow: 0 3px 12px rgba(0, 0, 0, 0.18);
+    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08);
     backdrop-filter: blur(6px);
   }
 
   .glass-card {
-    background: rgba(15, 23, 42, 0.8);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: var(--surface-strong);
+    border: 1px solid rgba(255, 255, 255, 0.10);
     border-radius: 14px;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
   }
 
   /* Global mobile-friendly form controls */
@@ -157,10 +293,26 @@
   input[type='password'],
   input[type='email'],
   input[type='number'],
+  input[type='date'],
   select,
   textarea {
     min-height: 44px;
-    border-color: rgba(255, 255, 255, 0.12);
+    background: rgba(15, 23, 42, 0.72);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    color: #E5E7EB;
+    transition: background-color 120ms ease, border-color 120ms ease, transform 80ms ease;
+  }
+
+  input[type='text']:focus,
+  input[type='password']:focus,
+  input[type='email']:focus,
+  input[type='number']:focus,
+  input[type='date']:focus,
+  select:focus,
+  textarea:focus {
+    border-color: #3B82F6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.18);
+    outline: none;
   }
 }
 

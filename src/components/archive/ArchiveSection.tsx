@@ -18,6 +18,8 @@ export function ArchiveSection(props: ArchiveSectionProps) {
     isArchiveLoading,
     archiveTickets,
     archiveInjections,
+    auditLogs,
+    auditLogsLoading,
     buildFinancialSummary,
     setSelectedUserToLiquidate,
     setLiquidationDate,
@@ -26,7 +28,9 @@ export function ArchiveSection(props: ArchiveSectionProps) {
     cleanText,
     formatTime12h,
   } = props;
+  const safeAuditLogs = auditLogs ?? [];
   const canAccessDomain = canAccessArchiveDomain(userProfile?.role, userProfile?.canLiquidate);
+  const canSeeAuditLog = userProfile?.role === 'ceo';
 
   return (
               <motion.div
@@ -116,6 +120,33 @@ export function ArchiveSection(props: ArchiveSectionProps) {
                     </div>
 
                     <div className="lg:col-span-2">
+                      {canSeeAuditLog && (
+                        <div className="glass-card p-4 mb-4 border border-white/10">
+                          <div className="flex items-center justify-between mb-2">
+                            <h3 className="text-sm font-black uppercase tracking-wide text-white">Log Diario</h3>
+                            <span className="text-[10px] font-mono text-muted-foreground">{archiveDate}</span>
+                          </div>
+                          {auditLogsLoading ? (
+                            <p className="text-xs text-muted-foreground">Cargando log...</p>
+                          ) : safeAuditLogs.length === 0 ? (
+                            <p className="text-xs text-muted-foreground">Sin eventos de auditoria para este dia.</p>
+                          ) : (
+                            <div className="space-y-1.5">
+                              {safeAuditLogs.slice(0, 20).map((event: any) => (
+                                <div key={`archive-audit-${event.id}`} className="text-[11px] border border-white/10 rounded-lg bg-white/[0.03] px-2.5 py-1.5 flex items-center justify-between gap-2">
+                                  <span className="truncate text-white/90">
+                                    {event.actorName || event.actorEmail || '-'} · {event.type || 'EVENTO'}
+                                  </span>
+                                  <span className="truncate text-muted-foreground text-right">
+                                    {event.targetName || event.targetSellerId || event.targetEmail || '-'}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {/* TODO(remodel): keep archive as read-only historical consultation UI in next phase. */}
                       {archiveUserEmail && archiveTickets.length > 0 ? (() => {
                         const userToLiquidate = users.find(u => u.email === archiveUserEmail);

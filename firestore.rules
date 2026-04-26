@@ -88,7 +88,7 @@ service cloud.firestore {
         data.email.size() < 120 &&
         data.name is string &&
         data.name.size() < 120 &&
-        data.role in ['ceo', 'admin', 'seller', 'programador'] &&
+        data.role in ['ceo', 'admin', 'seller'] &&
         (
           !data.keys().hasAny(['status']) ||
           data.get('status', 'active') in ['active', 'inactive']
@@ -109,10 +109,17 @@ service cloud.firestore {
     }
 
     function ownerProfileUpdateIsSafe() {
-      return request.resource.data.diff(resource.data).changedKeys().hasOnly(['name', 'preferredChancePrice', 'sessionTimeoutMinutes']) &&
+      return request.resource.data.diff(resource.data).changedKeys().hasOnly(['name', 'preferredChancePrice', 'sessionTimeoutMinutes', 'commissionRate']) &&
         request.resource.data.get('email', '').lower() == resource.data.get('email', '').lower() &&
         request.resource.data.get('role', '') == resource.data.get('role', '') &&
         request.resource.data.get('status', '') == resource.data.get('status', '') &&
+        (
+          !request.resource.data.diff(resource.data).changedKeys().hasAny(['commissionRate']) ||
+          (
+            request.resource.data.get('commissionRate', -1) is number &&
+            request.resource.data.get('commissionRate', -1) >= 0
+          )
+        ) &&
         request.resource.data.get('isPrimaryCeo', false) == resource.data.get('isPrimaryCeo', false);
     }
 
@@ -212,9 +219,31 @@ service cloud.firestore {
 
     match /injections/{injectionId} {
       allow read: if isAuthenticated() && (canReadAllSalesData() || resource.data.get('userEmail', '').lower() == currentUserEmail());
-      allow create: if isCeo() || isAdmin() || isProgramador();
-      allow update: if isCeo() || isAdmin() || isProgramador();
-      allow delete: if isCeo() || isProgramador();
+      allow create: if
+        (isCeo() || isAdmin() || isProgramador()) &&
+        request.resource.data.get('createdByEmail', '').lower() == currentUserEmail();
+      allow update: if
+        (isCeo() || isAdmin() || isProgramador()) && (
+          (
+            request.resource.data.diff(resource.data).changedKeys().hasOnly(['liquidated', 'settlementId', 'updatedAt', 'updatedByEmail'])
+          ) ||
+          (
+            (
+              resource.data.get('createdByEmail', '').lower() == currentUserEmail() ||
+              resource.data.get('createdBy', '') == request.auth.uid ||
+              (resource.data.get('createdByEmail', '') == '' && resource.data.get('createdBy', '') == '' && isPrimaryCeo())
+            ) &&
+            request.resource.data.get('createdByEmail', '').lower() == resource.data.get('createdByEmail', '').lower() &&
+            request.resource.data.get('createdBy', '') == resource.data.get('createdBy', '')
+          )
+        );
+      allow delete: if
+        (isCeo() || isAdmin() || isProgramador()) &&
+        (
+          resource.data.get('createdByEmail', '').lower() == currentUserEmail() ||
+          resource.data.get('createdBy', '') == request.auth.uid ||
+          (resource.data.get('createdByEmail', '') == '' && resource.data.get('createdBy', '') == '' && isPrimaryCeo())
+        );
     }
 
     match /settlements/{settlementId} {
@@ -227,6 +256,16 @@ service cloud.firestore {
       allow create: if isCeo() || isAdmin() || isProgramador();
       allow update: if isCeo() || isAdmin() || isProgramador();
       allow delete: if isCeo() || isProgramador();
+    }
+
+    match /daily_audit_logs/{logDate}/events/{eventId} {
+      allow read: if isAuthenticated() && (isCeo() || isPrimaryCeo());
+      allow create: if
+        isAuthenticated() &&
+        (isCeo() || isAdmin()) &&
+        request.resource.data.get('actorEmail', '').lower() == currentUserEmail() &&
+        request.resource.data.get('actorRole', '') in ['ceo', 'admin'];
+      allow update, delete: if false;
     }
 
     match /settings/global {

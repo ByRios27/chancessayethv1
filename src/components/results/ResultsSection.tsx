@@ -9,8 +9,6 @@ type ResultsSectionProps = {
   editingResult: any;
   cancelResultEdition: () => void;
   isCeoUser: boolean;
-  resultFormDate: string;
-  setResultFormDate: (value: string) => void;
   setResultFormLotteryId: (value: string) => void;
   businessDayKey: string;
   resultFormLotteryId: string;
@@ -37,8 +35,6 @@ export function ResultsSection({
   editingResult,
   cancelResultEdition,
   isCeoUser,
-  resultFormDate,
-  setResultFormDate,
   setResultFormLotteryId,
   businessDayKey,
   resultFormLotteryId,
@@ -59,6 +55,39 @@ export function ResultsSection({
   setEditingResult,
   deleteResult,
 }: ResultsSectionProps) {
+  const maxResultDigits = lotteryById.get(resultFormLotteryId)?.isFourDigits ? 4 : 2;
+
+  const focusVisibleResultInput = React.useCallback((field: 'second' | 'third') => {
+    if (typeof window === 'undefined') return;
+    const candidates = Array.from(
+      document.querySelectorAll<HTMLInputElement>(`input[data-result-field="${field}"]`)
+    );
+    const target = candidates.find((input) => input.offsetParent !== null) ?? candidates[0];
+    target?.focus();
+  }, []);
+
+  const buildResultChangeHandler = React.useCallback((
+    prevValue: string,
+    setValue: (value: string) => void,
+    nextField?: 'second' | 'third',
+  ) => {
+    return (event: React.ChangeEvent<HTMLInputElement>) => {
+      const rawDigits = event.target.value.replace(/\D/g, '');
+      const nextValue = rawDigits.slice(0, maxResultDigits);
+      setValue(nextValue);
+
+      const reachedByTyping = rawDigits.length === maxResultDigits;
+      const completedNow = prevValue.length < maxResultDigits && nextValue.length === maxResultDigits;
+      if (nextField && reachedByTyping && completedNow) {
+        focusVisibleResultInput(nextField);
+      }
+    };
+  }, [focusVisibleResultInput, maxResultDigits]);
+
+  const handleFirstPrizeChange = buildResultChangeHandler(resultFormFirstPrize, setResultFormFirstPrize, 'second');
+  const handleSecondPrizeChange = buildResultChangeHandler(resultFormSecondPrize, setResultFormSecondPrize, 'third');
+  const handleThirdPrizeChange = buildResultChangeHandler(resultFormThirdPrize, setResultFormThirdPrize);
+
   return (
     <motion.div
       key="results"
@@ -95,24 +124,6 @@ export function ResultsSection({
           <div className="md:hidden space-y-2">
             <div className="grid grid-cols-1 gap-2">
               <div>
-                <label className="text-[10px] font-mono uppercase text-muted-foreground">Fecha</label>
-                {isCeoUser ? (
-                  <input
-                    type="date"
-                    value={resultFormDate}
-                    onChange={(e) => {
-                      setResultFormDate(e.target.value);
-                      setResultFormLotteryId('');
-                    }}
-                    className="mt-1 w-full bg-white/5 border border-border rounded px-2 py-1 text-[11px] focus:outline-none focus:ring-1 focus:ring-primary"
-                  />
-                ) : (
-                  <div className="mt-1 inline-flex items-center rounded px-2 py-1 text-[11px] font-mono bg-white/5 border border-border">
-                    {businessDayKey}
-                  </div>
-                )}
-              </div>
-              <div>
                 <label className="text-[10px] font-mono uppercase text-muted-foreground">Sorteo</label>
                 <select
                   value={resultFormLotteryId}
@@ -133,27 +144,36 @@ export function ResultsSection({
             <div className="grid grid-cols-3 gap-1.5">
               <input
                 type="text"
-                maxLength={(lotteryById.get(resultFormLotteryId)?.isFourDigits ? 4 : 2)}
+                data-result-field="first"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={maxResultDigits}
                 value={resultFormFirstPrize}
-                onChange={(e) => setResultFormFirstPrize(e.target.value.replace(/\D/g, ''))}
+                onChange={handleFirstPrizeChange}
                 className="w-full border border-yellow-400/50 bg-yellow-500/20 text-yellow-200 rounded px-1 py-1 text-xs font-black text-center focus:outline-none focus:ring-1 focus:ring-yellow-300"
-                placeholder={(lotteryById.get(resultFormLotteryId)?.isFourDigits ? '0000' : '00')}
+                placeholder={maxResultDigits === 4 ? '0000' : '00'}
               />
               <input
                 type="text"
-                maxLength={(lotteryById.get(resultFormLotteryId)?.isFourDigits ? 4 : 2)}
+                data-result-field="second"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={maxResultDigits}
                 value={resultFormSecondPrize}
-                onChange={(e) => setResultFormSecondPrize(e.target.value.replace(/\D/g, ''))}
+                onChange={handleSecondPrizeChange}
                 className="w-full border border-blue-400/50 bg-blue-500/20 text-blue-200 rounded px-1 py-1 text-xs font-black text-center focus:outline-none focus:ring-1 focus:ring-blue-300"
-                placeholder={(lotteryById.get(resultFormLotteryId)?.isFourDigits ? '0000' : '00')}
+                placeholder={maxResultDigits === 4 ? '0000' : '00'}
               />
               <input
                 type="text"
-                maxLength={(lotteryById.get(resultFormLotteryId)?.isFourDigits ? 4 : 2)}
+                data-result-field="third"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={maxResultDigits}
                 value={resultFormThirdPrize}
-                onChange={(e) => setResultFormThirdPrize(e.target.value.replace(/\D/g, ''))}
+                onChange={handleThirdPrizeChange}
                 className="w-full border border-orange-400/50 bg-orange-500/20 text-orange-200 rounded px-1 py-1 text-xs font-black text-center focus:outline-none focus:ring-1 focus:ring-orange-300"
-                placeholder={(lotteryById.get(resultFormLotteryId)?.isFourDigits ? '0000' : '00')}
+                placeholder={maxResultDigits === 4 ? '0000' : '00'}
               />
             </div>
 
@@ -172,7 +192,6 @@ export function ResultsSection({
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-border bg-white/5">
-                  <th className="p-1 text-[10px] font-mono uppercase text-muted-foreground">Fecha</th>
                   <th className="p-1 text-[10px] font-mono uppercase text-muted-foreground">Sorteo</th>
                   <th className="p-1 text-[10px] font-mono uppercase text-muted-foreground">1ro</th>
                   <th className="p-1 text-[10px] font-mono uppercase text-muted-foreground">2do</th>
@@ -182,23 +201,6 @@ export function ResultsSection({
               </thead>
               <tbody>
                 <tr className="border-b border-border/70">
-                  <td className="p-1 min-w-[92px]">
-                    {isCeoUser ? (
-                      <input
-                        type="date"
-                        value={resultFormDate}
-                        onChange={(e) => {
-                          setResultFormDate(e.target.value);
-                          setResultFormLotteryId('');
-                        }}
-                        className="w-28 bg-white/5 border border-border rounded px-1 py-0.5 text-[10px] focus:outline-none focus:ring-1 focus:ring-primary"
-                      />
-                    ) : (
-                      <div className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-mono bg-white/5 border border-border">
-                        {businessDayKey}
-                      </div>
-                    )}
-                  </td>
                   <td className="p-1 min-w-[168px]">
                     <select
                       value={resultFormLotteryId}
@@ -217,31 +219,40 @@ export function ResultsSection({
                   <td className="p-1 min-w-[58px]">
                     <input
                       type="text"
-                      maxLength={(lotteryById.get(resultFormLotteryId)?.isFourDigits ? 4 : 2)}
+                      data-result-field="first"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      maxLength={maxResultDigits}
                       value={resultFormFirstPrize}
-                      onChange={(e) => setResultFormFirstPrize(e.target.value.replace(/\D/g, ''))}
+                      onChange={handleFirstPrizeChange}
                       className="w-full border border-yellow-400/50 bg-yellow-500/20 text-yellow-200 rounded px-1 py-0.5 text-[11px] font-black text-center focus:outline-none focus:ring-1 focus:ring-yellow-300"
-                      placeholder={(lotteryById.get(resultFormLotteryId)?.isFourDigits ? '0000' : '00')}
+                      placeholder={maxResultDigits === 4 ? '0000' : '00'}
                     />
                   </td>
                   <td className="p-1 min-w-[58px]">
                     <input
                       type="text"
-                      maxLength={(lotteryById.get(resultFormLotteryId)?.isFourDigits ? 4 : 2)}
+                      data-result-field="second"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      maxLength={maxResultDigits}
                       value={resultFormSecondPrize}
-                      onChange={(e) => setResultFormSecondPrize(e.target.value.replace(/\D/g, ''))}
+                      onChange={handleSecondPrizeChange}
                       className="w-full border border-blue-400/50 bg-blue-500/20 text-blue-200 rounded px-1 py-0.5 text-[11px] font-black text-center focus:outline-none focus:ring-1 focus:ring-blue-300"
-                      placeholder={(lotteryById.get(resultFormLotteryId)?.isFourDigits ? '0000' : '00')}
+                      placeholder={maxResultDigits === 4 ? '0000' : '00'}
                     />
                   </td>
                   <td className="p-1 min-w-[58px]">
                     <input
                       type="text"
-                      maxLength={(lotteryById.get(resultFormLotteryId)?.isFourDigits ? 4 : 2)}
+                      data-result-field="third"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      maxLength={maxResultDigits}
                       value={resultFormThirdPrize}
-                      onChange={(e) => setResultFormThirdPrize(e.target.value.replace(/\D/g, ''))}
+                      onChange={handleThirdPrizeChange}
                       className="w-full border border-orange-400/50 bg-orange-500/20 text-orange-200 rounded px-1 py-0.5 text-[11px] font-black text-center focus:outline-none focus:ring-1 focus:ring-orange-300"
-                      placeholder={(lotteryById.get(resultFormLotteryId)?.isFourDigits ? '0000' : '00')}
+                      placeholder={maxResultDigits === 4 ? '0000' : '00'}
                     />
                   </td>
                   <td className="p-1 min-w-[82px] text-right">
@@ -276,14 +287,12 @@ export function ResultsSection({
             const stats = resultStatusMap.get(getResultKey(res));
             const isLoss = !!stats && stats.prizes > stats.sales && stats.prizes > 0;
             const hasWinners = !!stats && stats.hasWinners;
-            const statusTone = canManageResults
-              ? (isLoss ? 'loss' : (hasWinners ? 'winner' : 'neutral'))
-              : 'neutral';
+            const statusTone = isLoss ? 'loss' : (hasWinners ? 'winner' : 'neutral');
             const statusClasses = statusTone === 'loss'
               ? 'border-red-400/40 bg-red-500/10'
               : statusTone === 'winner'
                 ? 'border-emerald-400/40 bg-emerald-500/10'
-                : 'border-border bg-white/5';
+                : 'border-white/10 bg-[#0A0F1A]';
             const lotteryInfo = lotteryById.get(res.lotteryId);
 
             return (

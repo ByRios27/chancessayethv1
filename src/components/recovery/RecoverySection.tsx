@@ -1,6 +1,7 @@
 import React from 'react';
 import { format } from 'date-fns';
 import { motion } from 'motion/react';
+import { getTicketPrimaryLabel, getTicketSecondaryId } from '../../utils/tickets';
 
 type RecoverySectionProps = any;
 
@@ -151,7 +152,10 @@ export function RecoverySection(props: RecoverySectionProps) {
                 <div className="grid grid-cols-1 xl:grid-cols-12 gap-3 items-end">
                   <div className="xl:col-span-3">
                     <p className="text-[10px] font-mono uppercase text-muted-foreground">Ticket</p>
-                    <p className="text-xs font-black break-all">{ticket.id}</p>
+                    <p className="text-xs font-black break-all">{getTicketPrimaryLabel(ticket)}</p>
+                    {getTicketSecondaryId(ticket) && (
+                      <p className="text-[10px] font-mono text-muted-foreground">{getTicketSecondaryId(ticket)}</p>
+                    )}
                     <p className="text-[10px] font-mono text-muted-foreground mt-1">{ticket.source === 'tickets' ? 'LIVE' : `ARCHIVO ${ticket.archiveDate}`}</p>
                   </div>
                   <div className="xl:col-span-2">

@@ -36,7 +36,7 @@ export function useAppDataScopes({
   return useMemo(() => {
     const hasPrivilegedRole = userRole === 'ceo' || userRole === 'admin';
     const canAccessManagedUsersData =
-      canUseGlobalScope && (activeTab === 'users' || activeTab === 'liquidaciones' || activeTab === 'archivo');
+      canUseGlobalScope && (activeTab === 'users' || activeTab === 'liquidaciones' || activeTab === 'archivo' || activeTab === 'dashboard');
     const canAccessAllUsers =
       canAccessManagedUsersData || (canUseGlobalScope && showGlobalScope && (activeTab === 'stats' || activeTab === 'cierres'));
 
@@ -46,6 +46,7 @@ export function useAppDataScopes({
         activeTab === 'users' ||
         activeTab === 'liquidaciones' ||
         activeTab === 'archivo' ||
+        activeTab === 'dashboard' ||
         ((activeTab === 'stats' || activeTab === 'cierres') && showGlobalScope)
       );
 

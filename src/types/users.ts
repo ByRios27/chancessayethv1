@@ -6,6 +6,7 @@ export interface UserProfile {
   status: 'active' | 'inactive';
   canLiquidate?: boolean;
   currentDebt?: number;
+  requiresInjection?: boolean;
   sellerId?: string;
   preferredChancePrice?: number;
 }

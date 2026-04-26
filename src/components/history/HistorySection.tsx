@@ -3,6 +3,7 @@ import { motion } from 'motion/react';
 import { format } from 'date-fns';
 import { normalizePlainText } from '../../utils/text';
 import { unifyBets } from '../../utils/bets';
+import { getTicketPrimaryLabel, getTicketSecondaryId } from '../../utils/tickets';
 import { Edit2, History, Layers, Lock, Minus, Moon, Plus, Repeat, Ticket as TicketIcon, Trophy, XCircle } from 'lucide-react';
 
 type HistorySectionProps = any;
@@ -100,7 +101,7 @@ export function HistorySection(props: HistorySectionProps) {
                     <div className="flex items-center gap-3">
                       <h2 className="text-[10px] font-black text-white uppercase tracking-[0.2em]">RESUMEN DE VENTAS</h2>
                     </div>
-                    <div className="flex gap-1 bg-black/40 p-1 rounded-full border border-white/5 overflow-x-auto custom-scrollbar">
+                    <div className="flex gap-1 bg-[#0A0F1A]/90 p-1 rounded-full border border-white/10 overflow-x-auto custom-scrollbar">
                       {['TODO', 'CHANCE', 'BILLETE', 'PALE'].map((f) => (
                         <button
                           key={f}
@@ -137,10 +138,10 @@ export function HistorySection(props: HistorySectionProps) {
                     const isHardLoss = isLoss || (prizes || 0) > (sales || 0);
                     const isWinningPositive = !isHardLoss && hasPositivePrizes;
                     const cardToneClass = isHardLoss
-                      ? 'bg-red-900/20 border-red-900/50'
+                      ? 'bg-red-500/10 border-red-500/20'
                       : isWinningPositive
-                        ? 'bg-emerald-900/20 border-emerald-900/50'
-                        : 'bg-[#111827] border-gray-800';
+                        ? 'bg-green-500/10 border-green-500/20'
+                        : 'bg-[#0A0F1A] border-white/10';
 
                     return (
                       <div key={lot.id} className={`overflow-hidden rounded-xl border transition-all ${cardToneClass} group`}>
@@ -186,11 +187,11 @@ export function HistorySection(props: HistorySectionProps) {
                             </div>
                             <div className="flex flex-col items-end">
                               <span className="text-[8px] font-bold text-muted-foreground uppercase">Premios</span>
-                              <span className={`text-xs font-black ${hasPositivePrizes ? 'text-emerald-400' : 'text-white/80'}`}>${(prizes || 0).toFixed(2)}</span>
+                              <span className={`text-xs font-black ${hasPositivePrizes ? 'text-red-400' : 'text-white/80'}`}>${(prizes || 0).toFixed(2)}</span>
                             </div>
                             <div className="flex flex-col items-end">
                               <span className="text-[8px] font-bold text-muted-foreground uppercase">Utilidad</span>
-                              <span className={`text-xs font-black ${isHardLoss ? 'text-red-500' : 'text-green-500'}`}>${netProfit.toFixed(2)}</span>
+                              <span className={`text-xs font-black ${isHardLoss ? 'text-red-400' : 'text-green-400'}`}>${netProfit.toFixed(2)}</span>
                             </div>
                           </div>
                         </div>
@@ -200,21 +201,26 @@ export function HistorySection(props: HistorySectionProps) {
                             initial={{ height: 0, opacity: 0 }}
                             animate={{ height: 'auto', opacity: 1 }}
                             exit={{ height: 0, opacity: 0 }}
-                            className="overflow-hidden bg-black/30 border-t border-white/5"
+                            className="overflow-hidden bg-[#0A0F1A]/92 border-t border-white/10"
                           >
                                 <div className="space-y-3 p-4">
                                   {paginatedTickets.map(({ t: ticket }) => {
                                     const { totalPrize, winningBets } = getTicketPrizes(ticket, lot.name, historyTypeFilterCode);
 
                                     return (
-                                      <div key={ticket.id} className={`glass-card p-2 border-white/5 bg-white/[0.01] hover:bg-white/[0.03] transition-all relative overflow-hidden ${totalPrize > 0 ? 'ring-1 ring-green-500/30' : ''}`}>
+                                      <div key={ticket.id} className={`glass-card p-2 border-white/10 bg-[#0A0F1A]/92 hover:bg-[#111827] transition-all relative overflow-hidden ${totalPrize > 0 ? 'ring-1 ring-green-500/30' : ''}`}>
                                         {/* Header */}
                                         <div className="flex justify-between items-start mb-1">
                                           <div className="space-y-0.5">
                                             <div className="flex items-center gap-2">
                                               <h3 className="text-xs font-black tracking-tight text-white/90">
-                                                {ticket.id.slice(0, 8).toUpperCase()}
+                                                {getTicketPrimaryLabel(ticket)}
                                               </h3>
+                                              {getTicketSecondaryId(ticket) && (
+                                                <span className="text-[9px] font-mono text-muted-foreground">
+                                                  {getTicketSecondaryId(ticket)}
+                                                </span>
+                                              )}
                                               <span className="text-[9px] font-bold text-muted-foreground bg-white/5 px-1 rounded">
                                                 {ticket.sellerName || ticket.sellerCode || '---'}
                                               </span>
@@ -264,7 +270,9 @@ export function HistorySection(props: HistorySectionProps) {
                                                 <Moon className="w-2.5 h-2.5" />
                                                 <span>{ticket.timestamp?.toDate ? format(ticket.timestamp.toDate(), 'h:mm:ss a') : '...'}</span>
                                               </div>
-                                              <p className="uppercase tracking-tighter">TX: {ticket.id.toUpperCase()}</p>
+                                              {getTicketSecondaryId(ticket) && (
+                                                <p className="uppercase tracking-tighter">Ref: {getTicketSecondaryId(ticket)}</p>
+                                              )}
                                             </div>
                                           </div>
 
@@ -301,7 +309,7 @@ export function HistorySection(props: HistorySectionProps) {
                                               });
 
                                               return (
-                                                <div key={`${ticket.id}-${lot.id}-${b.type}-${b.number}-${i}`} className={`flex justify-center items-center px-1.5 py-1 rounded border transition-all ${hasWinningBet ? 'border-green-500/50 bg-green-500/20' : 'border-white/5 bg-black/40'}`}>
+                                                  <div key={`${ticket.id}-${lot.id}-${b.type}-${b.number}-${i}`} className={`flex justify-center items-center px-1.5 py-1 rounded border transition-all ${hasWinningBet ? 'border-green-500/50 bg-green-500/20' : 'border-white/10 bg-[#0A0F1A]/95'}`}>
                                                   <div className="flex items-center gap-1">
                                                     <span className="text-xs font-black text-white">{b.number}</span>
                                                     <span className="text-[9px] font-bold text-muted-foreground">x{b.quantity}</span>

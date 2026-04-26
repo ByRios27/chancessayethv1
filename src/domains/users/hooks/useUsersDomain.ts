@@ -2,6 +2,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { createUserWithEmailAndPassword, secondaryAuth, signOut } from '../../../firebase';
+import { logDailyAuditEvent } from '../../../services/repositories/auditLogsRepo';
 import { deleteUserProfile, reserveNextSellerId, saveUserProfile } from '../../../services/repositories/usersRepo';
 import type { UserProfile } from '../../../types/users';
 import { USERS_DOMAIN_SPEC, canExecuteUsersAction } from '../domainSpec';
@@ -17,6 +18,7 @@ interface UseUsersDomainParams {
   users: UserProfile[];
   userRole?: string;
   currentUserEmail?: string;
+  currentUserProfile?: UserProfile | null;
   editingUser: UserProfile | null;
   setEditingUser: (value: UserProfile | null) => void;
   setShowUserModal: (value: boolean) => void;
@@ -29,6 +31,7 @@ export function useUsersDomain({
   users,
   userRole,
   currentUserEmail,
+  currentUserProfile,
   editingUser,
   setEditingUser,
   setShowUserModal,
@@ -47,6 +50,18 @@ export function useUsersDomain({
 
     const rawEmail = userProfileData.email.toLowerCase();
     const authEmail = rawEmail.includes('@') ? rawEmail : `${rawEmail}@chancepro.local`;
+    const normalizedRole = (userRole || '').toLowerCase();
+    const targetRole = (userProfileData.role || '').toLowerCase();
+
+    if (normalizedRole === 'admin' && targetRole !== 'seller') {
+      toast.error('Admin solo puede gestionar usuarios vendedor');
+      return;
+    }
+
+    if (normalizedRole === 'admin' && editingUser && editingUser.role !== 'seller') {
+      toast.error('Admin solo puede editar perfiles vendedor');
+      return;
+    }
 
     if (userProfileData.role === 'admin') {
       const adminCount = users.filter(u => u.role === 'admin' && u.email !== authEmail).length;
@@ -106,6 +121,29 @@ export function useUsersDomain({
 
       if (editingUser?.email?.toLowerCase() === currentUserEmail?.toLowerCase()) {
         setUserProfile(cleanData as UserProfile);
+      }
+
+      if (normalizedRole === 'ceo' || normalizedRole === 'admin') {
+        await logDailyAuditEvent({
+          type: editingUser ? 'USER_UPDATED' : 'USER_CREATED',
+          actor: {
+            email: currentUserEmail,
+            sellerId: currentUserProfile?.sellerId,
+            name: currentUserProfile?.name,
+            role: normalizedRole,
+          },
+          target: {
+            email: normalizedFirestoreEmail,
+            sellerId: String(cleanData.sellerId || ''),
+            name: String(cleanData.name || ''),
+          },
+          details: {
+            updatedFields: Object.keys(cleanData),
+            targetRole: cleanData.role,
+          },
+        }).catch((error) => {
+          console.error('Daily audit log failed (users save):', error);
+        });
       }
 
       toast.success('Usuario guardado correctamente');
