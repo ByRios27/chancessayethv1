@@ -8,6 +8,18 @@ import {
   findLatestSettlementForUserDate,
 } from '../services/calculations/liquidation';
 
+const ZERO_BALANCE_EPSILON = 0.005;
+
+const getSettlementFinalBalance = (settlement: Settlement) => {
+  const balance = Number(settlement.finalBalance ?? settlement.newTotalDebt);
+  return Number.isFinite(balance) ? balance : null;
+};
+
+const hasLiveSettlementBalance = (settlement: Settlement) => {
+  const balance = getSettlementFinalBalance(settlement);
+  return balance === null || Math.abs(balance) > ZERO_BALANCE_EPSILON;
+};
+
 export function useLiquidation({
   businessDayKey,
   selectedUserToLiquidate,
@@ -130,7 +142,8 @@ export function useLiquidation({
       .filter((settlement) =>
         (settlement.userEmail || '').toLowerCase() === normalizedUserEmail &&
         !!settlement.date &&
-        settlement.date < liquidationDate
+        settlement.date < liquidationDate &&
+        hasLiveSettlementBalance(settlement)
       )
       .reduce((sum, settlement) => sum + Number(settlement.dailyInjectionTotal ?? settlement.totalInjections ?? 0), 0);
 

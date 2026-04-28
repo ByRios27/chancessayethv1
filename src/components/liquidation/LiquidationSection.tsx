@@ -49,7 +49,6 @@ const hasDailyMovement = (summary: any) => (
 
 export function LiquidationSection(props: LiquidationSectionProps) {
   const {
-    isPrimaryCeoUser,
     setConsolidatedMode,
     consolidatedMode,
     consolidatedReportDate,
@@ -80,9 +79,9 @@ export function LiquidationSection(props: LiquidationSectionProps) {
     downloadDataUrlFile,
   } = props;
 
-  const canAccessDomain = canAccessLiquidationDomain(userProfile?.role, userProfile?.canLiquidate);
-  const canGenerateConsolidated = isPrimaryCeoUser;
   const canManageDailyLiquidation = userProfile?.role === 'ceo' || userProfile?.role === 'admin';
+  const canAccessDomain = canAccessLiquidationDomain(userProfile?.role, userProfile?.canLiquidate);
+  const canGenerateConsolidated = canManageDailyLiquidation;
   const isSeller = userProfile?.role === 'seller';
 
   const userToLiquidate = liquidationPreview?.userToLiquidate;
@@ -219,42 +218,13 @@ export function LiquidationSection(props: LiquidationSectionProps) {
         </section>
       )}
 
-      <section className="rounded-md border border-white/10 bg-white/[0.018] p-1.5">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <label className="inline-flex h-8 min-w-[145px] items-center gap-1.5 px-1">
-            <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
-            <input
-              type="date"
-              value={liquidationDate}
-              onChange={(event) => setLiquidationDate(event.target.value)}
-              className="h-8 min-w-0 flex-1 border-0 bg-transparent p-0 font-mono text-[11px] text-white [box-shadow:none] [outline:none]"
-            />
-          </label>
-
-          {canManageDailyLiquidation ? (
-            <select
-              value={selectedUserToLiquidate || ''}
-              onChange={(event) => setSelectedUserToLiquidate(event.target.value)}
-              className="h-8 min-w-[190px] flex-1 rounded-md border border-white/10 bg-black/25 px-2 text-xs font-bold text-white outline-none focus:border-white/20"
-            >
-              <option value="">Seleccionar vendedor</option>
-              {sellerOptions.map((row: any) => {
-                const user = row.user;
-                const label = `${row.status === 'liquidated' ? '✓ ' : ''}${user.sellerId || user.email?.split('@')[0]} - ${user.name || user.email}`;
-                return (
-                  <option key={user.email} value={user.email}>
-                    {label}
-                  </option>
-                );
-              })}
-            </select>
-          ) : (
-            <span className="h-8 rounded-md border border-white/10 bg-black/25 px-2 text-[9px] font-black uppercase tracking-widest text-white inline-flex items-center">
-              Tu cierre
-            </span>
-          )}
-
-          {canGenerateConsolidated && (
+      {canGenerateConsolidated && (
+        <section className="rounded-md border border-primary/20 bg-primary/[0.04] p-1.5">
+          <div className="flex flex-wrap items-center justify-between gap-1.5">
+            <div className="min-w-0">
+              <p className="text-[9px] font-black uppercase tracking-widest text-primary">Consolidado general</p>
+              <p className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground">Todos los usuarios por fecha o rango</p>
+            </div>
             <button
               type="button"
               onClick={generateConsolidatedReport}
@@ -263,20 +233,18 @@ export function LiquidationSection(props: LiquidationSectionProps) {
                 (consolidatedMode === 'day' && !consolidatedReportDate) ||
                 (consolidatedMode === 'range' && (!consolidatedStartDate || !consolidatedEndDate))
               }
-              title="Descargar consolidado"
-              aria-label="Descargar consolidado"
+              title="Descargar consolidado general"
+              aria-label="Descargar consolidado general"
               className="h-8 rounded-md border border-primary/25 bg-primary/10 px-2 text-[8px] font-black uppercase tracking-widest text-primary transition-all hover:bg-primary/15 active:scale-95 disabled:cursor-not-allowed disabled:opacity-45 inline-flex items-center gap-1.5"
             >
               <Download className="h-3 w-3" />
-              {isGeneratingYesterdayReport ? 'PDF' : 'Consolidado'}
+              {isGeneratingYesterdayReport ? 'PDF' : 'Descargar'}
             </button>
-          )}
-        </div>
+          </div>
 
-        {canGenerateConsolidated && (
           <details className="mt-1.5 rounded-md border border-white/10 bg-black/20 px-2 py-1">
             <summary className="cursor-pointer text-[8px] font-black uppercase tracking-widest text-muted-foreground">
-              Opciones de consolidado
+              Fecha/rango del consolidado
             </summary>
             <div className="mt-1.5 grid grid-cols-1 gap-1.5 sm:grid-cols-[120px_1fr]">
               <div className="grid grid-cols-2 gap-1">
@@ -324,7 +292,44 @@ export function LiquidationSection(props: LiquidationSectionProps) {
               )}
             </div>
           </details>
-        )}
+        </section>
+      )}
+
+      <section className="rounded-md border border-white/10 bg-white/[0.018] p-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <label className="inline-flex h-8 min-w-[145px] items-center gap-1.5 px-1">
+            <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
+            <input
+              type="date"
+              value={liquidationDate}
+              onChange={(event) => setLiquidationDate(event.target.value)}
+              className="h-8 min-w-0 flex-1 border-0 bg-transparent p-0 font-mono text-[11px] text-white [box-shadow:none] [outline:none]"
+            />
+          </label>
+
+          {canManageDailyLiquidation ? (
+            <select
+              value={selectedUserToLiquidate || ''}
+              onChange={(event) => setSelectedUserToLiquidate(event.target.value)}
+              className="h-8 min-w-[190px] flex-1 rounded-md border border-white/10 bg-black/25 px-2 text-xs font-bold text-white outline-none focus:border-white/20"
+            >
+              <option value="">Seleccionar vendedor</option>
+              {sellerOptions.map((row: any) => {
+                const user = row.user;
+                const label = `${row.status === 'liquidated' ? '✓ ' : ''}${user.sellerId || user.email?.split('@')[0]} - ${user.name || user.email}`;
+                return (
+                  <option key={user.email} value={user.email}>
+                    {label}
+                  </option>
+                );
+              })}
+            </select>
+          ) : (
+            <span className="h-8 rounded-md border border-white/10 bg-black/25 px-2 text-[9px] font-black uppercase tracking-widest text-white inline-flex items-center">
+              Tu cierre
+            </span>
+          )}
+        </div>
 
         {liquidationDate !== businessDayKey && isLiquidationDataLoading && (
           <p className="mt-1 text-[8px] font-mono uppercase tracking-widest text-muted-foreground">Cargando historico...</p>

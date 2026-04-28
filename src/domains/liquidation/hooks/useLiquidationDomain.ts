@@ -30,7 +30,6 @@ export function useLiquidationDomain(params: any) {
     results,
     settlements,
     userProfile,
-    isPrimaryCeoUser,
     getQuickOperationalDate,
     recentOperationalDates,
     getBusinessDayRange,
@@ -335,8 +334,10 @@ export function useLiquidationDomain(params: any) {
   };
 
   const generateConsolidatedReport = async () => {
-    if (!isPrimaryCeoUser) {
-      toast.error('Solo el CEO propietario puede generar este reporte');
+    const canGenerateConsolidatedReport = ['ceo', 'admin'].includes(String(userProfile?.role || '').toLowerCase());
+
+    if (!canGenerateConsolidatedReport) {
+      toast.error('Solo CEO o admin puede generar este reporte');
       return;
     }
 
