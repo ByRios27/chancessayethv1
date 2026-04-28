@@ -5,7 +5,7 @@ export const LIQUIDATION_DOMAIN_SPEC = {
   primaryAction: 'liquidateDailyBalance',
   secondaryActions: ['updatePaymentAmount', 'viewSellerSummary', 'generateConsolidatedReport'],
   prohibitedActions: ['manageUsers', 'manageLotteries', 'editArchiveData'],
-  allowedRoles: ['ceo', 'admin'] as const,
+  allowedRoles: ['ceo', 'admin', 'seller'] as const,
   emptyStates: {
     noUserSelected: 'Seleccione un usuario para liquidar.',
     noDataAvailable: 'No hay datos disponibles para liquidar en la fecha seleccionada.',
@@ -22,6 +22,7 @@ export const LIQUIDATION_DOMAIN_SPEC = {
 
 export const canAccessLiquidationDomain = (role?: string | null, canLiquidate?: boolean) => {
   if (!role) return false;
+  if (role === 'seller') return true;
   if ((LIQUIDATION_DOMAIN_SPEC.allowedRoles as readonly string[]).includes(role)) return true;
   return !!canLiquidate;
 };

@@ -1,10 +1,51 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { motion } from 'motion/react';
-import { Share2 } from 'lucide-react';
+import { CalendarDays, CheckCircle2, Download, Share2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { canAccessLiquidationDomain } from '../../domains/liquidation/domainSpec';
 
 type LiquidationSectionProps = any;
+
+const formatCurrency = (value?: number) => `USD ${Number(value || 0).toFixed(2)}`;
+const formatSignedCurrency = (value?: number) => {
+  const amount = Number(value || 0);
+  return `${amount < 0 ? '-' : ''}USD ${Math.abs(amount).toFixed(2)}`;
+};
+const formatAmount = (value?: number) => Number(value || 0).toFixed(2);
+
+const getOperationalProfit = (summary: any) => Number(summary?.operationalProfit ?? summary?.netProfit ?? 0);
+
+const getResultTone = (value: number) => {
+  if (value > 0) return 'text-emerald-300';
+  if (value < 0) return 'text-red-500';
+  return 'text-slate-200';
+};
+
+const getBalanceDirection = (value: number) => {
+  if (value > 0) return {
+    label: 'Ganancia',
+    tone: 'text-emerald-300',
+    box: 'border-emerald-400/25 bg-emerald-500/10',
+  };
+  if (value < 0) return {
+    label: 'Perdida',
+    tone: 'text-red-500',
+    box: 'border-red-500/30 bg-red-500/10',
+  };
+  return {
+    label: 'Sin Datos',
+    tone: 'text-slate-200',
+    box: 'border-white/10 bg-white/[0.04]',
+  };
+};
+
+const hasDailyMovement = (summary: any) => (
+  Math.abs(Number(summary?.totalSales || 0)) > 0 ||
+  Math.abs(Number(summary?.totalPrizes || 0)) > 0 ||
+  Math.abs(Number(summary?.totalCommissions || 0)) > 0 ||
+  Math.abs(Number(summary?.totalInjections || 0)) > 0 ||
+  Math.abs(getOperationalProfit(summary)) > 0
+);
 
 export function LiquidationSection(props: LiquidationSectionProps) {
   const {
@@ -17,30 +58,144 @@ export function LiquidationSection(props: LiquidationSectionProps) {
     setConsolidatedEndDate,
     consolidatedStartDate,
     consolidatedEndDate,
-    recentOperationalDates,
     generateConsolidatedReport,
     isGeneratingYesterdayReport,
     liquidationDate,
     setLiquidationDate,
-    applyOperationalQuickDate,
-    liquidacionQuickDateOptions,
     businessDayKey,
     isLiquidationDataLoading,
     userProfile,
     selectedUserToLiquidate,
     setSelectedUserToLiquidate,
-    users,
     selectedLiquidationSettlement,
+    liquidationGlobalSummary,
+    liquidationUserSummaries = [],
     amountPaid,
     setAmountPaid,
+    amountDirection = 'received',
+    setAmountDirection,
     handleLiquidate,
     liquidationPreview,
     shareImageDataUrl,
     downloadDataUrlFile,
   } = props;
+
   const canAccessDomain = canAccessLiquidationDomain(userProfile?.role, userProfile?.canLiquidate);
   const canGenerateConsolidated = isPrimaryCeoUser;
-  const canManageDailyLiquidation = canAccessDomain;
+  const canManageDailyLiquidation = userProfile?.role === 'ceo' || userProfile?.role === 'admin';
+  const isSeller = userProfile?.role === 'seller';
+
+  const userToLiquidate = liquidationPreview?.userToLiquidate;
+  const summary = liquidationPreview?.financialSummary;
+  const hasReport = !!summary && (!!selectedUserToLiquidate || !!userToLiquidate?.email || isSeller);
+  const isClosed = !!selectedLiquidationSettlement;
+
+  const globalOperationalProfit = getOperationalProfit(liquidationGlobalSummary);
+  const operationalProfit = getOperationalProfit(summary);
+  const dailyInjectionTotal = Number(summary?.totalInjections || 0);
+  const previewInjectionTotal = Number(
+    liquidationPreview?.previousInjectionTotal ??
+    0
+  );
+  const previousBalance = Number(
+    liquidationPreview?.previousDebt ??
+    selectedLiquidationSettlement?.previousBalance ??
+    selectedLiquidationSettlement?.previousDebt ??
+    userToLiquidate?.currentDebt ??
+    0
+  );
+  const amountEntered = Number(amountPaid) || 0;
+  const amountMovementLabel = amountDirection === 'sent' ? 'Monto enviado' : 'Monto recibido';
+  const dailyInjectionUtilityTotal = operationalProfit + dailyInjectionTotal;
+  const finalBalance = Number(
+    liquidationPreview?.newTotalDebt ??
+    (previousBalance + operationalProfit + dailyInjectionTotal + (amountDirection === 'sent' ? amountEntered : -amountEntered))
+  );
+  const resultDirection = getBalanceDirection(operationalProfit);
+  const finalDirection = getBalanceDirection(finalBalance);
+
+  const sellerOptions = useMemo(() => {
+    return (liquidationUserSummaries || [])
+      .filter((row: any) => {
+        const user = row?.user;
+        if (!user?.email) return false;
+        return user.role === 'seller' || !!user.sellerId || hasDailyMovement(row.summary);
+      })
+      .sort((a: any, b: any) => {
+        const aClosed = a.status === 'liquidated' ? 1 : 0;
+        const bClosed = b.status === 'liquidated' ? 1 : 0;
+        if (aClosed !== bClosed) return aClosed - bClosed;
+        return String(a.user.sellerId || a.user.name || a.user.email).localeCompare(
+          String(b.user.sellerId || b.user.name || b.user.email)
+        );
+      });
+  }, [liquidationUserSummaries]);
+
+  const globalSummaryItems = [
+    { label: 'Ventas totales', value: formatAmount(liquidationGlobalSummary?.totalSales), tone: 'text-white' },
+    { label: 'Premios pagados', value: formatAmount(liquidationGlobalSummary?.totalPrizes), tone: 'text-red-300' },
+    { label: 'Comisiones', value: formatAmount(liquidationGlobalSummary?.totalCommissions), tone: 'text-amber-300' },
+    { label: 'utilidad total', value: formatAmount(globalOperationalProfit), tone: getResultTone(globalOperationalProfit) },
+    { label: 'Inyecciones', value: formatAmount(liquidationGlobalSummary?.totalInjections), tone: 'text-sky-300' },
+  ];
+
+  const dayRows = [
+    { label: 'Ventas del dia', value: formatCurrency(summary?.totalSales), tone: 'text-white' },
+    { label: 'Premios del dia', value: formatCurrency(summary?.totalPrizes), tone: 'text-red-300' },
+    { label: 'Comision del dia', value: formatCurrency(summary?.totalCommissions), tone: 'text-amber-300' },
+    { label: 'Inyecciones Recibidas', value: formatCurrency(dailyInjectionTotal), tone: 'text-sky-300' },
+    { label: 'Utilidad', value: formatSignedCurrency(operationalProfit), tone: getResultTone(operationalProfit) },
+    { label: 'Total inyeccion/utilidad', value: formatSignedCurrency(dailyInjectionUtilityTotal), tone: 'text-orange-400', emphasis: true, nowrap: true },
+  ];
+
+  const balanceRows = [
+    { label: 'Inyecciones anteriores', value: formatCurrency(previewInjectionTotal), tone: 'text-sky-300' },
+    { label: 'Saldo anterior', value: formatCurrency(previousBalance), tone: previousBalance >= 0 ? 'text-amber-300' : 'text-emerald-300' },
+    { label: amountMovementLabel, value: formatCurrency(amountEntered), tone: amountDirection === 'sent' ? 'text-sky-300' : 'text-white' },
+    { label: 'Saldo final', value: formatCurrency(finalBalance), tone: 'text-orange-400', emphasis: true },
+  ];
+
+  const handleShareReport = async () => {
+    const reportEl = document.getElementById('liquidation-report');
+    if (!reportEl || !hasReport) return;
+
+    const toastId = toast.loading('Generando reporte...');
+    try {
+      await document.fonts.ready;
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const lib = await import('html-to-image');
+      const dataUrl = await lib.toPng(reportEl, {
+        backgroundColor: '#0f172a',
+        pixelRatio: 2,
+        style: {
+          transform: 'scale(1)',
+          transformOrigin: 'top left',
+        },
+      });
+
+      const fileName = `Cierre-${userToLiquidate?.name || 'Usuario'}-${liquidationDate}.png`;
+      const shared = await shareImageDataUrl({
+        dataUrl,
+        fileName,
+        title: 'Cierre de caja',
+        text: `Cierre de ${userToLiquidate?.name || 'Usuario'} para ${liquidationDate}`,
+        dialogTitle: 'Compartir cierre',
+      });
+
+      if (shared) {
+        toast.success('Reporte compartido', { id: toastId });
+      } else {
+        downloadDataUrlFile(dataUrl, fileName);
+        toast.info('Imagen descargada para envio manual', { id: toastId });
+      }
+    } catch (error) {
+      console.error('Error generating report:', error);
+      toast.error('Error al generar el reporte', { id: toastId });
+    }
+  };
+
+  if (!canAccessDomain) return null;
 
   return (
     <motion.div
@@ -48,27 +203,94 @@ export function LiquidationSection(props: LiquidationSectionProps) {
       initial={{ opacity: 0, x: -20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: 20 }}
-      className="space-y-8"
+      className="space-y-2"
     >
-      <div className="glass-card p-4 sm:p-6 md:p-10">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-10 gap-6">
-          <div>
-            <h2 className="text-2xl font-black italic tracking-tighter neon-text uppercase">LIQUIDACIONES</h2>
-            <p className="text-xs font-mono text-muted-foreground mt-1 uppercase tracking-widest">Cierre de caja y reporte de ventas</p>
+      {canManageDailyLiquidation && (
+        <section className="mx-auto max-w-4xl rounded-md border border-white/10 bg-white/[0.018] px-2 py-1 text-center">
+          <div className="flex flex-wrap justify-center gap-x-2 gap-y-0.5 text-[10px] leading-5">
+            {globalSummaryItems.map((item, index) => (
+              <span key={item.label} className="whitespace-nowrap">
+                {index > 0 && <span className="mr-2 text-muted-foreground/60">.</span>}
+                <span className="font-mono uppercase text-muted-foreground">{item.label}</span>{' '}
+                <span className={`font-black ${item.tone}`}>{item.value}</span>
+              </span>
+            ))}
           </div>
+        </section>
+      )}
+
+      <section className="rounded-md border border-white/10 bg-white/[0.018] p-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <label className="inline-flex h-8 min-w-[145px] items-center gap-1.5 px-1">
+            <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
+            <input
+              type="date"
+              value={liquidationDate}
+              onChange={(event) => setLiquidationDate(event.target.value)}
+              className="h-8 min-w-0 flex-1 border-0 bg-transparent p-0 font-mono text-[11px] text-white [box-shadow:none] [outline:none]"
+            />
+          </label>
+
+          {canManageDailyLiquidation ? (
+            <select
+              value={selectedUserToLiquidate || ''}
+              onChange={(event) => setSelectedUserToLiquidate(event.target.value)}
+              className="h-8 min-w-[190px] flex-1 rounded-md border border-white/10 bg-black/25 px-2 text-xs font-bold text-white outline-none focus:border-white/20"
+            >
+              <option value="">Seleccionar vendedor</option>
+              {sellerOptions.map((row: any) => {
+                const user = row.user;
+                const label = `${row.status === 'liquidated' ? '✓ ' : ''}${user.sellerId || user.email?.split('@')[0]} - ${user.name || user.email}`;
+                return (
+                  <option key={user.email} value={user.email}>
+                    {label}
+                  </option>
+                );
+              })}
+            </select>
+          ) : (
+            <span className="h-8 rounded-md border border-white/10 bg-black/25 px-2 text-[9px] font-black uppercase tracking-widest text-white inline-flex items-center">
+              Tu cierre
+            </span>
+          )}
+
           {canGenerateConsolidated && (
-            // TODO(remodel): split this block into its own "Ver consolidado" section in next visual phase.
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
-              <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={generateConsolidatedReport}
+              disabled={
+                isGeneratingYesterdayReport ||
+                (consolidatedMode === 'day' && !consolidatedReportDate) ||
+                (consolidatedMode === 'range' && (!consolidatedStartDate || !consolidatedEndDate))
+              }
+              title="Descargar consolidado"
+              aria-label="Descargar consolidado"
+              className="h-8 rounded-md border border-primary/25 bg-primary/10 px-2 text-[8px] font-black uppercase tracking-widest text-primary transition-all hover:bg-primary/15 active:scale-95 disabled:cursor-not-allowed disabled:opacity-45 inline-flex items-center gap-1.5"
+            >
+              <Download className="h-3 w-3" />
+              {isGeneratingYesterdayReport ? 'PDF' : 'Consolidado'}
+            </button>
+          )}
+        </div>
+
+        {canGenerateConsolidated && (
+          <details className="mt-1.5 rounded-md border border-white/10 bg-black/20 px-2 py-1">
+            <summary className="cursor-pointer text-[8px] font-black uppercase tracking-widest text-muted-foreground">
+              Opciones de consolidado
+            </summary>
+            <div className="mt-1.5 grid grid-cols-1 gap-1.5 sm:grid-cols-[120px_1fr]">
+              <div className="grid grid-cols-2 gap-1">
                 <button
+                  type="button"
                   onClick={() => setConsolidatedMode('day')}
-                  className={`px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${consolidatedMode === 'day' ? 'bg-primary text-primary-foreground' : 'bg-white/5 text-muted-foreground'}`}
+                  className={`h-7 rounded text-[8px] font-black uppercase tracking-widest transition-all active:scale-95 ${consolidatedMode === 'day' ? 'bg-primary text-primary-foreground' : 'bg-white/[0.05] text-muted-foreground'}`}
                 >
-                  Un Día
+                  Dia
                 </button>
                 <button
+                  type="button"
                   onClick={() => setConsolidatedMode('range')}
-                  className={`px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${consolidatedMode === 'range' ? 'bg-primary text-primary-foreground' : 'bg-white/5 text-muted-foreground'}`}
+                  className={`h-7 rounded text-[8px] font-black uppercase tracking-widest transition-all active:scale-95 ${consolidatedMode === 'range' ? 'bg-primary text-primary-foreground' : 'bg-white/[0.05] text-muted-foreground'}`}
                 >
                   Rango
                 </button>
@@ -77,280 +299,149 @@ export function LiquidationSection(props: LiquidationSectionProps) {
                 <input
                   type="date"
                   value={consolidatedReportDate}
-                  onChange={(e) => {
-                    setConsolidatedReportDate(e.target.value);
-                    setConsolidatedStartDate(e.target.value);
-                    setConsolidatedEndDate(e.target.value);
+                  onChange={(event) => {
+                    setConsolidatedReportDate(event.target.value);
+                    setConsolidatedStartDate(event.target.value);
+                    setConsolidatedEndDate(event.target.value);
                   }}
-                  className="bg-black border border-border p-3 rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all"
+                  className="h-7 w-full rounded border border-white/10 bg-black/35 px-2 font-mono text-[11px] outline-none"
                 />
               ) : (
-                <div className="flex flex-col sm:flex-row gap-2">
+                <div className="grid grid-cols-2 gap-1.5">
                   <input
                     type="date"
                     value={consolidatedStartDate}
-                    onChange={(e) => setConsolidatedStartDate(e.target.value)}
-                    className="bg-black border border-border p-3 rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all"
+                    onChange={(event) => setConsolidatedStartDate(event.target.value)}
+                    className="h-7 w-full rounded border border-white/10 bg-black/35 px-2 font-mono text-[11px] outline-none"
                   />
                   <input
                     type="date"
                     value={consolidatedEndDate}
-                    onChange={(e) => setConsolidatedEndDate(e.target.value)}
-                    className="bg-black border border-border p-3 rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all"
+                    onChange={(event) => setConsolidatedEndDate(event.target.value)}
+                    className="h-7 w-full rounded border border-white/10 bg-black/35 px-2 font-mono text-[11px] outline-none"
                   />
                 </div>
               )}
-              <select
-                value={consolidatedMode === 'day' ? consolidatedReportDate : consolidatedEndDate}
-                onChange={(e) => {
-                  if (consolidatedMode === 'day') {
-                    setConsolidatedReportDate(e.target.value);
-                  } else {
-                    setConsolidatedEndDate(e.target.value);
-                  }
-                }}
-                className="bg-black border border-border p-3 rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all"
-              >
-                {recentOperationalDates.map((dateValue: string) => (
-                  <option key={`consolidated-${dateValue}`} value={dateValue} className="bg-gray-900">{dateValue}</option>
-                ))}
-              </select>
-              <button
-                onClick={generateConsolidatedReport}
-                disabled={
-                  isGeneratingYesterdayReport ||
-                  (consolidatedMode === 'day' && !consolidatedReportDate) ||
-                  (consolidatedMode === 'range' && (!consolidatedStartDate || !consolidatedEndDate))
-                }
-                className="bg-primary text-primary-foreground font-black uppercase tracking-widest px-4 py-3 rounded-xl hover:brightness-110 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {isGeneratingYesterdayReport ? 'Generando PDF...' : 'Descargar Consolidado'}
-              </button>
             </div>
-          )}
-        </div>
+          </details>
+        )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-1 space-y-6">
-            <div className="space-y-2">
-              <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Fecha de Liquidación</label>
-              <input
-                type="date"
-                value={liquidationDate}
-                onChange={(e) => setLiquidationDate(e.target.value)}
-                className="w-full bg-black border border-border p-3 rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all"
-              />
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => applyOperationalQuickDate(setLiquidationDate, 0)}
-                  className="px-2 py-1 rounded-md bg-white/5 text-[10px] font-black uppercase tracking-widest"
-                >
-                  Hoy
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyOperationalQuickDate(setLiquidationDate, -1)}
-                  className="px-2 py-1 rounded-md bg-white/5 text-[10px] font-black uppercase tracking-widest"
-                >
-                  Ayer
-                </button>
-              </div>
-              <select
-                value={liquidationDate}
-                onChange={(e) => setLiquidationDate(e.target.value)}
-                className="w-full bg-black border border-border p-3 rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all"
-              >
-                {liquidacionQuickDateOptions.map((option: any) => (
-                  <option key={`liq-${option.value}`} value={option.value} className="bg-gray-900">{option.label}</option>
-                ))}
-              </select>
-              {liquidationDate !== businessDayKey && isLiquidationDataLoading && (
-                <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Cargando datos históricos...</p>
-              )}
+        {liquidationDate !== businessDayKey && isLiquidationDataLoading && (
+          <p className="mt-1 text-[8px] font-mono uppercase tracking-widest text-muted-foreground">Cargando historico...</p>
+        )}
+      </section>
+
+      {hasReport ? (
+        <article id="liquidation-report" className="rounded-lg border border-white/10 bg-black p-2.5">
+          <div className="flex items-start justify-between gap-2 border-b border-white/10 pb-2">
+            <div className="min-w-0">
+              <p className="text-[8px] font-mono uppercase tracking-widest text-muted-foreground">{liquidationDate}</p>
+              <p className="truncate text-sm font-black text-white">{userToLiquidate?.name || userToLiquidate?.email}</p>
+              <p className="text-[9px] font-mono uppercase text-muted-foreground">{userToLiquidate?.sellerId || 'SIN ID'}</p>
             </div>
-
-            {canManageDailyLiquidation ? (
-              <div className="space-y-2">
-                <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Seleccionar Usuario</label>
-                <select
-                  value={selectedUserToLiquidate}
-                  onChange={(e) => setSelectedUserToLiquidate(e.target.value)}
-                  className="w-full bg-black border border-border p-3 rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all"
-                >
-                  <option key="default" value="" className="bg-gray-900">Seleccionar...</option>
-                  {users.filter((u: any) => {
-                    if (!u || !u.email || !u.name || u.name.trim() === '') return false;
-                    if (userProfile?.role === 'ceo' || userProfile?.role === 'admin') return true;
-                    return u.email === userProfile?.email;
-                  }).map((u: any, i: number) => (
-                    <option key={u.email || `liq-${i}`} value={u.email} className="bg-gray-900">{u.name} ({u.email?.split('@')[0] || ''})</option>
-                  ))}
-                </select>
-              </div>
-            ) : (
-              <div className="bg-white/5 p-4 rounded-xl border border-white/10">
-                <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Usuario</p>
-                <p className="text-sm font-bold text-white">{userProfile?.name}</p>
-              </div>
+            {isClosed && (
+              <span className="shrink-0 rounded border border-emerald-400/30 bg-emerald-500/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-emerald-300 inline-flex items-center gap-1">
+                <CheckCircle2 className="h-3 w-3" />
+                Cerrado
+              </span>
             )}
+          </div>
 
-            {selectedUserToLiquidate && canManageDailyLiquidation && (
-              <>
-                {selectedLiquidationSettlement && (
-                  <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-emerald-300">
-                      LIQUIDADO
-                    </p>
-                    <p className="text-[10px] font-mono text-emerald-200">
-                      Monto registrado: USD {(selectedLiquidationSettlement.amountPaid || 0).toFixed(2)}
-                    </p>
-                  </div>
-                )}
-                <div className="space-y-2">
-                  <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Monto Entregado (USD)</label>
-                  <input
-                    type="number"
-                    value={amountPaid === 'NaN' ? '' : amountPaid}
-                    onChange={(e) => setAmountPaid(e.target.value)}
-                    placeholder="Ej: 150.00"
-                    className="w-full bg-white/5 border border-border p-3 rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary transition-all"
-                  />
+          <section className={`mt-2 rounded-md border px-2 py-1.5 ${resultDirection.box}`}>
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <p className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground">Resultado del dia</p>
+                <p className={`text-[11px] font-black uppercase tracking-widest ${resultDirection.tone}`}>{resultDirection.label}</p>
+              </div>
+              <span className={`text-lg font-black ${resultDirection.tone}`}>{formatSignedCurrency(operationalProfit)}</span>
+            </div>
+          </section>
+
+          <div className="mt-2 grid grid-cols-1 gap-2 lg:grid-cols-2">
+            <section className="rounded-md border border-white/10 bg-white/[0.025]">
+              <div className="border-b border-white/10 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-white">
+                Cierre del dia
+              </div>
+              {dayRows.map((row) => (
+                <div key={row.label} className={`flex items-center justify-between gap-2 border-b border-white/10 px-2 py-1.5 last:border-b-0 ${row.emphasis ? 'bg-white/[0.035]' : ''} ${row.nowrap ? 'min-w-0' : ''}`}>
+                  <span className={`font-mono uppercase tracking-widest ${row.emphasis ? 'text-[11px] font-black text-white' : 'text-[10px] text-muted-foreground'} ${row.nowrap ? 'min-w-0 flex-1 truncate whitespace-nowrap text-[9px] tracking-normal sm:text-[11px] sm:tracking-widest' : ''}`}>{row.label}</span>
+                  <span className={`${row.emphasis ? 'text-sm' : 'text-xs'} font-black ${row.tone} ${row.nowrap ? 'shrink-0 whitespace-nowrap text-xs sm:text-sm' : ''}`}>{row.value}</span>
                 </div>
+              ))}
+            </section>
 
+            <section className="rounded-md border border-white/10 bg-white/[0.025]">
+              <div className="border-b border-white/10 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-white">
+                Saldos
+              </div>
+              {balanceRows.map((row) => (
+                <div key={row.label} className={`flex items-center justify-between gap-2 border-b border-white/10 px-2 py-1.5 last:border-b-0 ${row.emphasis ? 'bg-white/[0.035]' : ''}`}>
+                  <span className={`font-mono uppercase tracking-widest ${row.emphasis ? 'text-[11px] font-black text-white' : 'text-[10px] text-muted-foreground'}`}>{row.label}</span>
+                  <span className={`${row.emphasis ? 'text-sm' : 'text-xs'} font-black ${row.tone}`}>{row.value}</span>
+                </div>
+              ))}
+            </section>
+          </div>
+
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={handleShareReport}
+              className="h-8 rounded-md border border-white/10 bg-white/[0.06] px-2 text-[8px] font-black uppercase tracking-widest text-white transition-all hover:bg-white/[0.1] active:scale-95 inline-flex items-center gap-1.5"
+            >
+              <Share2 className="h-3 w-3" />
+              Compartir
+            </button>
+            {canManageDailyLiquidation && (
+              <>
+                <div className="grid h-8 grid-cols-2 rounded-md border border-white/10 bg-black/35 p-0.5">
+                  {(['received', 'sent'] as const).map((direction) => (
+                    <button
+                      key={direction}
+                      type="button"
+                      onClick={() => setAmountDirection(direction)}
+                      className={`rounded px-2 text-[8px] font-black uppercase tracking-widest transition-all active:scale-95 ${
+                        amountDirection === direction
+                          ? 'bg-primary text-primary-foreground'
+                          : 'text-muted-foreground hover:bg-white/[0.06]'
+                      }`}
+                    >
+                      {direction === 'received' ? 'Recibido' : 'Enviado'}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="number"
+                  value={amountPaid === 'NaN' ? '' : amountPaid}
+                  onChange={(event) => setAmountPaid(event.target.value)}
+                  placeholder={amountMovementLabel}
+                  className="h-8 min-w-[128px] flex-1 rounded-md border border-white/10 bg-black/35 px-2 font-mono text-[11px] outline-none focus:ring-2 focus:ring-primary/60"
+                />
                 <button
+                  type="button"
                   onClick={handleLiquidate}
-                  className="w-full bg-primary text-primary-foreground font-black uppercase tracking-widest py-4 rounded-xl hover:brightness-110 transition-all mt-6 shadow-lg shadow-primary/20"
+                  disabled={!summary}
+                  className="h-8 rounded-md bg-primary px-2 text-[8px] font-black uppercase tracking-widest text-primary-foreground transition-all hover:brightness-110 active:scale-95 disabled:cursor-not-allowed disabled:opacity-45"
                 >
-                  {selectedLiquidationSettlement ? `Actualizar liquidación ${liquidationDate}` : `Liquidar día ${liquidationDate}`}
+                  Liquidar
                 </button>
               </>
             )}
           </div>
-
-          <div className="lg:col-span-2">
-            {selectedUserToLiquidate ? (() => {
-              const userToLiquidate = liquidationPreview?.userToLiquidate;
-              const summary = liquidationPreview?.financialSummary;
-              if (!summary) return null;
-              const previousDebt = selectedLiquidationSettlement
-                ? selectedLiquidationSettlement.previousDebt
-                : (userToLiquidate?.currentDebt || 0);
-
-              return (
-                <div id="liquidation-report" className="glass-card p-8 space-y-8 bg-black border-white/10 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -mr-16 -mt-16 blur-3xl" />
-
-                  <div className="flex justify-between items-start border-b border-white/10 pb-6">
-                    <div>
-                      <h3 className="text-xl font-black uppercase tracking-tighter text-primary">REPORTE DE VENTAS</h3>
-                      <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">{liquidationDate}</p>
-                    </div>
-                    <div className="text-right space-y-1">
-                      <p className="text-xs font-black text-white">{userToLiquidate?.name}</p>
-                      <p className="text-[9px] font-mono text-muted-foreground uppercase">ID: {userToLiquidate?.sellerId}</p>
-                      {selectedLiquidationSettlement && (
-                        <span className="inline-block rounded border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-emerald-300">
-                          LIQUIDADO
-                        </span>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="space-y-6">
-                    <div className="flex justify-between items-center py-2 border-b border-white/5">
-                      <span className="text-xs font-mono text-muted-foreground uppercase tracking-widest">Ventas Totales</span>
-                      <span className="text-sm font-bold text-white">USD {summary.totalSales.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between items-center py-2 border-b border-white/5">
-                      <span className="text-xs font-mono text-muted-foreground uppercase tracking-widest">Comisiones Generadas</span>
-                      <span className="text-sm font-bold text-amber-400">USD {summary.totalCommissions.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between items-center py-2 border-b border-white/5">
-                      <span className="text-xs font-mono text-muted-foreground uppercase tracking-widest">Premios a Pagar</span>
-                      <span className="text-sm font-bold text-red-400">USD {summary.totalPrizes.toFixed(2)}</span>
-                    </div>
-                    {summary.totalInjections !== 0 && (
-                      <div className="flex justify-between items-center py-2 border-b border-white/5">
-                        <span className="text-xs font-mono text-muted-foreground uppercase tracking-widest">Inyecciones/Ajustes</span>
-                        <span className="text-sm font-bold text-blue-400">USD {summary.totalInjections.toFixed(2)}</span>
-                      </div>
-                    )}
-
-                    <div className="bg-primary/5 p-6 rounded-2xl border border-primary/20 flex justify-between items-center">
-                      <div>
-                        <p className="text-[10px] font-mono text-primary uppercase tracking-widest mb-1">Balance Neto del Día</p>
-                        <p className="text-xs text-muted-foreground uppercase tracking-tighter">Monto a entregar a la casa</p>
-                      </div>
-                      <p className="text-3xl font-black text-primary">USD {summary.netProfit.toFixed(2)}</p>
-                    </div>
-
-                    <div className="pt-4 space-y-3">
-                      <div className="flex justify-between items-center">
-                        <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Deuda Acumulada</span>
-                        <span className="text-sm font-bold text-white">USD {previousDebt.toFixed(2)}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="pt-8 flex gap-4 no-print">
-                    <button
-                      onClick={async () => {
-                        const reportEl = document.getElementById('liquidation-report');
-                        if (!reportEl) return;
-
-                        const toastId = toast.loading('Generando reporte...');
-                        try {
-                          await document.fonts.ready;
-                          await new Promise(resolve => setTimeout(resolve, 300));
-
-                          const lib = await import('html-to-image');
-                          const dataUrl = await lib.toPng(reportEl, {
-                            backgroundColor: '#0f172a',
-                            pixelRatio: 2,
-                            style: {
-                              transform: 'scale(1)',
-                              transformOrigin: 'top left'
-                            }
-                          });
-
-                          const fileName = `Reporte-${userToLiquidate?.name || 'Usuario'}-${liquidationDate}.png`;
-
-                          const shared = await shareImageDataUrl({
-                            dataUrl,
-                            fileName,
-                            title: 'Reporte de Liquidación',
-                            text: `Reporte de ventas de ${userToLiquidate?.name || 'Usuario'} para el día ${liquidationDate}`,
-                            dialogTitle: 'Compartir Reporte'
-                          });
-
-                          if (shared) {
-                            toast.success('Reporte compartido', { id: toastId });
-                          } else {
-                            downloadDataUrlFile(dataUrl, fileName);
-                            toast.info('Tu dispositivo no permite compartir imágenes adjuntas. Se descargó para envío manual.', { id: toastId });
-                          }
-
-                        } catch (error) {
-                          console.error('Error generating report:', error);
-                          toast.error('Error al generar el reporte', { id: toastId });
-                        }
-                      }}
-                      className="flex-1 bg-white/10 hover:bg-white/20 text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2"
-                    >
-                      <Share2 className="w-4 h-4" /> Compartir Reporte
-                    </button>
-                  </div>
-                </div>
-              );
-            })() : (
-              <div className="h-full flex items-center justify-center text-muted-foreground font-mono text-sm uppercase tracking-widest border-2 border-dashed border-border rounded-2xl p-10">
-                Seleccione un usuario para ver su reporte detallado
-              </div>
-            )}
+        </article>
+      ) : (
+        <div className="min-h-[110px] rounded-lg border border-dashed border-white/15 bg-white/[0.02] p-4 flex items-center justify-center text-center">
+          <div>
+            <CheckCircle2 className="mx-auto mb-2 h-5 w-5 text-primary/80" />
+            <p className="text-[11px] font-black uppercase tracking-widest text-white">
+              {isSeller ? 'Cargando tu cierre' : 'Seleccione un vendedor'}
+            </p>
+            <p className="mt-1 text-[10px] text-muted-foreground">
+              {isSeller ? 'Revise la fecha.' : 'Use el menu de vendedores.'}
+            </p>
           </div>
         </div>
-      </div>
+      )}
     </motion.div>
   );
 }

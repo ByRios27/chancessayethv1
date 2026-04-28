@@ -9,4 +9,15 @@ export interface UserProfile {
   requiresInjection?: boolean;
   sellerId?: string;
   preferredChancePrice?: number;
+  isPrimaryCeo?: boolean;
+  createdBy?: string;
+  createdByEmail?: string;
+  createdByRole?: 'ceo' | 'admin' | 'seller';
+  createdBySellerId?: string;
+  createdAt?: any;
+  updatedBy?: string;
+  updatedByEmail?: string;
+  updatedByRole?: 'ceo' | 'admin' | 'seller';
+  updatedBySellerId?: string;
+  updatedAt?: any;
 }

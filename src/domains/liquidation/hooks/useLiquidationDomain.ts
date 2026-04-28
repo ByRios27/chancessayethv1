@@ -73,8 +73,12 @@ export function useLiquidationDomain(params: any) {
   const {
     amountPaid,
     setAmountPaid,
+    amountDirection,
+    setAmountDirection,
     selectedLiquidationSettlement,
     liquidationPreview,
+    liquidationGlobalSummary,
+    liquidationUserSummaries,
   } = useLiquidation({
     businessDayKey,
     selectedUserToLiquidate,
@@ -124,9 +128,13 @@ export function useLiquidationDomain(params: any) {
       ticketsToLiquidate,
       injectionsToLiquidate,
       paid,
+      amountDirection: previewAmountDirection,
       netProfit,
+      operationalProfit,
+      liquidationBalance,
       debtAdded,
       newTotalDebt,
+      previousDebt,
       actionLabel,
     } = liquidationPreview;
 
@@ -139,7 +147,7 @@ export function useLiquidationDomain(params: any) {
       ...prev,
       show: true,
       title: selectedLiquidationSettlement ? 'Actualizar Liquidacion' : 'Confirmar Liquidacion Diaria',
-      message: `Seguro de ${actionLabel} a ${userToLiquidate.name} para ${liquidationDate}?\n\nUtilidad Neta: USD ${netProfit.toFixed(2)}\nMonto Entregado: USD ${paid.toFixed(2)}\nDeuda Anadida: USD ${debtAdded.toFixed(2)}\nNueva Deuda Total: USD ${newTotalDebt.toFixed(2)}`,
+      message: `Seguro de ${actionLabel} a ${userToLiquidate.name} para ${liquidationDate}?\n\nResultado del dia: USD ${operationalProfit.toFixed(2)}\nInyeccion diaria: USD ${totalInjections.toFixed(2)}\nSaldo anterior: USD ${previousDebt.toFixed(2)}\n${previewAmountDirection === 'sent' ? 'Monto enviado' : 'Monto recibido'}: USD ${paid.toFixed(2)}\nSaldo final: USD ${newTotalDebt.toFixed(2)}`,
       onConfirm: async () => {
         try {
           const normalizedUserEmail = userToLiquidate.email.toLowerCase();
@@ -163,8 +171,10 @@ export function useLiquidationDomain(params: any) {
 
           const currentDebtValue = userToLiquidate.currentDebt || 0;
           const baselineDebt = currentDebtValue - (existingSettlement?.debtAdded || 0);
-          const finalDebtAdded = netProfit - paid;
+          const finalDebtAdded = liquidationBalance + (previewAmountDirection === 'sent' ? paid : -paid);
           const finalNewTotalDebt = baselineDebt + finalDebtAdded;
+          const finalAmountReceived = previewAmountDirection === 'received' ? paid : 0;
+          const finalAmountSent = previewAmountDirection === 'sent' ? paid : 0;
 
           const settlementPayload = {
             userEmail: normalizedUserEmail,
@@ -175,12 +185,29 @@ export function useLiquidationDomain(params: any) {
             totalCommissions,
             totalPrizes,
             totalInjections,
+            sales: totalSales,
+            prizes: totalPrizes,
+            commission: totalCommissions,
+            dailyResult: operationalProfit,
+            dailyInjectionTotal: totalInjections,
+            previousBalance: baselineDebt,
+            finalBalance: finalNewTotalDebt,
+            operationalProfit,
+            liquidationBalance,
             netProfit,
             net: netProfit,
-            amountPaid: paid,
+            amountPaid: finalAmountReceived,
+            amountDirection: previewAmountDirection,
+            amountReceived: finalAmountReceived,
+            amountSent: finalAmountSent,
+            amountEntered: paid,
             debtAdded: finalDebtAdded,
             previousDebt: baselineDebt,
             newTotalDebt: finalNewTotalDebt,
+            status: 'closed',
+            closed: true,
+            closedAt: serverTimestamp(),
+            closedByEmail: userProfile?.email,
             liquidatedBy: userProfile?.email,
             updatedAt: serverTimestamp(),
           };
@@ -262,12 +289,28 @@ export function useLiquidationDomain(params: any) {
               totalCommissions,
               totalPrizes,
               totalInjections,
+              sales: totalSales,
+              prizes: totalPrizes,
+              commission: totalCommissions,
+              dailyResult: operationalProfit,
+              dailyInjectionTotal: totalInjections,
+              previousBalance: baselineDebt,
+              finalBalance: finalNewTotalDebt,
+              operationalProfit,
+              liquidationBalance,
               netProfit,
               net: netProfit,
-              amountPaid: paid,
+              amountPaid: finalAmountReceived,
+              amountDirection: previewAmountDirection,
+              amountReceived: finalAmountReceived,
+              amountSent: finalAmountSent,
+              amountEntered: paid,
               debtAdded: finalDebtAdded,
               previousDebt: baselineDebt,
               newTotalDebt: finalNewTotalDebt,
+              status: 'closed',
+              closed: true,
+              closedByEmail: userProfile?.email,
               liquidatedBy: userProfile?.email,
               timestamp: existingSettlement?.timestamp,
             } as Settlement;
@@ -283,6 +326,7 @@ export function useLiquidationDomain(params: any) {
           setLiquidationSettlementsSnapshot((prev: Settlement[]) => upsertSettlement(prev));
           toastSuccess(existingSettlement ? 'Liquidacion actualizada correctamente' : 'Liquidacion guardada correctamente');
           setAmountPaid(String(paid));
+          setAmountDirection(previewAmountDirection);
         } catch (error) {
           onError(error, 'write', 'settlements');
         }
@@ -377,6 +421,8 @@ export function useLiquidationDomain(params: any) {
               totalPrizes: 0,
               totalInjections: 0,
               totalLiquidations: 0,
+              operationalProfit: 0,
+              liquidationBalance: 0,
               netProfit: 0,
             },
           });
@@ -406,13 +452,17 @@ export function useLiquidationDomain(params: any) {
         const totalPrizes = userTickets.reduce((sum, t) => sum + (getTicketPrizesFromSource(t, reportResults).totalPrize || 0), 0);
         const totalInjections = userInjections.reduce((sum, i) => sum + (i.amount || 0), 0);
         const totalLiquidations = userSettlements.reduce((sum, s) => sum + (s.amountPaid || 0), 0);
+        const operationalProfit = totalSales - totalCommissions - totalPrizes;
+        const liquidationBalance = operationalProfit + totalInjections;
         u.summary = {
           totalSales,
           totalCommissions,
           totalPrizes,
           totalInjections,
           totalLiquidations,
-          netProfit: totalSales - totalCommissions - totalPrizes + totalInjections,
+          operationalProfit,
+          liquidationBalance,
+          netProfit: operationalProfit,
         };
       });
 
@@ -453,7 +503,7 @@ export function useLiquidationDomain(params: any) {
       const globalInjections = reportUsers.reduce((acc: number, u: any) => acc + u.summary.totalInjections, 0);
       const globalCommissions = reportUsers.reduce((acc: number, u: any) => acc + u.summary.totalCommissions, 0);
       const globalLiquidations = reportUsers.reduce((acc: number, u: any) => acc + u.summary.totalLiquidations, 0);
-      const globalNet = globalSales - globalCommissions - globalPrizes + globalInjections;
+      const globalOperationalProfit = globalSales - globalCommissions - globalPrizes;
 
       writeLine('REPORTE CONSOLIDADO EJECUTIVO', 'bold', 15);
       writeLine(`Rango operativo: ${reportStartDate} -> ${reportEndDate}`, 'bold', 10);
@@ -465,7 +515,7 @@ export function useLiquidationDomain(params: any) {
       writeLine(`Total premios: USD ${globalPrizes.toFixed(2)}`);
       writeLine(`Total inyecciones: USD ${globalInjections.toFixed(2)}`);
       writeLine(`Total liquidaciones: USD ${globalLiquidations.toFixed(2)}`);
-      writeLine(`Neto global estimado: USD ${globalNet.toFixed(2)}`, 'bold', 10);
+      writeLine(`Resultado operativo: USD ${globalOperationalProfit.toFixed(2)}`, 'bold', 10);
 
       pdf.save(`Reporte-Consolidado-${reportStartDate}-a-${reportEndDate}.pdf`);
       toastSuccess(`Reporte consolidado listo (${reportStartDate} -> ${reportEndDate})`, { id: toastId });
@@ -492,8 +542,12 @@ export function useLiquidationDomain(params: any) {
     setSelectedUserToLiquidate,
     amountPaid,
     setAmountPaid,
+    amountDirection,
+    setAmountDirection,
     selectedLiquidationSettlement,
     liquidationPreview,
+    liquidationGlobalSummary,
+    liquidationUserSummaries,
     liquidacionQuickDateOptions,
     handleLiquidate,
     generateConsolidatedReport,

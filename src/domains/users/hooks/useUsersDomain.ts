@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { auth, createUserWithEmailAndPassword, db, doc, secondaryAuth, serverTimestamp, signOut, updateDoc } from '../../../firebase';
 import { logDailyAuditEvent } from '../../../services/repositories/auditLogsRepo';
+import { createCeoAdminAlert } from '../../../services/repositories/appAlertsRepo';
 import { deleteUserProfile, reserveNextSellerId, saveUserProfile } from '../../../services/repositories/usersRepo';
 import type { UserProfile } from '../../../types/users';
 import { USERS_DOMAIN_SPEC, canExecuteUsersAction } from '../domainSpec';
@@ -22,6 +23,7 @@ interface UseUsersDomainParams {
   editingUser: UserProfile | null;
   setEditingUser: (value: UserProfile | null) => void;
   setShowUserModal: (value: boolean) => void;
+  setUsers: Dispatch<SetStateAction<UserProfile[]>>;
   setUserProfile: (value: UserProfile) => void;
   setConfirmModal: Dispatch<SetStateAction<ConfirmModalState>>;
   onDeleteError: (error: unknown, path: string) => void;
@@ -35,11 +37,31 @@ export function useUsersDomain({
   editingUser,
   setEditingUser,
   setShowUserModal,
+  setUsers,
   setUserProfile,
   setConfirmModal,
   onDeleteError,
 }: UseUsersDomainParams) {
   const [selectedManageUserEmail, setSelectedManageUserEmail] = useState('');
+  const [isSavingUser, setIsSavingUser] = useState(false);
+
+  const upsertUserLocally = (nextUser: UserProfile) => {
+    const normalizedEmail = String(nextUser.email || '').toLowerCase();
+    if (!normalizedEmail) return;
+
+    setUsers((currentUsers) => {
+      let replaced = false;
+      const nextUsers = currentUsers.map((userItem) => {
+        if (String(userItem.email || '').toLowerCase() !== normalizedEmail) {
+          return userItem;
+        }
+        replaced = true;
+        return { ...userItem, ...nextUser };
+      });
+
+      return replaced ? nextUsers : [nextUser, ...nextUsers];
+    });
+  };
 
   const saveUser = async (userProfileData: UserProfile, password?: string) => {
     const action = editingUser ? 'editUser' : 'createUser';
@@ -52,6 +74,22 @@ export function useUsersDomain({
     const authEmail = rawEmail.includes('@') ? rawEmail : `${rawEmail}@chancepro.local`;
     const normalizedRole = (userRole || '').toLowerCase();
     const targetRole = (userProfileData.role || '').toLowerCase();
+    const actorUid = auth.currentUser?.uid || '';
+    const actorEmail = (currentUserEmail || auth.currentUser?.email || '').toLowerCase();
+    const actorSellerId = currentUserProfile?.sellerId || '';
+
+    const wasCreatedByCurrentActor = (targetUser: UserProfile | null) => {
+      if (!targetUser) return false;
+      const createdByEmail = String((targetUser as any).createdByEmail || '').toLowerCase();
+      const createdBySellerId = String((targetUser as any).createdBySellerId || '').toLowerCase();
+      const createdByUid = String((targetUser as any).createdBy || '');
+
+      return (
+        (!!createdByEmail && !!actorEmail && createdByEmail === actorEmail) ||
+        (!!createdBySellerId && !!actorSellerId && createdBySellerId === actorSellerId.toLowerCase()) ||
+        (!!createdByUid && !!actorUid && createdByUid === actorUid)
+      );
+    };
 
     if (normalizedRole === 'admin' && targetRole !== 'seller') {
       toast.error('Admin solo puede gestionar usuarios vendedor');
@@ -60,6 +98,11 @@ export function useUsersDomain({
 
     if (normalizedRole === 'admin' && editingUser && editingUser.role !== 'seller') {
       toast.error('Admin solo puede editar perfiles vendedor');
+      return;
+    }
+
+    if (normalizedRole === 'admin' && editingUser && !wasCreatedByCurrentActor(editingUser)) {
+      toast.error('Admin solo puede editar usuarios creados por el mismo');
       return;
     }
 
@@ -97,6 +140,8 @@ export function useUsersDomain({
 
       return `Permiso insuficiente para ${action === 'createUser' ? 'crear' : 'actualizar'} users/${normalizedTarget}. Verifica permisos de rol en reglas Firestore.`;
     };
+
+    setIsSavingUser(true);
 
     try {
       if (!userProfileData.sellerId) {
@@ -139,18 +184,44 @@ export function useUsersDomain({
       const cleanData = Object.fromEntries(
         Object.entries(userProfileData).filter(([_, v]) => v !== undefined)
       ) as Record<string, unknown>;
+      const previousUserData = editingUser ? { ...editingUser } : null;
 
       // Preserve immutable primary-ceo marker when editing an existing doc.
       if (editingUser && (editingUser as any).isPrimaryCeo !== undefined && cleanData.isPrimaryCeo === undefined) {
         cleanData.isPrimaryCeo = Boolean((editingUser as any).isPrimaryCeo);
       }
 
+      if (editingUser) {
+        cleanData.createdBy = (editingUser as any).createdBy || cleanData.createdBy || '';
+        cleanData.createdByEmail = String((editingUser as any).createdByEmail || cleanData.createdByEmail || '').toLowerCase();
+        cleanData.createdByRole = (editingUser as any).createdByRole || cleanData.createdByRole || '';
+        cleanData.createdBySellerId = (editingUser as any).createdBySellerId || cleanData.createdBySellerId || '';
+        if ((editingUser as any).createdAt !== undefined) {
+          cleanData.createdAt = (editingUser as any).createdAt;
+        }
+      } else {
+        cleanData.createdBy = actorUid;
+        cleanData.createdByEmail = actorEmail;
+        cleanData.createdByRole = normalizedRole;
+        cleanData.createdBySellerId = actorSellerId;
+        cleanData.createdAt = serverTimestamp();
+      }
+
+      cleanData.updatedBy = actorUid;
+      cleanData.updatedByEmail = actorEmail;
+      cleanData.updatedByRole = normalizedRole;
+      cleanData.updatedBySellerId = actorSellerId;
+      cleanData.updatedAt = serverTimestamp();
+
       const selfUpdatePayload = isSelfEdit
         ? {
             name: String(cleanData.name || '').trim(),
             commissionRate: Number.isFinite(Number(cleanData.commissionRate)) ? Number(cleanData.commissionRate) : 0,
             updatedAt: serverTimestamp(),
-            updatedByEmail: normalizedCurrentUserEmail,
+            updatedBy: actorUid,
+            updatedByEmail: normalizedCurrentUserEmail || actorEmail,
+            updatedByRole: normalizedRole,
+            updatedBySellerId: actorSellerId,
           }
         : null;
 
@@ -195,6 +266,22 @@ export function useUsersDomain({
         }
       }
 
+      const optimisticUser = {
+        ...(editingUser || {}),
+        ...(isSelfEdit && selfUpdatePayload
+          ? {
+              name: String(selfUpdatePayload.name || ''),
+              commissionRate: Number(selfUpdatePayload.commissionRate || 0),
+            }
+          : cleanData),
+        email: normalizedFirestoreEmail,
+      } as UserProfile;
+      upsertUserLocally(optimisticUser);
+      toast.success(editingUser ? 'Usuario actualizado correctamente' : 'Usuario creado correctamente');
+      setShowUserModal(false);
+      setEditingUser(null);
+      setIsSavingUser(false);
+
       if (normalizedRole === 'ceo' || normalizedRole === 'admin') {
         await logDailyAuditEvent({
           type: editingUser ? 'USER_UPDATED' : 'USER_CREATED',
@@ -218,9 +305,38 @@ export function useUsersDomain({
         });
       }
 
-      toast.success('Usuario guardado correctamente');
-      setShowUserModal(false);
-      setEditingUser(null);
+      if (normalizedRole === 'admin' || normalizedRole === 'ceo') {
+        const alertType = `${normalizedRole}_${editingUser ? 'user_updated' : 'user_created'}`;
+        const actionLabel = editingUser ? 'actualizo' : 'creo';
+        const targetUsername = normalizedFirestoreEmail.split('@')[0] || normalizedFirestoreEmail;
+        await createCeoAdminAlert({
+          type: alertType,
+          priority: 70,
+          title: editingUser ? 'Usuario editado' : 'Usuario creado',
+          message: `${currentUserProfile?.name || actorEmail || normalizedRole.toUpperCase()} ${actionLabel} usuario ${String(cleanData.name || targetUsername)} (${targetUsername}) con rol ${String(cleanData.role || 'seller')} y comision ${Number(cleanData.commissionRate || 0).toFixed(2)}%.`,
+          createdByEmail: actorEmail,
+          createdByRole: normalizedRole,
+          metadata: {
+            actorName: currentUserProfile?.name || '',
+            actorSellerId: currentUserProfile?.sellerId || '',
+            actorRole: normalizedRole,
+            targetEmail: normalizedFirestoreEmail,
+            targetUsername,
+            targetName: String(cleanData.name || ''),
+            targetSellerId: String(cleanData.sellerId || ''),
+            targetRole: String(cleanData.role || ''),
+            commissionRate: Number(cleanData.commissionRate || 0),
+            updatedFields: Object.keys(cleanData),
+            previousRole: previousUserData?.role || '',
+            previousCommissionRate: Number(previousUserData?.commissionRate || 0),
+            nextRole: String(cleanData.role || ''),
+            nextCommissionRate: Number(cleanData.commissionRate || 0),
+          },
+          actionRef: `users/${normalizedFirestoreEmail}`,
+        }).catch((error) => {
+          console.error('App alert failed (users save):', error);
+        });
+      }
     } catch (error: any) {
       const firebaseCode = error?.code || 'unknown';
       const targetEmail = (userProfileData.email || authEmail || '').toLowerCase();
@@ -249,6 +365,8 @@ export function useUsersDomain({
         targetPath: `users/${targetEmail}`,
         message: error?.message || '',
       });
+    } finally {
+      setIsSavingUser(false);
     }
   };
 
@@ -265,6 +383,7 @@ export function useUsersDomain({
       onConfirm: async () => {
         try {
           await deleteUserProfile(email);
+          setUsers((currentUsers) => currentUsers.filter((userItem) => String(userItem.email || '').toLowerCase() !== email.toLowerCase()));
           toast.success('Usuario eliminado correctamente');
         } catch (error) {
           onDeleteError(error, `users/${email}`);
@@ -278,5 +397,6 @@ export function useUsersDomain({
     setSelectedManageUserEmail,
     saveUser,
     deleteUser,
+    isSavingUser,
   };
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { collection, getDocs, query } from '../firebase';
+import { collection, onSnapshot, query } from '../firebase';
 import { db } from '../firebase';
 import type { UserProfile } from '../types/users';
 
@@ -17,27 +17,33 @@ export function useUsers({
   const [users, setUsers] = useState<UserProfile[]>([]);
 
   useEffect(() => {
-    if (!enabled) return;
-    if (role !== 'ceo' && role !== 'admin') return;
+    if (!enabled || (role !== 'ceo' && role !== 'admin')) {
+      setUsers([]);
+      return;
+    }
 
-    let cancelled = false;
-    const run = async () => {
-      try {
-        console.log('Fetching users (one-time) for role:', role);
-        const q = query(collection(db, 'users'));
-        const snapshot = await getDocs(q);
-        if (cancelled) return;
-        const docs = snapshot.docs.map((userDoc) => userDoc.data() as UserProfile);
+    console.log('Listening to users for role:', role);
+    const q = query(collection(db, 'users'));
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const docs = snapshot.docs.map((userDoc) => {
+          const data = userDoc.data() as UserProfile;
+          return {
+            ...data,
+            email: data.email || userDoc.id,
+          };
+        });
         setUsers(docs);
-      } catch (error) {
-        console.error('Error fetching users:', error);
+      },
+      (error) => {
+        console.error('Error listening to users:', error);
         onError?.(error, 'list', 'users');
       }
-    };
-    void run();
+    );
 
     return () => {
-      cancelled = true;
+      unsubscribe();
     };
   }, [enabled, onError, role]);
 

@@ -31,6 +31,7 @@ export const buildLiquidationDebtMetrics = ({
   totalPrizes,
   totalInjections,
   amountPaid,
+  amountDirection = 'received',
   currentDebt,
   existingDebtImpact,
 }: {
@@ -39,16 +40,22 @@ export const buildLiquidationDebtMetrics = ({
   totalPrizes: number;
   totalInjections: number;
   amountPaid: number;
+  amountDirection?: 'received' | 'sent';
   currentDebt: number;
   existingDebtImpact: number;
 }) => {
-  const netProfit = totalSales - totalCommissions - totalPrizes + totalInjections;
+  const operationalProfit = totalSales - totalCommissions - totalPrizes;
+  const liquidationBalance = operationalProfit + totalInjections;
+  const netProfit = operationalProfit;
   const previousDebt = currentDebt - existingDebtImpact;
-  const debtAdded = netProfit - amountPaid;
+  const amountEffect = amountDirection === 'sent' ? amountPaid : -amountPaid;
+  const debtAdded = liquidationBalance + amountEffect;
   const newTotalDebt = previousDebt + debtAdded;
 
   return {
     netProfit,
+    operationalProfit,
+    liquidationBalance,
     previousDebt,
     debtAdded,
     newTotalDebt,

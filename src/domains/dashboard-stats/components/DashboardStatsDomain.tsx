@@ -29,6 +29,8 @@ export function DashboardStatsDomain(props: any) {
     results,
     users,
     auditLogs,
+    appAlerts,
+    appAlertsLoading,
   } = props;
 
   const role = String(userProfile?.role ?? '').toLowerCase();
@@ -56,6 +58,8 @@ export function DashboardStatsDomain(props: any) {
   const safeResults = results ?? [];
   const safeUsers = users ?? [];
   const safeAuditLogs = auditLogs ?? [];
+  const safeAppAlerts = appAlerts ?? [];
+  const timestampMs = (value: any) => value?.toDate?.()?.getTime?.() ?? (value?.seconds ? value.seconds * 1000 : 0);
 
   const todaysGlobalInjections = useMemo(() => {
     return safeInjections.filter((inj: any) => inj?.date === todayStr);
@@ -142,6 +146,40 @@ export function DashboardStatsDomain(props: any) {
       .filter((event: any) => String(event?.actorRole || '').toLowerCase() === 'admin')
       .slice(0, 3);
   }, [role, safeAuditLogs]);
+
+  const visibleDashboardAlerts = useMemo(() => {
+    const injectionNeedRows = injectionAlerts.map((alert: any) => ({
+      id: `need-${alert.email}`,
+      priority: 100,
+      title: 'Requiere inyeccion',
+      message: `${alert.name} (${alert.sellerId}) necesita USD ${Number(alert.requiredAmount || 0).toFixed(2)}`,
+      createdAtMs: 0,
+    }));
+
+    const appAlertRows = safeAppAlerts.map((alert: any) => ({
+      id: `app-${alert.id || alert.actionRef || alert.title}`,
+      priority: Number(alert.priority || 0),
+      title: alert.title || 'Alerta',
+      message: alert.message || '',
+      createdAtMs: timestampMs(alert.createdAt),
+    }));
+
+    const auditFallbackRows = safeAppAlerts.length > 0 ? [] : adminAuditAlerts.map((event: any) => ({
+      id: `audit-${event.id}`,
+      priority: String(event.type || '').includes('INJECTION') ? 80 : String(event.type || '').includes('USER') ? 70 : 60,
+      title: event.type || 'Accion admin',
+      message: `${event.actorName || event.actorEmail || 'Admin'} -> ${event.targetName || event.targetSellerId || event.targetEmail || '-'}`,
+      createdAtMs: timestampMs(event.createdAt),
+    }));
+
+    return [...injectionNeedRows, ...appAlertRows, ...auditFallbackRows]
+      .sort((a, b) => {
+        const priorityDiff = Number(b.priority || 0) - Number(a.priority || 0);
+        if (priorityDiff !== 0) return priorityDiff;
+        return Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0);
+      })
+      .slice(0, 3);
+  }, [adminAuditAlerts, injectionAlerts, safeAppAlerts]);
 
   useEffect(() => {
     if (mode !== 'stats') return;
@@ -258,42 +296,30 @@ export function DashboardStatsDomain(props: any) {
           )}
         </div>
 
-        {canViewInjections && (
-          <div className={`dashboard-panel p-2.5 space-y-1.5 ${injectionAlerts.length > 0 ? 'border-red-400/35' : ''}`}>
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Alertas</p>
-            {injectionAlerts.length === 0 && adminAuditAlerts.length === 0 ? (
-              <p className="text-[11px] text-muted-foreground">Sin alertas</p>
-            ) : (
-              <>
-                {injectionAlerts.map((alert: any) => {
-                  const latestInjection = latestInjectionByTargetEmail.get(String(alert.email || '').toLowerCase());
-                  const latestActor = latestInjection
-                    ? (latestInjection.createdByName || latestInjection.createdByEmail || latestInjection.actorEmail || 'sin autor')
-                    : '';
-                  return (
-                    <div key={`alert-${alert.email}`} className="flex items-center justify-between gap-2 text-[11px]">
-                      <span className="truncate text-red-300">
-                        {alert.name} ({alert.sellerId})
-                        {role === 'admin' && latestActor ? ` · Inyeccion: ${latestActor}` : ''}
-                      </span>
-                      <span className="text-red-400 font-semibold">${Number(alert.requiredAmount || 0).toFixed(2)}</span>
-                    </div>
-                  );
-                })}
-                {role === 'ceo' && adminAuditAlerts.map((event: any) => (
-                  <div key={`audit-${event.id}`} className="flex items-center justify-between gap-2 text-[11px]">
-                    <span className="truncate text-amber-300">
-                      {event.actorName || event.actorEmail || 'Admin'} · {event.type || 'EVENTO'}
-                    </span>
-                    <span className="text-white/70">
-                      {event.targetName || event.targetSellerId || event.targetEmail || '-'}
-                    </span>
-                  </div>
-                ))}
-              </>
-            )}
-          </div>
-        )}
+        <div className={`dashboard-panel p-2.5 space-y-1.5 ${visibleDashboardAlerts.some((alert: any) => Number(alert.priority || 0) >= 100) ? 'border-red-400/35' : ''}`}>
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Alertas</p>
+          {appAlertsLoading && visibleDashboardAlerts.length === 0 ? (
+            <p className="text-[11px] text-muted-foreground">Cargando alertas...</p>
+          ) : visibleDashboardAlerts.length === 0 ? (
+            <p className="text-[11px] text-muted-foreground">Sin alertas</p>
+          ) : (
+            visibleDashboardAlerts.map((alert: any) => {
+              const tone = Number(alert.priority || 0) >= 100
+                ? 'text-red-300'
+                : Number(alert.priority || 0) >= 80
+                  ? 'text-yellow-300'
+                  : Number(alert.priority || 0) >= 70
+                    ? 'text-blue-300'
+                    : 'text-white/90';
+              return (
+                <div key={alert.id} className="text-[11px] leading-snug">
+                  <p className={`font-semibold truncate ${tone}`}>{alert.title}</p>
+                  <p className="text-white/70 truncate">{alert.message}</p>
+                </div>
+              );
+            })
+          )}
+        </div>
 
         {canViewInjections && (
           <div className="dashboard-panel p-2.5 space-y-1.5">

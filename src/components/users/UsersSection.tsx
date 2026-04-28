@@ -1,6 +1,6 @@
 ﻿import React, { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
-import { Edit2, Plus, Settings, Trash2, User as UserIcon, Zap } from 'lucide-react';
+import { Edit2, Plus, Send, Settings, Trash2, User as UserIcon, Zap } from 'lucide-react';
 import { USERS_DOMAIN_SPEC, canExecuteUsersAction } from '../../domains/users/domainSpec';
 import type { Injection } from '../../types/finance';
 
@@ -22,6 +22,7 @@ type UsersSectionProps = {
   canMutateInjection: (injection: Injection) => boolean;
   updateInjectionAmount: (injection: Injection, nextAmount: number) => Promise<void>;
   deleteInjection: (injection: Injection) => void;
+  sendUserMessage: (params: { message: string; targetUserEmail?: string; global?: boolean }) => Promise<void>;
 };
 
 export function UsersSection({
@@ -42,6 +43,7 @@ export function UsersSection({
   canMutateInjection,
   updateInjectionAmount,
   deleteInjection,
+  sendUserMessage,
 }: UsersSectionProps) {
   const role = userProfile?.role;
   const canCreateUser = canExecuteUsersAction(role, 'createUser');
@@ -49,9 +51,15 @@ export function UsersSection({
   const canDeleteUser = canExecuteUsersAction(role, 'deleteUser');
   const canInjectCapital = canExecuteUsersAction(role, 'injectCapital');
   const canManageInjectionEntries = role === 'ceo' || role === 'admin';
+  const canSendMessages = role === 'ceo' || role === 'admin';
+  const currentUserEmail = String(userProfile?.email || '').toLowerCase();
+  const currentSellerId = String(userProfile?.sellerId || '').toLowerCase();
 
   const [editingInjectionId, setEditingInjectionId] = useState<string | null>(null);
   const [editingInjectionAmount, setEditingInjectionAmount] = useState('');
+  const [messageMode, setMessageMode] = useState<'individual' | 'global'>('individual');
+  const [messageText, setMessageText] = useState('');
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
 
   const validUsers = useMemo(() => {
     const list = (users || []).filter((u) => u && u.email && u.name && u.name.trim() !== '');
@@ -64,6 +72,30 @@ export function UsersSection({
   const selectedUser = useMemo(
     () => validUsers.find((u) => u.email === selectedManageUserEmail) || null,
     [selectedManageUserEmail, validUsers]
+  );
+
+  const selectedUserWasCreatedByCurrentAdmin = useMemo(() => {
+    if (!selectedUser || role !== 'admin') return false;
+    const createdByEmail = String(selectedUser.createdByEmail || '').toLowerCase();
+    const createdBySellerId = String(selectedUser.createdBySellerId || '').toLowerCase();
+    return (
+      (!!createdByEmail && createdByEmail === currentUserEmail) ||
+      (!!createdBySellerId && createdBySellerId === currentSellerId)
+    );
+  }, [currentSellerId, currentUserEmail, role, selectedUser]);
+
+  const canEditSelectedUser = Boolean(
+    selectedUser &&
+    canEditUser &&
+    (
+      role === 'ceo' ||
+      (
+        role === 'admin' &&
+        selectedUser.role === 'seller' &&
+        selectedUserWasCreatedByCurrentAdmin &&
+        selectedUser.isPrimaryCeo !== true
+      )
+    )
   );
 
   const selectedUserInjections = useMemo(() => {
@@ -127,6 +159,57 @@ export function UsersSection({
             )}
           </div>
         </div>
+
+        {canSendMessages && (
+          <div className="mb-4 rounded-xl border border-white/10 bg-white/[0.03] p-3 space-y-2">
+            <div className="grid grid-cols-2 rounded-lg overflow-hidden border border-white/10 bg-black/20">
+              <button
+                type="button"
+                onClick={() => setMessageMode('individual')}
+                className={`h-9 text-[10px] font-black uppercase tracking-widest ${messageMode === 'individual' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-white'}`}
+              >
+                Individual
+              </button>
+              <button
+                type="button"
+                onClick={() => setMessageMode('global')}
+                className={`h-9 text-[10px] font-black uppercase tracking-widest ${messageMode === 'global' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-white'}`}
+              >
+                Global
+              </button>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="text"
+                value={messageText}
+                maxLength={180}
+                onChange={(event) => setMessageText(event.target.value)}
+                placeholder={messageMode === 'global' ? 'Mensaje para todos' : 'Mensaje para usuario seleccionado'}
+                className="h-10 flex-1 rounded-lg border border-white/10 bg-black/20 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/70"
+              />
+              <button
+                type="button"
+                disabled={isSendingMessage || !messageText.trim() || (messageMode === 'individual' && !selectedUser?.email)}
+                onClick={async () => {
+                  setIsSendingMessage(true);
+                  try {
+                    await sendUserMessage({
+                      message: messageText,
+                      global: messageMode === 'global',
+                      targetUserEmail: messageMode === 'individual' ? selectedUser?.email : undefined,
+                    });
+                    setMessageText('');
+                  } finally {
+                    setIsSendingMessage(false);
+                  }
+                }}
+                className="h-10 px-4 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] border border-white/10 text-white text-[10px] font-black uppercase tracking-widest disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <Send className="w-3.5 h-3.5" /> Enviar
+              </button>
+            </div>
+          </div>
+        )}
 
         {selectedUser ? (() => {
           const stats = userStats[selectedUser.email.toLowerCase()];
@@ -194,11 +277,13 @@ export function UsersSection({
                 {canEditUser && (
                   <button
                     onClick={() => {
+                      if (!canEditSelectedUser) return;
                       setEditingUser(selectedUser);
                       setShowUserModal(true);
                     }}
-                    disabled={selectedUser.role === 'ceo' && role !== 'ceo'}
+                    disabled={!canEditSelectedUser}
                     className="h-10 flex-1 min-w-0 bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-white rounded-xl text-[10px] font-black uppercase tracking-wide transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                    title={!canEditSelectedUser && role === 'admin' ? 'Admin solo puede editar usuarios creados por el mismo' : 'Editar usuario'}
                   >
                     <Settings className="w-3.5 h-3.5" /> Editar
                   </button>

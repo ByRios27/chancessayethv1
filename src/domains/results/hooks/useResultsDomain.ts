@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { serverTimestamp } from '../../../firebase';
 import { createResult, deleteResult as deleteResultById, updateResult } from '../../../services/repositories/resultsRepo';
+import { createCeoAdminAlert } from '../../../services/repositories/appAlertsRepo';
+import { logDailyAuditEvent, type DailyAuditEventType } from '../../../services/repositories/auditLogsRepo';
 import { toast } from 'sonner';
 import type { Lottery } from '../../../types/lotteries';
 import type { LotteryResult } from '../../../types/results';
 import type { LotteryTicket } from '../../../types/bets';
+import type { UserProfile } from '../../../types/users';
 import { toastSuccess } from '../../../utils/toast';
 import { RESULTS_DOMAIN_SPEC, canExecuteResultsAction } from '../domainSpec';
 
@@ -21,6 +24,7 @@ interface UseResultsDomainParams {
   results: LotteryResult[];
   sortedLotteries: Lottery[];
   tickets: LotteryTicket[];
+  currentUserProfile?: UserProfile | null;
   currentSellerId?: string;
   getOperationalTimeSortValue: (time: string) => number;
   cleanText: (value: string) => string;
@@ -38,6 +42,7 @@ export function useResultsDomain({
   results,
   sortedLotteries,
   tickets,
+  currentUserProfile,
   currentSellerId,
   getOperationalTimeSortValue,
   cleanText,
@@ -150,6 +155,78 @@ export function useResultsDomain({
     setResultFormThirdPrize(editingResult.thirdPrize);
   }, [editingResult]);
 
+  const logAdminResultChange = useCallback(async ({
+    eventType,
+    actionLabel,
+    previousResult,
+    nextResult,
+    actionRef,
+  }: {
+    eventType: DailyAuditEventType;
+    actionLabel: string;
+    previousResult?: Partial<LotteryResult> | null;
+    nextResult?: Partial<LotteryResult> | null;
+    actionRef?: string;
+  }) => {
+    const actorRole = String(currentUserProfile?.role || userRole || '').toLowerCase();
+    if (actorRole !== 'admin' && actorRole !== 'ceo') return;
+
+    const actorEmail = currentUserProfile?.email || '';
+    const lotteryName = String(nextResult?.lotteryName || previousResult?.lotteryName || 'Sorteo');
+    const lotteryId = String(nextResult?.lotteryId || previousResult?.lotteryId || '');
+    const resultDate = String(nextResult?.date || previousResult?.date || businessDayKey);
+    const previousSummary = previousResult
+      ? `${previousResult.firstPrize || '--'} / ${previousResult.secondPrize || '--'} / ${previousResult.thirdPrize || '--'}`
+      : 'sin resultado previo';
+    const nextSummary = nextResult
+      ? `${nextResult.firstPrize || '--'} / ${nextResult.secondPrize || '--'} / ${nextResult.thirdPrize || '--'}`
+      : 'resultado eliminado';
+
+    const details = {
+      lotteryId,
+      lotteryName,
+      previousResult: previousResult || null,
+      nextResult: nextResult || null,
+    };
+
+    await Promise.all([
+      logDailyAuditEvent({
+        type: eventType,
+        actor: {
+          email: actorEmail,
+          sellerId: currentUserProfile?.sellerId,
+          name: currentUserProfile?.name,
+          role: actorRole,
+        },
+        target: {
+          name: lotteryName,
+        },
+        details,
+        date: resultDate,
+      }).catch((error) => {
+        console.error('Daily audit log failed (result change):', error);
+      }),
+      createCeoAdminAlert({
+        type: `${actorRole}_${eventType.toLowerCase()}`,
+        priority: 60,
+        title: `Resultado ${actionLabel}`,
+        message: `${currentUserProfile?.name || actorEmail || 'Admin'} ${actionLabel} ${lotteryName}: ${previousSummary} -> ${nextSummary}`,
+        createdByEmail: actorEmail,
+        createdByRole: actorRole,
+        metadata: {
+          ...details,
+          date: resultDate,
+          actorName: currentUserProfile?.name || '',
+          actorSellerId: currentUserProfile?.sellerId || '',
+          actorRole,
+        },
+        actionRef,
+      }).catch((error) => {
+        console.error('App alert failed (result change):', error);
+      }),
+    ]);
+  }, [businessDayKey, currentUserProfile, userRole]);
+
   const saveResult = useCallback(async (resultData: Partial<LotteryResult>) => {
     if (!canManageResults) {
       toast.error(RESULTS_DOMAIN_SPEC.expectedErrors.unauthorizedAction);
@@ -173,12 +250,26 @@ export function useResultsDomain({
           ...resultData,
           timestamp: serverTimestamp(),
         });
+        await logAdminResultChange({
+          eventType: 'RESULT_UPDATED',
+          actionLabel: 'actualizo',
+          previousResult: editingResult,
+          nextResult: { ...editingResult, ...resultData },
+          actionRef: `results/${editingResult.id}`,
+        });
         onResultsMutated?.();
         toastSuccess('Resultado actualizado');
       } else {
-        await createResult({
+        const resultRef = await createResult({
           ...resultData,
           timestamp: serverTimestamp(),
+        });
+        await logAdminResultChange({
+          eventType: 'RESULT_CREATED',
+          actionLabel: 'creo',
+          previousResult: null,
+          nextResult: resultData,
+          actionRef: `results/${resultRef.id}`,
         });
         onResultsMutated?.();
         toastSuccess('Resultado ingresado');
@@ -190,7 +281,7 @@ export function useResultsDomain({
       onError(error, editingResult ? 'update' : 'create', 'results');
       return false;
     }
-  }, [canManageResults, editingResult, onError, onResultsMutated, results]);
+  }, [canManageResults, editingResult, logAdminResultChange, onError, onResultsMutated, results]);
 
   const handleCreateResultFromForm = useCallback(async () => {
     if (!canManageResults) {
@@ -247,7 +338,15 @@ export function useResultsDomain({
       message: 'Esta seguro de eliminar este resultado? Esta accion no se puede deshacer.',
       onConfirm: async () => {
         try {
+          const deletedResult = results.find(result => result.id === id) || null;
           await deleteResultById(id);
+          await logAdminResultChange({
+            eventType: 'RESULT_DELETED',
+            actionLabel: 'elimino',
+            previousResult: deletedResult,
+            nextResult: null,
+            actionRef: `results/${id}`,
+          });
           onResultsMutated?.();
           toastSuccess('Resultado eliminado');
         } catch (error) {

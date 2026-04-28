@@ -4,12 +4,13 @@ import { toast } from 'sonner';
 import { X } from 'lucide-react';
 import type { UserProfile } from '../../types/users';
 
-const UserModal = ({ show, userProfile, onSave, onClose, currentUserRole }: {
+const UserModal = ({ show, userProfile, onSave, onClose, currentUserRole, isSaving = false }: {
   show: boolean;
   userProfile: UserProfile | null;
-  onSave: (user: UserProfile, password?: string) => void;
+  onSave: (user: UserProfile, password?: string) => void | Promise<void>;
   onClose: () => void;
   currentUserRole: string | undefined;
+  isSaving?: boolean;
 }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -169,6 +170,7 @@ const UserModal = ({ show, userProfile, onSave, onClose, currentUserRole }: {
 
           <button
             onClick={() => {
+              if (isSaving) return;
               if (!email) {
                 toast.error('Usuario es requerido');
                 return;
@@ -195,9 +197,10 @@ const UserModal = ({ show, userProfile, onSave, onClose, currentUserRole }: {
                 sellerId,
               }, password);
             }}
-            className="h-11 w-full bg-primary text-primary-foreground rounded-xl font-bold uppercase tracking-wide hover:bg-blue-400 transition-all mt-3"
+            disabled={isSaving}
+            className="h-11 w-full bg-primary text-primary-foreground rounded-xl font-bold uppercase tracking-wide hover:bg-blue-400 transition-all mt-3 disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {userProfile ? 'Guardar Cambios' : 'Crear Usuario'}
+            {isSaving ? 'Guardando...' : userProfile ? 'Guardar Cambios' : 'Crear Usuario'}
           </button>
         </div>
       </motion.div>

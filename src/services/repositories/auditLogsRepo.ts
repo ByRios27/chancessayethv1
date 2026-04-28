@@ -7,7 +7,11 @@ export type DailyAuditEventType =
   | 'USER_UPDATED'
   | 'INJECTION_CREATED'
   | 'INJECTION_UPDATED'
-  | 'INJECTION_DELETED';
+  | 'INJECTION_DELETED'
+  | 'RESULT_CREATED'
+  | 'RESULT_UPDATED'
+  | 'RESULT_DELETED'
+  | 'LOTTERY_UPDATED';
 
 interface DailyAuditActor {
   email?: string;

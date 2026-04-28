@@ -99,6 +99,7 @@ import { useDailyAuditLogs } from './hooks/useDailyAuditLogs';
 import { useInjections } from './hooks/useInjections';
 import { useLotteries } from './hooks/useLotteries';
 import { useAppDataScopes, type AppTabId } from './hooks/useAppDataScopes';
+import { useAppAlerts } from './hooks/useAppAlerts';
 import { useOperationalArchive } from './hooks/useOperationalArchive';
 import { useOperationalClock } from './hooks/useOperationalClock';
 import { useRecovery } from './hooks/useRecovery';
@@ -124,6 +125,7 @@ import {
 import { createTicket, deleteTicket as deleteTicketById, updateTicket } from './services/repositories/ticketsRepo';
 import { updatePreferredChancePrice } from './services/repositories/usersRepo';
 import { logDailyAuditEvent } from './services/repositories/auditLogsRepo';
+import { createAppAlert, createCeoAdminAlert } from './services/repositories/appAlertsRepo';
 
 import { GeneralConfigDomain } from './domains/admin-config/components/GeneralConfigDomain';
 import { ConfigSection } from './components/config/ConfigSection';
@@ -312,6 +314,7 @@ function App() {
     canAccessManagedUsersData,
     canAccessAllUsers,
     shouldLoadUsersList,
+    needsRealtimeOperationalData,
     shouldLoadResults,
     shouldLoadLotteries,
   } = useAppDataScopes({
@@ -401,7 +404,11 @@ function App() {
   const [selectedUserToLiquidate, setSelectedUserToLiquidate] = useState<string>('');
   const [liquidationDate, setLiquidationDate] = useState<string>(format(getBusinessDate(), 'yyyy-MM-dd'));
   const primaryCeoEmail = (import.meta.env.VITE_CEO_EMAIL || 'zsayeth09@gmail.com').toLowerCase();
-  const isPrimaryCeoUser = (userProfile?.email || '').toLowerCase() === primaryCeoEmail;
+  const primaryCeoSellerId = 'ceo01';
+  const isPrimaryCeoUser =
+    (userProfile?.email || '').toLowerCase() === primaryCeoEmail ||
+    userProfile?.isPrimaryCeo === true ||
+    String(userProfile?.sellerId || '').toLowerCase() === primaryCeoSellerId;
   const operationalSellerId = (userProfile?.sellerId || '').trim();
   const historyDataCacheRef = useRef<Map<string, {
     tickets: LotteryTicket[];
@@ -417,10 +424,10 @@ function App() {
     netProfit: number;
     sortedTicketsForLot: Array<{ t: LotteryTicket; prize: number }>;
   }>>(new Map());
-  const ticketsRealtimeEnabled = !!user?.uid && !!userProfile?.role && activeTab === 'sales';
+  const ticketsRealtimeEnabled = !!user?.uid && !!userProfile?.role && needsRealtimeOperationalData;
   const punctualFinanceTabs: AppTabId[] = ['users', 'results', 'stats', 'dashboard', 'history', 'liquidaciones', 'archivo', 'cierres'];
   const injectionsRealtimeEnabled = !!user?.uid && !!userProfile?.role && punctualFinanceTabs.includes(activeTab);
-  const settlementsRealtimeEnabled = false;
+  const settlementsRealtimeEnabled = !!user?.uid && !!userProfile?.role && activeTab === 'liquidaciones';
 
   const { tickets, setTickets } = useTickets({
     enabled: ticketsRealtimeEnabled,
@@ -485,7 +492,7 @@ function App() {
     show: boolean;
     ticket: LotteryTicket | null;
   }>({ show: false, ticket: null });
-  const { selectedManageUserEmail, setSelectedManageUserEmail, saveUser, deleteUser } = useUsersDomain({
+  const { selectedManageUserEmail, setSelectedManageUserEmail, saveUser, deleteUser, isSavingUser } = useUsersDomain({
     users,
     userRole: userProfile?.role,
     currentUserEmail: userProfile?.email,
@@ -493,6 +500,7 @@ function App() {
     editingUser,
     setEditingUser,
     setShowUserModal,
+    setUsers,
     setUserProfile,
     setConfirmModal,
     onDeleteError: (error, path) => handleFirestoreError(error, OperationType.DELETE, path),
@@ -571,6 +579,34 @@ function App() {
         });
       }
 
+      if (userProfile?.role === 'admin' || userProfile?.role === 'ceo') {
+        const targetUser = users.find((u) => String(u.email || '').toLowerCase() === String(injection.userEmail || '').toLowerCase());
+        const actorRole = String(userProfile?.role || '').toLowerCase();
+        await createCeoAdminAlert({
+          type: `${actorRole}_injection_updated`,
+          priority: 80,
+          title: 'Inyeccion editada',
+          message: `${userProfile?.name || userProfile?.email || actorRole.toUpperCase()} edito inyeccion de ${targetUser?.name || injection.userEmail}: USD ${Number(injection.amount || 0).toFixed(2)} -> USD ${normalizedAmount.toFixed(2)}.`,
+          createdByEmail: userProfile?.email,
+          createdByRole: userProfile?.role,
+          metadata: {
+            actorName: userProfile?.name || '',
+            actorSellerId: userProfile?.sellerId || '',
+            actorRole,
+            targetEmail: injection.userEmail,
+            targetSellerId: injection.sellerId || '',
+            targetName: targetUser?.name || '',
+            injectionId: injection.id,
+            previousAmount: Number(injection.amount || 0),
+            nextAmount: normalizedAmount,
+            date: injection.date || businessDayKey,
+          },
+          actionRef: `injections/${injection.id}`,
+        }).catch((error) => {
+          console.error('App alert failed (injection update):', error);
+        });
+      }
+
       toastSuccess('Inyeccion actualizada');
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `injections/${injection.id}`);
@@ -613,6 +649,33 @@ function App() {
               date: injection.date || businessDayKey,
             }).catch((error) => {
               console.error('Daily audit log failed (injection delete):', error);
+            });
+          }
+
+          if (userProfile?.role === 'admin' || userProfile?.role === 'ceo') {
+            const targetUser = users.find((u) => String(u.email || '').toLowerCase() === String(injection.userEmail || '').toLowerCase());
+            const actorRole = String(userProfile?.role || '').toLowerCase();
+            await createCeoAdminAlert({
+              type: `${actorRole}_injection_deleted`,
+              priority: 80,
+              title: 'Inyeccion borrada',
+              message: `${userProfile?.name || userProfile?.email || actorRole.toUpperCase()} borro inyeccion de USD ${Number(injection.amount || 0).toFixed(2)} para ${targetUser?.name || injection.userEmail}.`,
+              createdByEmail: userProfile?.email,
+              createdByRole: userProfile?.role,
+              metadata: {
+                actorName: userProfile?.name || '',
+                actorSellerId: userProfile?.sellerId || '',
+                actorRole,
+                targetEmail: injection.userEmail,
+                targetSellerId: injection.sellerId || '',
+                targetName: targetUser?.name || '',
+                injectionId: injection.id,
+                removedAmount: Number(injection.amount || 0),
+                date: injection.date || businessDayKey,
+              },
+              actionRef: `injections/${injection.id}`,
+            }).catch((error) => {
+              console.error('App alert failed (injection delete):', error);
             });
           }
 
@@ -667,6 +730,17 @@ function App() {
     date: auditLogsDateScope,
     onError: handleOperationalHookError,
   });
+  const {
+    alerts: appAlerts,
+    loading: appAlertsLoading,
+    error: appAlertsError,
+    refresh: refreshAppAlerts,
+  } = useAppAlerts({
+    enabled: !!user?.uid && !!userProfile?.role && activeTab === 'dashboard',
+    userEmail: userProfile?.email,
+    userRole: userProfile?.role,
+    onError: handleOperationalHookError,
+  });
 
   const queryTabs = useMemo(
     () => (['users', 'results', 'stats', 'dashboard', 'history', 'liquidaciones', 'archivo', 'cierres'] as AppTabId[]),
@@ -683,8 +757,9 @@ function App() {
     refreshInjections();
     refreshSettlements();
     refreshAuditLogs();
+    refreshAppAlerts();
     window.setTimeout(() => setIsAutoRefreshing(false), 600);
-  }, [refreshAuditLogs, refreshInjections, refreshResults, refreshSettlements, tabNeedsPunctualRefresh]);
+  }, [refreshAppAlerts, refreshAuditLogs, refreshInjections, refreshResults, refreshSettlements, tabNeedsPunctualRefresh]);
 
   useEffect(() => {
     if (resultsError) toast.error(`Resultados: ${resultsError}`);
@@ -693,6 +768,80 @@ function App() {
   useEffect(() => {
     if (injectionsError) toast.error(`Inyecciones: ${injectionsError}`);
   }, [injectionsError]);
+
+  useEffect(() => {
+    if (appAlertsError) toast.error(`Alertas: ${appAlertsError}`);
+  }, [appAlertsError]);
+
+  const sendUserMessage = useCallback(async ({
+    message,
+    targetUserEmail,
+    global,
+  }: {
+    message: string;
+    targetUserEmail?: string;
+    global?: boolean;
+  }) => {
+    const normalizedRole = String(userProfile?.role || '').toLowerCase();
+    if (normalizedRole !== 'ceo' && normalizedRole !== 'admin') {
+      toast.error('No tienes permisos para enviar mensajes');
+      return;
+    }
+
+    const trimmedMessage = message.trim();
+    if (!trimmedMessage) {
+      toast.error('Mensaje vacio');
+      return;
+    }
+
+    const normalizedTargetEmail = String(targetUserEmail || '').toLowerCase();
+    if (!global && !normalizedTargetEmail) {
+      toast.error('Seleccione un usuario destino');
+      return;
+    }
+
+    try {
+      await createAppAlert({
+        type: 'message',
+        priority: 30,
+        title: global ? 'Mensaje global' : 'Mensaje interno',
+        message: trimmedMessage,
+        createdByEmail: userProfile?.email,
+        createdByRole: userProfile?.role,
+        targetUserEmail: global ? '' : normalizedTargetEmail,
+        global: global === true,
+        readBy: [],
+        metadata: {
+          actorName: userProfile?.name || '',
+          actorSellerId: userProfile?.sellerId || '',
+          targetEmail: global ? '' : normalizedTargetEmail,
+        },
+      });
+      if (normalizedRole === 'admin') {
+        await createCeoAdminAlert({
+          type: 'admin_message_sent',
+          priority: 30,
+          title: global ? 'Mensaje global enviado por admin' : 'Mensaje individual enviado por admin',
+          message: `${userProfile?.name || userProfile?.email || 'Admin'} envio mensaje ${global ? 'global' : `a ${normalizedTargetEmail}`}: ${trimmedMessage}`,
+          createdByEmail: userProfile?.email,
+          createdByRole: userProfile?.role,
+          metadata: {
+            actorName: userProfile?.name || '',
+            actorSellerId: userProfile?.sellerId || '',
+            targetEmail: global ? '' : normalizedTargetEmail,
+            global: global === true,
+          },
+          actionRef: global ? 'app_alerts/global-message' : `users/${normalizedTargetEmail}`,
+        }).catch((error) => {
+          console.error('App alert failed (message audit):', error);
+        });
+      }
+      refreshAppAlerts();
+      toastSuccess('Mensaje enviado');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'app_alerts');
+    }
+  }, [refreshAppAlerts, userProfile]);
 
   useEffect(() => {
     if (settlementsError) toast.error(`Liquidaciones: ${settlementsError}`);
@@ -1538,6 +1687,7 @@ function App() {
     results,
     sortedLotteries,
     tickets,
+    currentUserProfile: userProfile ?? null,
     currentSellerId: operationalSellerId,
     getOperationalTimeSortValue,
     cleanText,
@@ -1902,6 +2052,7 @@ function App() {
 
   const { saveLottery, toggleLotteryActive, deleteLottery } = useGeneralConfigDomain({
     userRole: userProfile?.role,
+    currentUserProfile: userProfile ?? null,
     lotteries,
     editingLottery,
     setEditingLottery,
@@ -1949,6 +2100,12 @@ function App() {
     settlements,
     tickets
   ]);
+  const liquidationUsers = useMemo(() => {
+    if (userProfile?.role === 'seller' && userProfile?.email) {
+      return [userProfile];
+    }
+    return users;
+  }, [userProfile, users]);
 
   const {
     consolidatedMode,
@@ -1963,13 +2120,17 @@ function App() {
     liquidacionQuickDateOptions,
     amountPaid,
     setAmountPaid,
+    amountDirection,
+    setAmountDirection,
     selectedLiquidationSettlement,
     liquidationPreview,
+    liquidationGlobalSummary,
+    liquidationUserSummaries,
     handleLiquidate,
     generateConsolidatedReport,
   } = useLiquidationDomain({
     businessDayKey,
-    users,
+    users: liquidationUsers,
     tickets,
     injections,
     results,
@@ -1998,7 +2159,7 @@ function App() {
   });
 
   const handleDeleteAllSalesData = () => {
-    if (!userProfile || !['ceo', 'admin'].includes(userProfile.role)) {
+    if (!userProfile || !isPrimaryCeoUser) {
       toast.error('No tienes permisos para ejecutar limpieza operativa');
       return;
     }
@@ -2244,7 +2405,7 @@ function App() {
   const historyStats = useMemo(() => {
     if (activeTab !== 'history') return null;
     
-    const hTickets = filteredTickets.filter(t => (t.status === 'active' || t.status === 'winner'));
+    const hTickets = filteredTickets.filter(t => t.status !== 'cancelled');
     
     const sales = hTickets.reduce((acc, t) => {
       const lotBets = (t.bets || []);
@@ -2614,10 +2775,10 @@ function App() {
       }
     });
 
-    // Final utility calculation: sales - commissions - prizes + injections
+    // Final utility calculation: injections are reference cash flow, not operating profit.
     Object.keys(stats).forEach(email => {
       const s = stats[email];
-      s.utility = s.sales - s.commissions - s.prizes + s.injections;
+      s.utility = s.sales - s.commissions - s.prizes;
     });
 
     return stats;
@@ -2692,9 +2853,9 @@ function App() {
         </div>
       ) : (
         <div className="app-shell min-h-screen text-foreground font-sans flex flex-col lg:flex-row overflow-hidden">
-          <GlobalSettingsModal 
-            show={showSettingsModal}
-            settings={globalSettings}
+      <GlobalSettingsModal 
+        show={showSettingsModal}
+        settings={globalSettings}
             onSave={async (data) => {
               try {
                 await setDoc(doc(db, 'settings', 'global'), data);
@@ -2705,6 +2866,8 @@ function App() {
               }
             }}
             onClose={() => setShowSettingsModal(false)}
+            allowDangerZone={isPrimaryCeoUser}
+            onDeleteAllSalesData={handleDeleteAllSalesData}
           />
 
       <FastEntryModal
@@ -2778,6 +2941,7 @@ function App() {
         onSave={saveUser}
         onClose={() => { setShowUserModal(false); setEditingUser(null); }}
         currentUserRole={userProfile?.role}
+        isSaving={isSavingUser}
       />
 
       <TransactionModal
@@ -2844,7 +3008,10 @@ function App() {
             {visibleNavigationItems.map((item) => (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => {
+                  setActiveTab(item.id);
+                  if (isMobile) setIsSidebarOpen(false);
+                }}
                 className={`w-full h-11 px-3 rounded-lg border flex items-center gap-2.5 transition-all ${
                   activeTab === item.id
                     ? 'bg-primary text-primary-foreground border-primary shadow-lg shadow-primary/20'
@@ -2965,6 +3132,8 @@ function App() {
                   cleanText={cleanText}
                   formatTime12h={formatTime12h}
                   auditLogs={dailyAuditLogs}
+                  appAlerts={appAlerts}
+                  appAlertsLoading={appAlertsLoading}
                 />
               </Suspense>
             )}
@@ -3204,6 +3373,7 @@ function App() {
                 canMutateInjection={canMutateInjection}
                 updateInjectionAmount={updateInjectionAmount}
                 deleteInjection={deleteInjection}
+                sendUserMessage={sendUserMessage}
               />
             )}
             {activeTab === 'liquidaciones' && canAccessLiquidation && (
@@ -3230,10 +3400,14 @@ function App() {
                   userProfile={userProfile}
                   selectedUserToLiquidate={selectedUserToLiquidate}
                   setSelectedUserToLiquidate={setSelectedUserToLiquidate}
-                  users={users}
+                  users={liquidationUsers}
                   selectedLiquidationSettlement={selectedLiquidationSettlement}
+                  liquidationGlobalSummary={liquidationGlobalSummary}
+                  liquidationUserSummaries={liquidationUserSummaries}
                   amountPaid={amountPaid}
                   setAmountPaid={setAmountPaid}
+                  amountDirection={amountDirection}
+                  setAmountDirection={setAmountDirection}
                   handleLiquidate={handleLiquidate}
                   liquidationPreview={liquidationPreview}
                   shareImageDataUrl={shareImageDataUrl}

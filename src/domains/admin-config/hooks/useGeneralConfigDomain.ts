@@ -1,5 +1,7 @@
 import { toast } from 'sonner';
 import type { Lottery } from '../../../types/lotteries';
+import type { UserProfile } from '../../../types/users';
+import { createCeoAdminAlert } from '../../../services/repositories/appAlertsRepo';
 import { createLottery, deleteLottery as deleteLotteryById, setLotteryActive, updateLottery } from '../../../services/repositories/lotteriesRepo';
 import { ADMIN_CONFIG_DOMAIN_SPEC, canExecuteAdminConfigAction } from '../domainSpec';
 
@@ -12,6 +14,7 @@ interface ConfirmModalState {
 
 interface UseGeneralConfigDomainParams {
   userRole?: string;
+  currentUserProfile?: UserProfile | null;
   lotteries: Lottery[];
   editingLottery: Lottery | null;
   setEditingLottery: (value: Lottery | null) => void;
@@ -23,6 +26,7 @@ interface UseGeneralConfigDomainParams {
 
 export function useGeneralConfigDomain({
   userRole,
+  currentUserProfile,
   lotteries,
   editingLottery,
   setEditingLottery,
@@ -31,6 +35,46 @@ export function useGeneralConfigDomain({
   normalizeLotteryName,
   onError,
 }: UseGeneralConfigDomainParams) {
+  const notifyLotteryChange = async ({
+    type,
+    title,
+    message,
+    lottery,
+    previousActive,
+    nextActive,
+  }: {
+    type: string;
+    title: string;
+    message: string;
+    lottery: Partial<Lottery> & { id?: string };
+    previousActive?: boolean;
+    nextActive?: boolean;
+  }) => {
+    const actorRole = String(currentUserProfile?.role || userRole || '').toLowerCase();
+    if (actorRole !== 'admin' && actorRole !== 'ceo') return;
+
+    await createCeoAdminAlert({
+      type: `${actorRole}_${type}`,
+      priority: 60,
+      title,
+      message,
+      createdByEmail: currentUserProfile?.email,
+      createdByRole: actorRole,
+      metadata: {
+        actorName: currentUserProfile?.name || '',
+        actorSellerId: currentUserProfile?.sellerId || '',
+        actorRole,
+        lotteryId: lottery.id || '',
+        lotteryName: lottery.name || '',
+        previousActive: previousActive ?? null,
+        nextActive: nextActive ?? null,
+      },
+      actionRef: lottery.id ? `lotteries/${lottery.id}` : 'lotteries',
+    }).catch((error) => {
+      console.error('App alert failed (lottery change):', error);
+    });
+  };
+
   const saveLottery = async (lotteryData: Partial<Lottery>) => {
     const action = editingLottery ? 'editLottery' : 'createLottery';
     if (!canExecuteAdminConfigAction(userRole, action)) {
@@ -57,9 +101,24 @@ export function useGeneralConfigDomain({
 
       if (editingLottery) {
         await updateLottery(editingLottery.id, lotteryData);
+        await notifyLotteryChange({
+          type: 'lottery_updated',
+          title: 'Sorteo editado',
+          message: `${currentUserProfile?.name || currentUserProfile?.email || 'Usuario'} edito sorteo ${normalizedName}.`,
+          lottery: { ...editingLottery, ...lotteryData, id: editingLottery.id },
+          previousActive: editingLottery.active,
+          nextActive: lotteryData.active ?? editingLottery.active,
+        });
         toast.success('Loteria actualizada');
       } else {
-        await createLottery({ ...lotteryData, active: true });
+        const lotteryRef = await createLottery({ ...lotteryData, active: true });
+        await notifyLotteryChange({
+          type: 'lottery_created',
+          title: 'Sorteo creado',
+          message: `${currentUserProfile?.name || currentUserProfile?.email || 'Usuario'} creo sorteo ${normalizedName}.`,
+          lottery: { ...lotteryData, id: lotteryRef.id, active: true },
+          nextActive: true,
+        });
         toast.success('Loteria agregada');
       }
 
@@ -78,6 +137,14 @@ export function useGeneralConfigDomain({
 
     try {
       await setLotteryActive(lottery.id, !lottery.active);
+      await notifyLotteryChange({
+        type: 'lottery_toggled',
+        title: lottery.active ? 'Sorteo desactivado' : 'Sorteo activado',
+        message: `${currentUserProfile?.name || currentUserProfile?.email || 'Usuario'} ${lottery.active ? 'desactivo' : 'activo'} sorteo ${lottery.name}.`,
+        lottery,
+        previousActive: lottery.active,
+        nextActive: !lottery.active,
+      });
       toast.success(`Loteria ${lottery.active ? 'pausada' : 'activada'}`);
     } catch (error) {
       onError(error, 'update', `lotteries/${lottery.id}`);

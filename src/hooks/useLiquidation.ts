@@ -52,11 +52,14 @@ export function useLiquidation({
     totalPrizes: number;
     totalInjections: number;
     totalLiquidations: number;
+    operationalProfit: number;
+    liquidationBalance: number;
     netProfit: number;
   };
   getTicketPrizesFromSource: (ticket: LotteryTicket, source: LotteryResult[]) => { totalPrize: number };
 }) {
   const [amountPaid, setAmountPaid] = useState('');
+  const [amountDirection, setAmountDirection] = useState<'received' | 'sent'>('received');
 
   const selectedLiquidationSettlement = useMemo(() => {
     if (!selectedUserToLiquidate || !liquidationDate) return null;
@@ -71,14 +74,31 @@ export function useLiquidation({
   useEffect(() => {
     if (!selectedUserToLiquidate || !liquidationDate) {
       setAmountPaid('');
+      setAmountDirection('received');
       return;
     }
     if (selectedLiquidationSettlement) {
-      setAmountPaid(String(selectedLiquidationSettlement.amountPaid ?? 0));
+      const storedDirection = selectedLiquidationSettlement.amountDirection ||
+        (Number(selectedLiquidationSettlement.amountSent || 0) > 0 ? 'sent' : 'received');
+      const storedAmount = storedDirection === 'sent'
+        ? selectedLiquidationSettlement.amountSent ?? selectedLiquidationSettlement.amountEntered ?? 0
+        : selectedLiquidationSettlement.amountReceived ?? selectedLiquidationSettlement.amountPaid ?? selectedLiquidationSettlement.amountEntered ?? 0;
+      setAmountDirection(storedDirection);
+      setAmountPaid(String(storedAmount));
       return;
     }
+    setAmountDirection('received');
     setAmountPaid('');
-  }, [liquidationDate, selectedLiquidationSettlement?.amountPaid, selectedLiquidationSettlement?.id, selectedUserToLiquidate]);
+  }, [
+    liquidationDate,
+    selectedLiquidationSettlement?.amountDirection,
+    selectedLiquidationSettlement?.amountEntered,
+    selectedLiquidationSettlement?.amountPaid,
+    selectedLiquidationSettlement?.amountReceived,
+    selectedLiquidationSettlement?.amountSent,
+    selectedLiquidationSettlement?.id,
+    selectedUserToLiquidate,
+  ]);
 
   const liquidationPreview = useMemo(() => {
     if (!selectedUserToLiquidate) return null;
@@ -90,31 +110,49 @@ export function useLiquidation({
     const liquidationTicketsSource = isCurrentOperationalDate ? tickets : liquidationTicketsSnapshot;
     const liquidationInjectionsSource = isCurrentOperationalDate ? injections : liquidationInjectionsSnapshot;
     const liquidationResultsSource = isCurrentOperationalDate ? results : liquidationResultsSnapshot;
+    const liquidationSettlementsSource = isCurrentOperationalDate ? settlements : liquidationSettlementsSnapshot;
 
     const financialSummary = buildFinancialSummary({
       tickets: liquidationTicketsSource,
       injections: liquidationInjectionsSource,
+      settlements: liquidationSettlementsSource,
       userEmail: selectedUserToLiquidate,
       targetDate: liquidationDate,
       prizeResolver: (ticketItem: LotteryTicket) => getTicketPrizesFromSource(ticketItem, liquidationResultsSource),
     });
+    const normalizedFinancialSummary = {
+      ...financialSummary,
+      operationalProfit: financialSummary.operationalProfit ?? financialSummary.netProfit,
+      liquidationBalance: financialSummary.liquidationBalance ?? ((financialSummary.operationalProfit ?? financialSummary.netProfit) + financialSummary.totalInjections),
+    };
+    const normalizedUserEmail = selectedUserToLiquidate.toLowerCase();
+    const previousInjectionTotal = liquidationSettlementsSource
+      .filter((settlement) =>
+        (settlement.userEmail || '').toLowerCase() === normalizedUserEmail &&
+        !!settlement.date &&
+        settlement.date < liquidationDate
+      )
+      .reduce((sum, settlement) => sum + Number(settlement.dailyInjectionTotal ?? settlement.totalInjections ?? 0), 0);
 
-    const ticketsToLiquidate = financialSummary.tickets.filter((ticketItem) =>
+    const ticketsToLiquidate = normalizedFinancialSummary.tickets.filter((ticketItem) =>
       ticketItem.status === 'active' && !ticketItem.settlementId && !ticketItem.liquidated
     );
-    const injectionsToLiquidate = financialSummary.injections.filter((injectionItem) =>
+    const injectionsToLiquidate = normalizedFinancialSummary.injections.filter((injectionItem) =>
       !injectionItem.settlementId && !injectionItem.liquidated
     );
 
     const paid = Number(amountPaid) || 0;
+    const amountReceived = amountDirection === 'received' ? paid : 0;
+    const amountSent = amountDirection === 'sent' ? paid : 0;
     const currentDebt = userToLiquidate.currentDebt || 0;
     const existingDebtImpact = selectedLiquidationSettlement?.debtAdded || 0;
     const debtMetrics = buildLiquidationDebtMetrics({
-      totalSales: financialSummary.totalSales,
-      totalCommissions: financialSummary.totalCommissions,
-      totalPrizes: financialSummary.totalPrizes,
-      totalInjections: financialSummary.totalInjections,
+      totalSales: normalizedFinancialSummary.totalSales,
+      totalCommissions: normalizedFinancialSummary.totalCommissions,
+      totalPrizes: normalizedFinancialSummary.totalPrizes,
+      totalInjections: normalizedFinancialSummary.totalInjections,
       amountPaid: paid,
+      amountDirection,
       currentDebt,
       existingDebtImpact,
     });
@@ -123,17 +161,22 @@ export function useLiquidation({
       userToLiquidate,
       isCurrentOperationalDate,
       liquidationResultsSource,
-      financialSummary,
+      financialSummary: normalizedFinancialSummary,
       ticketsToLiquidate,
       injectionsToLiquidate,
       paid,
+      amountDirection,
+      amountReceived,
+      amountSent,
       currentDebt,
       existingDebtImpact,
+      previousInjectionTotal,
       ...debtMetrics,
       actionLabel: selectedLiquidationSettlement ? 'actualizar' : 'liquidar',
     };
   }, [
     amountPaid,
+    amountDirection,
     businessDayKey,
     buildFinancialSummary,
     getTicketPrizesFromSource,
@@ -141,6 +184,7 @@ export function useLiquidation({
     liquidationDate,
     liquidationInjectionsSnapshot,
     liquidationResultsSnapshot,
+    liquidationSettlementsSnapshot,
     liquidationTicketsSnapshot,
     results,
     selectedLiquidationSettlement,
@@ -149,10 +193,102 @@ export function useLiquidation({
     users,
   ]);
 
+  const liquidationGlobalSummary = useMemo(() => {
+    const isCurrentOperationalDate = liquidationDate === businessDayKey;
+    const liquidationTicketsSource = isCurrentOperationalDate ? tickets : liquidationTicketsSnapshot;
+    const liquidationInjectionsSource = isCurrentOperationalDate ? injections : liquidationInjectionsSnapshot;
+    const liquidationResultsSource = isCurrentOperationalDate ? results : liquidationResultsSnapshot;
+    const liquidationSettlementsSource = isCurrentOperationalDate ? settlements : liquidationSettlementsSnapshot;
+
+    const summary = buildFinancialSummary({
+      tickets: liquidationTicketsSource,
+      injections: liquidationInjectionsSource,
+      settlements: liquidationSettlementsSource,
+      targetDate: liquidationDate,
+      prizeResolver: (ticketItem: LotteryTicket) => getTicketPrizesFromSource(ticketItem, liquidationResultsSource),
+    });
+
+    return {
+      ...summary,
+      operationalProfit: summary.operationalProfit ?? summary.netProfit,
+      liquidationBalance: summary.liquidationBalance ?? ((summary.operationalProfit ?? summary.netProfit) + summary.totalInjections),
+    };
+  }, [
+    buildFinancialSummary,
+    businessDayKey,
+    getTicketPrizesFromSource,
+    injections,
+    liquidationDate,
+    liquidationInjectionsSnapshot,
+    liquidationResultsSnapshot,
+    liquidationSettlementsSnapshot,
+    liquidationTicketsSnapshot,
+    results,
+    settlements,
+    tickets,
+  ]);
+
+  const liquidationUserSummaries = useMemo(() => {
+    const isCurrentOperationalDate = liquidationDate === businessDayKey;
+    const liquidationTicketsSource = isCurrentOperationalDate ? tickets : liquidationTicketsSnapshot;
+    const liquidationInjectionsSource = isCurrentOperationalDate ? injections : liquidationInjectionsSnapshot;
+    const liquidationResultsSource = isCurrentOperationalDate ? results : liquidationResultsSnapshot;
+    const liquidationSettlementsSource = isCurrentOperationalDate ? settlements : liquidationSettlementsSnapshot;
+
+    return users
+      .filter((userItem) => !!userItem?.email)
+      .map((userItem) => {
+        const summary = buildFinancialSummary({
+          tickets: liquidationTicketsSource,
+          injections: liquidationInjectionsSource,
+          settlements: liquidationSettlementsSource,
+          userEmail: userItem.email,
+          targetDate: liquidationDate,
+          prizeResolver: (ticketItem: LotteryTicket) => getTicketPrizesFromSource(ticketItem, liquidationResultsSource),
+        });
+        const operationalProfit = summary.operationalProfit ?? summary.netProfit;
+        const liquidationBalance = summary.liquidationBalance ?? (operationalProfit + summary.totalInjections);
+        const settlement = findLatestSettlementForUserDate({
+          settlements: liquidationSettlementsSource,
+          userEmail: userItem.email,
+          targetDate: liquidationDate,
+        });
+
+        return {
+          user: userItem,
+          summary: {
+            ...summary,
+            operationalProfit,
+            liquidationBalance,
+          },
+          settlement,
+          status: settlement ? 'liquidated' : 'pending',
+        };
+      });
+  }, [
+    buildFinancialSummary,
+    businessDayKey,
+    getTicketPrizesFromSource,
+    injections,
+    liquidationDate,
+    liquidationInjectionsSnapshot,
+    liquidationResultsSnapshot,
+    liquidationSettlementsSnapshot,
+    liquidationTicketsSnapshot,
+    results,
+    settlements,
+    tickets,
+    users,
+  ]);
+
   return {
     amountPaid,
     setAmountPaid,
+    amountDirection,
+    setAmountDirection,
     selectedLiquidationSettlement,
     liquidationPreview,
+    liquidationGlobalSummary,
+    liquidationUserSummaries,
   };
 }

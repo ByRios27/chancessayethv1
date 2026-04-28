@@ -47,7 +47,9 @@ export const buildFinancialSummary = ({
   const totalPrizes = validTickets.reduce((sum, ticket) => sum + (prizeResolver(ticket).totalPrize || 0), 0);
   const totalInjections = validInjections.reduce((sum, injection) => sum + (injection.amount || 0), 0);
   const totalLiquidations = validSettlements.reduce((sum, settlement) => sum + (settlement.amountPaid || 0), 0);
-  const netProfit = totalSales - totalCommissions - totalPrizes + totalInjections;
+  const operationalProfit = totalSales - totalCommissions - totalPrizes;
+  const liquidationBalance = operationalProfit + totalInjections;
+  const netProfit = operationalProfit;
 
   return {
     tickets: validTickets,
@@ -58,6 +60,8 @@ export const buildFinancialSummary = ({
     totalPrizes,
     totalInjections,
     totalLiquidations,
+    operationalProfit,
+    liquidationBalance,
     netProfit
   };
 };
