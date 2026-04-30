@@ -2,7 +2,7 @@ import { toast } from 'sonner';
 import type { Lottery } from '../../../types/lotteries';
 import type { UserProfile } from '../../../types/users';
 import { createCeoAdminAlert } from '../../../services/repositories/appAlertsRepo';
-import { createLottery, deleteLottery as deleteLotteryById, setLotteryActive, updateLottery } from '../../../services/repositories/lotteriesRepo';
+import { createLottery, deleteLottery as deleteLotteryById, renameLotteryReferences, setLotteryActive, updateLottery } from '../../../services/repositories/lotteriesRepo';
 import { ADMIN_CONFIG_DOMAIN_SPEC, canExecuteAdminConfigAction } from '../domainSpec';
 
 interface ConfirmModalState {
@@ -100,16 +100,37 @@ export function useGeneralConfigDomain({
       }
 
       if (editingLottery) {
+        const previousName = editingLottery.name || '';
+        const nextName = String(lotteryData.name || '').trim();
+        const shouldRenameReferences = normalizeLotteryName(previousName) !== normalizedName;
+
         await updateLottery(editingLottery.id, lotteryData);
+        let renameSummary: Awaited<ReturnType<typeof renameLotteryReferences>> | null = null;
+
+        if (shouldRenameReferences) {
+          renameSummary = await renameLotteryReferences({
+            lotteryId: editingLottery.id,
+            previousName,
+            nextName,
+          });
+        }
+
         await notifyLotteryChange({
           type: 'lottery_updated',
           title: 'Sorteo editado',
-          message: `${currentUserProfile?.name || currentUserProfile?.email || 'Usuario'} edito sorteo ${normalizedName}.`,
+          message: shouldRenameReferences
+            ? `${currentUserProfile?.name || currentUserProfile?.email || 'Usuario'} renombro sorteo ${previousName} a ${nextName}.`
+            : `${currentUserProfile?.name || currentUserProfile?.email || 'Usuario'} edito sorteo ${normalizedName}.`,
           lottery: { ...editingLottery, ...lotteryData, id: editingLottery.id },
           previousActive: editingLottery.active,
           nextActive: lotteryData.active ?? editingLottery.active,
         });
-        toast.success('Loteria actualizada');
+        const migratedItems = renameSummary
+          ? renameSummary.liveTicketBets + renameSummary.archivedTicketBets + renameSummary.liveResults + renameSummary.archivedResults
+          : 0;
+        toast.success(shouldRenameReferences
+          ? `Loteria actualizada. Referencias migradas: ${migratedItems}`
+          : 'Loteria actualizada');
       } else {
         const lotteryRef = await createLottery({ ...lotteryData, active: true });
         await notifyLotteryChange({
