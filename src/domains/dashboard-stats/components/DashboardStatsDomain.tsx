@@ -295,7 +295,7 @@ export function DashboardStatsDomain(props: any) {
         </div>
 
         <div className={`dashboard-panel p-2.5 space-y-1.5 ${visibleDashboardAlerts.some((alert: any) => Number(alert.priority || 0) >= 80) ? 'border-yellow-400/35' : ''}`}>
-          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Alertas</p>
+          <p className="text-[10px] font-black uppercase tracking-wider text-white">Alertas</p>
           {appAlertsLoading && visibleDashboardAlerts.length === 0 ? (
             <p className="text-[11px] text-muted-foreground">Cargando alertas...</p>
           ) : visibleDashboardAlerts.length === 0 ? (
@@ -321,7 +321,7 @@ export function DashboardStatsDomain(props: any) {
 
         {canViewInjections && (
           <div className={`dashboard-panel p-2.5 space-y-1.5 ${injectionNotifications.length > 0 ? 'border-red-400/35' : ''}`}>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Notificaciones de inyeccion</p>
+            <p className="text-[10px] font-black uppercase tracking-wider text-white">Notificaciones de inyeccion</p>
             {injectionNotifications.length === 0 ? (
               <p className="text-[11px] text-muted-foreground">Sin usuarios pendientes</p>
             ) : (
@@ -340,7 +340,7 @@ export function DashboardStatsDomain(props: any) {
 
         {canViewInjections && (
           <div className="dashboard-panel p-2.5 space-y-1.5">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Inyecciones globales</p>
+            <p className="text-[10px] font-black uppercase tracking-wider text-white">Inyecciones globales</p>
             {todaysGlobalInjections.length === 0 ? (
               <p className="text-[11px] text-muted-foreground">Sin inyecciones hoy</p>
             ) : (
@@ -362,7 +362,7 @@ export function DashboardStatsDomain(props: any) {
         )}
 
         <div className="dashboard-panel p-2.5 space-y-1.5">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Inyecciones recibidas</p>
+          <p className="text-[10px] font-black uppercase tracking-wider text-white">Inyecciones recibidas</p>
           {todaysReceivedInjections.length === 0 ? (
             <p className="text-[11px] text-muted-foreground">Sin inyecciones recibidas hoy</p>
           ) : (
@@ -383,7 +383,7 @@ export function DashboardStatsDomain(props: any) {
         </div>
 
         <div className="dashboard-panel p-2.5 space-y-1.5">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Ultimos resultados</p>
+          <p className="text-[10px] font-black uppercase tracking-wider text-white">Ultimos resultados</p>
           {latestResults.length === 0 ? (
             <p className="text-[11px] text-muted-foreground">Sin resultados recientes</p>
           ) : (
@@ -401,7 +401,7 @@ export function DashboardStatsDomain(props: any) {
         </div>
 
         <div className="dashboard-panel p-2.5">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+          <p className="text-[10px] font-black uppercase tracking-wider text-white">
             {canViewInjections ? 'Ganancia/Perdida global' : 'Ganancia/Perdida personal'}
           </p>
           <p className={`text-sm font-bold ${todayStats.netProfit > 0 ? 'text-green-400' : todayStats.netProfit < 0 ? 'text-red-400' : 'text-white'}`}>
@@ -477,7 +477,7 @@ export function DashboardStatsDomain(props: any) {
                 {isExpanded && (
                   <div className="px-2.5 py-2 border-t border-white/8 space-y-2">
                     <div>
-                      <h4 className="text-[10px] font-bold text-white/70 mb-1">Numeros (00-99) - Tiempos</h4>
+                      <h4 className="text-[10px] font-black text-white mb-1">Numeros (00-99) - Tiempos</h4>
                       <div className="grid grid-cols-10 gap-[2px]">
                         {qtyByNum.map((totalQty: number, i: number) => {
                           const num = i.toString().padStart(2, '0');
@@ -522,7 +522,7 @@ export function DashboardStatsDomain(props: any) {
                       <div className="dashboard-panel p-2 space-y-1.5">
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Detalle {selectedNumberDetail.number}</p>
+                            <p className="text-[10px] font-black uppercase tracking-wider text-white">Detalle {selectedNumberDetail.number}</p>
                             <p className="text-[11px] text-white/80">{selectedNumberPayload.mode === 'global' ? 'Usuarios con ventas' : 'Tickets propios con ventas'}</p>
                           </div>
                           <button type="button" onClick={() => setSelectedNumberDetail(null)} className="text-[10px] text-muted-foreground hover:text-white">Cerrar</button>
