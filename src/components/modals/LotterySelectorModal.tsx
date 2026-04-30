@@ -8,7 +8,7 @@ import { formatTime12h } from '../../utils/time';
 const LotterySelectorModal = ({ show, lotteries, onSelect, onClose }: {
   show: boolean;
   lotteries: Lottery[];
-  onSelect: (lotteryName: string) => void;
+  onSelect: (lotteryId: string) => void;
   onClose: () => void;
 }) => {
   if (!show) return null;
@@ -28,7 +28,7 @@ const LotterySelectorModal = ({ show, lotteries, onSelect, onClose }: {
           {lotteries.filter(l => l.active).map(lot => (
             <button
               key={lot.id}
-              onClick={() => { onSelect(lot.name); onClose(); }}
+              onClick={() => { onSelect(lot.id); onClose(); }}
               className="w-full p-4 rounded-xl border border-border hover:border-primary hover:bg-primary/5 transition-all text-left group flex justify-between items-center"
             >
               <div className="flex flex-col">

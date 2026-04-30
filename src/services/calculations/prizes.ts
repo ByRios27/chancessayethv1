@@ -46,7 +46,10 @@ export const getTicketPrizesFromSource = ({
     if (filterLottery && cleanText(bet.lottery) !== cleanText(filterLottery)) return;
     if (typeFilter && bet.type !== typeFilter) return;
 
-    const result = resultsSource.find(r => cleanText(r.lotteryName) === cleanText(bet.lottery) && r.date === ticketDate);
+    const result = resultsSource.find(r => (
+      r.date === ticketDate &&
+      (bet.lotteryId ? r.lotteryId === bet.lotteryId : cleanText(r.lotteryName) === cleanText(bet.lottery))
+    ));
     if (!result) return;
 
     const last2 = bet.number.slice(-2);

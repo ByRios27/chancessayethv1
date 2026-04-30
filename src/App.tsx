@@ -582,34 +582,6 @@ function App() {
         });
       }
 
-      if (userProfile?.role === 'admin' || userProfile?.role === 'ceo') {
-        const targetUser = users.find((u) => String(u.email || '').toLowerCase() === String(injection.userEmail || '').toLowerCase());
-        const actorRole = String(userProfile?.role || '').toLowerCase();
-        await createCeoAdminAlert({
-          type: `${actorRole}_injection_updated`,
-          priority: 80,
-          title: 'Inyeccion editada',
-          message: `${userProfile?.name || userProfile?.email || actorRole.toUpperCase()} edito inyeccion de ${targetUser?.name || injection.userEmail}: USD ${Number(injection.amount || 0).toFixed(2)} -> USD ${normalizedAmount.toFixed(2)}.`,
-          createdByEmail: userProfile?.email,
-          createdByRole: userProfile?.role,
-          metadata: {
-            actorName: userProfile?.name || '',
-            actorSellerId: userProfile?.sellerId || '',
-            actorRole,
-            targetEmail: injection.userEmail,
-            targetSellerId: injection.sellerId || '',
-            targetName: targetUser?.name || '',
-            injectionId: injection.id,
-            previousAmount: Number(injection.amount || 0),
-            nextAmount: normalizedAmount,
-            date: injection.date || businessDayKey,
-          },
-          actionRef: `injections/${injection.id}`,
-        }).catch((error) => {
-          console.error('App alert failed (injection update):', error);
-        });
-      }
-
       toastSuccess('Inyeccion actualizada');
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `injections/${injection.id}`);
@@ -652,33 +624,6 @@ function App() {
               date: injection.date || businessDayKey,
             }).catch((error) => {
               console.error('Daily audit log failed (injection delete):', error);
-            });
-          }
-
-          if (userProfile?.role === 'admin' || userProfile?.role === 'ceo') {
-            const targetUser = users.find((u) => String(u.email || '').toLowerCase() === String(injection.userEmail || '').toLowerCase());
-            const actorRole = String(userProfile?.role || '').toLowerCase();
-            await createCeoAdminAlert({
-              type: `${actorRole}_injection_deleted`,
-              priority: 80,
-              title: 'Inyeccion borrada',
-              message: `${userProfile?.name || userProfile?.email || actorRole.toUpperCase()} borro inyeccion de USD ${Number(injection.amount || 0).toFixed(2)} para ${targetUser?.name || injection.userEmail}.`,
-              createdByEmail: userProfile?.email,
-              createdByRole: userProfile?.role,
-              metadata: {
-                actorName: userProfile?.name || '',
-                actorSellerId: userProfile?.sellerId || '',
-                actorRole,
-                targetEmail: injection.userEmail,
-                targetSellerId: injection.sellerId || '',
-                targetName: targetUser?.name || '',
-                injectionId: injection.id,
-                removedAmount: Number(injection.amount || 0),
-                date: injection.date || businessDayKey,
-              },
-              actionRef: `injections/${injection.id}`,
-            }).catch((error) => {
-              console.error('App alert failed (injection delete):', error);
             });
           }
 
@@ -1425,7 +1370,9 @@ function App() {
 
     // Verify if any lottery in the cart is closed or has results
     for (const bet of unifiedCart) {
-      const lot = lotteries.find(l => cleanText(l.name) === cleanText(bet.lottery));
+      const lot = bet.lotteryId
+        ? lotteries.find(l => l.id === bet.lotteryId)
+        : lotteries.find(l => cleanText(l.name) === cleanText(bet.lottery));
       const sellableError = validateLotterySellable({
         lottery: lot,
         lotteryName: bet.lottery,
@@ -1631,6 +1578,12 @@ function App() {
     setBetType,
     setNumber,
   });
+  const fastEntrySelectedLotteries = useMemo(() => {
+    const selectedKeys = isMultipleMode ? multiLottery : (selectedLottery ? [selectedLottery] : []);
+    return selectedKeys
+      .map((key) => findActiveLotteryByName(key))
+      .filter(Boolean) as Lottery[];
+  }, [findActiveLotteryByName, isMultipleMode, multiLottery, selectedLottery]);
   const {
     addToCart,
     removeFromCart,
@@ -1891,9 +1844,19 @@ function App() {
     setReuseModal({ show: true, ticket });
   };
 
-  const handleReuseSelect = (lotteryName: string) => {
+  const handleReuseSelect = (lotteryId: string) => {
     if (!reuseModal.ticket) return;
-    const newBets = reuseModal.ticket.bets.map(b => ({ ...b, lottery: lotteryName }));
+    const targetLottery = lotteries.find((lottery) => lottery.id === lotteryId);
+    if (!targetLottery) {
+      toast.error('Sorteo no encontrado');
+      return;
+    }
+    const newBets = reuseModal.ticket.bets.map(b => ({
+      ...b,
+      lottery: targetLottery.name,
+      lotteryId: targetLottery.id,
+      lotteryDrawTime: targetLottery.drawTime || '',
+    }));
     
     setCart(prevCart => {
       const combined = [...prevCart, ...newBets];
@@ -1901,7 +1864,7 @@ function App() {
     });
     
     setActiveTab('sales');
-    toast.info(`Lista duplicada y unificada para ${cleanText(lotteryName)}`);
+    toast.info(`Lista duplicada y unificada para ${cleanText(targetLottery.name)}`);
   };
 
   const handleUpdatePassword = async (e: React.FormEvent) => {
@@ -2197,10 +2160,17 @@ function App() {
     });
   };
 
-  const applyLotteryToCart = (lotteryName: string) => {
-    if (!lotteryName) return;
-    setCart(cart.map(item => ({ ...item, lottery: lotteryName })));
-    toastSuccess(`Lotería ${cleanText(lotteryName)} aplicada a todo el pedido`);
+  const applyLotteryToCart = (lotteryKey: string) => {
+    if (!lotteryKey) return;
+    const targetLottery = findActiveLotteryByName(lotteryKey);
+    if (!targetLottery) return;
+    setCart(cart.map(item => ({
+      ...item,
+      lottery: targetLottery.name,
+      lotteryId: targetLottery.id,
+      lotteryDrawTime: targetLottery.drawTime || '',
+    })));
+    toastSuccess(`Lotería ${cleanText(targetLottery.name)} aplicada a todo el pedido`);
   };
 
   const downloadDataUrlFile = (dataUrl: string, fileName: string) => {
@@ -2890,7 +2860,7 @@ function App() {
           toastSuccess('Apuestas agregadas y unificadas');
         }}
         onClose={() => setShowFastEntryModal(false)}
-        selectedLotteries={isMultipleMode ? multiLottery : (selectedLottery ? [selectedLottery] : [])}
+        selectedLotteries={fastEntrySelectedLotteries}
         chancePrice={chancePrice}
         plAmount={plAmount}
       />

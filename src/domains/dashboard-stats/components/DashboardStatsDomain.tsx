@@ -28,7 +28,7 @@ export function DashboardStatsDomain(props: any) {
     formatTime12h,
     results,
     users,
-    auditLogs,
+    userStats,
     appAlerts,
     appAlertsLoading,
   } = props;
@@ -57,9 +57,23 @@ export function DashboardStatsDomain(props: any) {
   const safeInjections = injections ?? [];
   const safeResults = results ?? [];
   const safeUsers = users ?? [];
-  const safeAuditLogs = auditLogs ?? [];
   const safeAppAlerts = appAlerts ?? [];
   const timestampMs = (value: any) => value?.toDate?.()?.getTime?.() ?? (value?.seconds ? value.seconds * 1000 : 0);
+  const todayBusinessRange = useMemo(() => {
+    const start = new Date(`${todayStr}T03:00:00`);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 1);
+    return { startMs: start.getTime(), endMs: end.getTime() };
+  }, [todayStr]);
+
+  const isSameOperationalDay = (item: any) => {
+    const metadataDate = String(item?.metadata?.date || item?.date || '');
+    if (metadataDate) return metadataDate === todayStr;
+    const createdAtMs = timestampMs(item?.createdAt);
+    return createdAtMs >= todayBusinessRange.startMs && createdAtMs < todayBusinessRange.endMs;
+  };
+
+  const isInjectionAlertType = (type: unknown) => String(type || '').toLowerCase().includes('injection');
 
   const todaysGlobalInjections = useMemo(() => {
     return safeInjections.filter((inj: any) => inj?.date === todayStr);
@@ -105,24 +119,27 @@ export function DashboardStatsDomain(props: any) {
       .slice(0, 3);
   }, [safeResults]);
 
-  const injectionAlerts = useMemo(() => {
+  const injectionNotifications = useMemo(() => {
     if (!canViewInjections) return [];
 
     return safeUsers
       .map((u: any) => {
-        if (u?.requiresInjection !== true) return null;
+        const email = String(u?.email || '').toLowerCase();
+        const stats = userStats?.[email];
+        const requiredAmount = Math.max(0, -1 * (Number(stats?.utility || 0) + Number(stats?.injections || 0)));
+        if (requiredAmount <= 0.005) return null;
 
         return {
-          email: String(u?.email || '').toLowerCase(),
+          email,
           name: u?.name || u?.email || 'Usuario',
           sellerId: u?.sellerId || '-',
-          requiredAmount: Number(u?.currentDebt || 0),
+          requiredAmount,
         };
       })
       .filter(Boolean)
       .sort((a: any, b: any) => (Number(b.requiredAmount || 0) - Number(a.requiredAmount || 0)))
-      .slice(0, 3);
-  }, [canViewInjections, safeUsers]);
+      .slice(0, 5);
+  }, [canViewInjections, safeUsers, userStats]);
 
   const latestInjectionByTargetEmail = useMemo(() => {
     const grouped = new Map<string, any>();
@@ -140,23 +157,12 @@ export function DashboardStatsDomain(props: any) {
     return grouped;
   }, [todaysGlobalInjections]);
 
-  const adminAuditAlerts = useMemo(() => {
-    if (role !== 'ceo') return [];
-    return safeAuditLogs
-      .filter((event: any) => String(event?.actorRole || '').toLowerCase() === 'admin')
-      .slice(0, 3);
-  }, [role, safeAuditLogs]);
-
   const visibleDashboardAlerts = useMemo(() => {
-    const injectionNeedRows = injectionAlerts.map((alert: any) => ({
-      id: `need-${alert.email}`,
-      priority: 100,
-      title: 'Requiere inyeccion',
-      message: `${alert.name} (${alert.sellerId}) necesita USD ${Number(alert.requiredAmount || 0).toFixed(2)}`,
-      createdAtMs: 0,
-    }));
+    const visibleAppAlerts = safeAppAlerts.filter((alert: any) => (
+      isSameOperationalDay(alert) && !isInjectionAlertType(alert?.type)
+    ));
 
-    const appAlertRows = safeAppAlerts.map((alert: any) => ({
+    const appAlertRows = visibleAppAlerts.map((alert: any) => ({
       id: `app-${alert.id || alert.actionRef || alert.title}`,
       priority: Number(alert.priority || 0),
       title: alert.title || 'Alerta',
@@ -164,22 +170,14 @@ export function DashboardStatsDomain(props: any) {
       createdAtMs: timestampMs(alert.createdAt),
     }));
 
-    const auditFallbackRows = safeAppAlerts.length > 0 ? [] : adminAuditAlerts.map((event: any) => ({
-      id: `audit-${event.id}`,
-      priority: String(event.type || '').includes('INJECTION') ? 80 : String(event.type || '').includes('USER') ? 70 : 60,
-      title: event.type || 'Accion admin',
-      message: `${event.actorName || event.actorEmail || 'Admin'} -> ${event.targetName || event.targetSellerId || event.targetEmail || '-'}`,
-      createdAtMs: timestampMs(event.createdAt),
-    }));
-
-    return [...injectionNeedRows, ...appAlertRows, ...auditFallbackRows]
+    return appAlertRows
       .sort((a, b) => {
         const priorityDiff = Number(b.priority || 0) - Number(a.priority || 0);
         if (priorityDiff !== 0) return priorityDiff;
         return Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0);
       })
       .slice(0, 3);
-  }, [adminAuditAlerts, injectionAlerts, safeAppAlerts]);
+  }, [safeAppAlerts, todayBusinessRange.endMs, todayBusinessRange.startMs, todayStr]);
 
   useEffect(() => {
     if (mode !== 'stats') return;
@@ -296,8 +294,8 @@ export function DashboardStatsDomain(props: any) {
           )}
         </div>
 
-        <div className={`dashboard-panel p-2.5 space-y-1.5 ${visibleDashboardAlerts.some((alert: any) => Number(alert.priority || 0) >= 100) ? 'border-red-400/35' : ''}`}>
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Alertas</p>
+        <div className={`dashboard-panel p-2.5 space-y-1.5 ${visibleDashboardAlerts.some((alert: any) => Number(alert.priority || 0) >= 80) ? 'border-yellow-400/35' : ''}`}>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Alertas</p>
           {appAlertsLoading && visibleDashboardAlerts.length === 0 ? (
             <p className="text-[11px] text-muted-foreground">Cargando alertas...</p>
           ) : visibleDashboardAlerts.length === 0 ? (
@@ -322,8 +320,27 @@ export function DashboardStatsDomain(props: any) {
         </div>
 
         {canViewInjections && (
+          <div className={`dashboard-panel p-2.5 space-y-1.5 ${injectionNotifications.length > 0 ? 'border-red-400/35' : ''}`}>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Notificaciones de inyeccion</p>
+            {injectionNotifications.length === 0 ? (
+              <p className="text-[11px] text-muted-foreground">Sin usuarios pendientes</p>
+            ) : (
+              injectionNotifications.map((alert: any) => (
+                <div key={`need-${alert.email}`} className="flex items-center justify-between gap-2 text-[11px] leading-snug">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-red-300 truncate">{alert.name}</p>
+                    <p className="text-white/65 truncate">{alert.sellerId}</p>
+                  </div>
+                  <span className="shrink-0 font-semibold text-red-300">${Number(alert.requiredAmount || 0).toFixed(2)}</span>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {canViewInjections && (
           <div className="dashboard-panel p-2.5 space-y-1.5">
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Inyecciones globales</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Inyecciones globales</p>
             {todaysGlobalInjections.length === 0 ? (
               <p className="text-[11px] text-muted-foreground">Sin inyecciones hoy</p>
             ) : (
@@ -345,7 +362,7 @@ export function DashboardStatsDomain(props: any) {
         )}
 
         <div className="dashboard-panel p-2.5 space-y-1.5">
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Inyecciones recibidas</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Inyecciones recibidas</p>
           {todaysReceivedInjections.length === 0 ? (
             <p className="text-[11px] text-muted-foreground">Sin inyecciones recibidas hoy</p>
           ) : (
@@ -366,7 +383,7 @@ export function DashboardStatsDomain(props: any) {
         </div>
 
         <div className="dashboard-panel p-2.5 space-y-1.5">
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Ultimos resultados</p>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Ultimos resultados</p>
           {latestResults.length === 0 ? (
             <p className="text-[11px] text-muted-foreground">Sin resultados recientes</p>
           ) : (
@@ -384,7 +401,7 @@ export function DashboardStatsDomain(props: any) {
         </div>
 
         <div className="dashboard-panel p-2.5">
-          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
             {canViewInjections ? 'Ganancia/Perdida global' : 'Ganancia/Perdida personal'}
           </p>
           <p className={`text-sm font-bold ${todayStats.netProfit > 0 ? 'text-green-400' : todayStats.netProfit < 0 ? 'text-red-400' : 'text-white'}`}>
@@ -460,7 +477,7 @@ export function DashboardStatsDomain(props: any) {
                 {isExpanded && (
                   <div className="px-2.5 py-2 border-t border-white/8 space-y-2">
                     <div>
-                      <h4 className="text-[10px] text-white/70 mb-1">Numeros (00-99) - Tiempos</h4>
+                      <h4 className="text-[10px] font-bold text-white/70 mb-1">Numeros (00-99) - Tiempos</h4>
                       <div className="grid grid-cols-10 gap-[2px]">
                         {qtyByNum.map((totalQty: number, i: number) => {
                           const num = i.toString().padStart(2, '0');
@@ -505,7 +522,7 @@ export function DashboardStatsDomain(props: any) {
                       <div className="dashboard-panel p-2 space-y-1.5">
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Detalle {selectedNumberDetail.number}</p>
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Detalle {selectedNumberDetail.number}</p>
                             <p className="text-[11px] text-white/80">{selectedNumberPayload.mode === 'global' ? 'Usuarios con ventas' : 'Tickets propios con ventas'}</p>
                           </div>
                           <button type="button" onClick={() => setSelectedNumberDetail(null)} className="text-[10px] text-muted-foreground hover:text-white">Cerrar</button>

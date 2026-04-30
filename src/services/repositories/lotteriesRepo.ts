@@ -25,6 +25,7 @@ const normalizeReferenceName = (value: unknown) => String(value || '')
 
 const replaceBetLotteryName = (
   bets: unknown,
+  lotteryId: string,
   previousNameKey: string,
   nextName: string
 ) => {
@@ -34,9 +35,11 @@ const replaceBetLotteryName = (
 
   let changedBets = 0;
   const nextBets = bets.map((bet: any) => {
-    if (normalizeReferenceName(bet?.lottery) !== previousNameKey) return bet;
+    const matchesById = bet?.lotteryId && bet.lotteryId === lotteryId;
+    const matchesLegacyName = !bet?.lotteryId && normalizeReferenceName(bet?.lottery) === previousNameKey;
+    if (!matchesById && !matchesLegacyName) return bet;
     changedBets += 1;
-    return { ...bet, lottery: nextName };
+    return { ...bet, lottery: nextName, lotteryId: bet?.lotteryId || lotteryId };
   });
 
   return {
@@ -91,7 +94,7 @@ export const renameLotteryReferences = async ({
 
   ticketsSnapshot.docs.forEach((docSnap: any) => {
     const data = docSnap.data() || {};
-    const nextBets = replaceBetLotteryName(data.bets, previousNameKey, nextName);
+    const nextBets = replaceBetLotteryName(data.bets, lotteryId, previousNameKey, nextName);
     if (!nextBets.changed) return;
 
     liveTicketBets += nextBets.changedBets;
@@ -125,7 +128,7 @@ export const renameLotteryReferences = async ({
 
     if (Array.isArray(data.tickets)) {
       const nextTickets = data.tickets.map((ticket: any) => {
-        const nextBets = replaceBetLotteryName(ticket?.bets, previousNameKey, nextName);
+        const nextBets = replaceBetLotteryName(ticket?.bets, lotteryId, previousNameKey, nextName);
         if (!nextBets.changed) return ticket;
 
         changed = true;

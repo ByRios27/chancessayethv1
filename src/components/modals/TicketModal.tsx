@@ -36,6 +36,14 @@ const TicketModal = ({ ticket, results, lotteries, globalSettings, users, onClos
     }
   };
 
+  const getBetGroupKey = (bet: any) => String(bet?.lotteryId || normalizePlainText(bet?.lottery || ''));
+  const getBetGroupLabel = (bet: any, fallback: string) => bet?.lottery || fallback || 'Sorteo';
+  const matchesSelectedLottery = (bet: any) => (
+    showFullTicket ||
+    !selectedLotteryName ||
+    normalizePlainText(bet?.lottery || '') === normalizePlainText(selectedLotteryName)
+  );
+
   const getTicketPrizesLocal = (ticket: LotteryTicket, results: LotteryResult[]) => {
     let totalPrize = 0;
     const winningBets: { idx: number, prize: number, rank: number, lotteryName: string, winningNumber: string, matchType?: string }[] = [];
@@ -45,9 +53,12 @@ const TicketModal = ({ ticket, results, lotteries, globalSettings, users, onClos
     const ticketDate = getTicketDate(ticket);
 
     (ticket.bets || []).forEach((bet, idx) => {
-      if (!showFullTicket && selectedLotteryName && bet.lottery !== selectedLotteryName) return;
+      if (!matchesSelectedLottery(bet)) return;
 
-      const result = results.find(r => cleanText(r.lotteryName) === cleanText(bet.lottery) && r.date === ticketDate);
+      const result = results.find(r => (
+        r.date === ticketDate &&
+        (bet.lotteryId ? r.lotteryId === bet.lotteryId : cleanText(r.lotteryName) === cleanText(bet.lottery))
+      ));
       if (!result) return;
 
       const last2 = bet.number.slice(-2);
@@ -380,7 +391,7 @@ const TicketModal = ({ ticket, results, lotteries, globalSettings, users, onClos
     const ticketDate = getTicketDate(ticket);
     const relevantResults = results.filter(r => 
       r.date === ticketDate && 
-      (ticket.bets || []).some(b => b?.lottery === r.lotteryName) &&
+      (ticket.bets || []).some(b => (b?.lotteryId ? b.lotteryId === r.lotteryId : b?.lottery === r.lotteryName)) &&
       (showFullTicket || !selectedLotteryName || r.lotteryName === selectedLotteryName)
     );
 
@@ -420,9 +431,19 @@ const TicketModal = ({ ticket, results, lotteries, globalSettings, users, onClos
     y += 8;
 
     // Bets grouped by lottery
-    Array.from(new Set((ticket.bets || []).map(b => cleanText(b?.lottery))))
-      .filter(lotName => showFullTicket || !selectedLotteryName || lotName === cleanText(selectedLotteryName))
-      .forEach(lotName => {
+    Array.from(
+      (ticket.bets || []).reduce((map, bet) => {
+        const key = getBetGroupKey(bet);
+        if (!key) return map;
+        if (!map.has(key)) map.set(key, getBetGroupLabel(bet, key));
+        return map;
+      }, new Map<string, string>()).entries()
+    )
+      .filter(([groupKey]) => {
+        const groupBets = (ticket.bets || []).filter(b => getBetGroupKey(b) === groupKey);
+        return groupBets.some(matchesSelectedLottery);
+      })
+      .forEach(([groupKey, lotName]) => {
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(10);
       doc.setTextColor(0, 0, 0);
@@ -431,7 +452,7 @@ const TicketModal = ({ ticket, results, lotteries, globalSettings, users, onClos
       
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(10);
-      const betsForLot = (ticket.bets || []).filter(b => b?.lottery === lotName);
+      const betsForLot = (ticket.bets || []).filter(b => getBetGroupKey(b) === groupKey && matchesSelectedLottery(b));
       betsForLot.forEach((bet, bIdx) => {
         // Find original index in ticket.bets
         const originalIdx = (ticket.bets || []).findIndex((tb, i) => tb === bet);
@@ -511,7 +532,7 @@ const TicketModal = ({ ticket, results, lotteries, globalSettings, users, onClos
         animate={{ scale: 1, opacity: 1 }}
         className="bg-[#0f172a] text-white p-2 rounded-xl shadow-2xl w-full relative max-h-[90vh] overflow-y-auto custom-scrollbar"
       >
-        {selectedLotteryName && new Set(ticket.bets.map(b => b.lottery)).size > 1 && (
+        {selectedLotteryName && new Set(ticket.bets.map(getBetGroupKey)).size > 1 && (
           <div className="p-4 bg-[#1e293b] border-b border-white/10 flex items-center justify-between">
             <span className="text-[10px] font-bold uppercase text-gray-400">Vista de Ticket</span>
             <div className="flex bg-[#0f172a] p-1 rounded-lg">
@@ -583,19 +604,25 @@ const TicketModal = ({ ticket, results, lotteries, globalSettings, users, onClos
             <div className="space-y-2">
               {Array.from(
                 (ticket.bets || []).reduce((map, bet) => {
-                  const rawLottery = (bet?.lottery || '').trim();
-                  const lotteryKey = normalizePlainText(rawLottery);
+                  const rawLottery = getBetGroupLabel(bet, '');
+                  const lotteryKey = getBetGroupKey(bet);
                   if (!lotteryKey) return map;
                   if (!map.has(lotteryKey)) map.set(lotteryKey, rawLottery);
                   return map;
                 }, new Map<string, string>()).entries()
               )
-                .filter(([lotteryKey]) => showFullTicket || !selectedLotteryName || lotteryKey === normalizePlainText(selectedLotteryName))
+                .filter(([lotteryKey]) => {
+                  const groupBets = (ticket.bets || []).filter(b => getBetGroupKey(b) === lotteryKey);
+                  return groupBets.some(matchesSelectedLottery);
+                })
                 .map(([lotteryKey, lotName]) => {
-                const betsForLot = (ticket.bets || []).filter(b => normalizePlainText(b?.lottery || '') === lotteryKey);
+                const betsForLot = (ticket.bets || []).filter(b => getBetGroupKey(b) === lotteryKey && matchesSelectedLottery(b));
                 const unifiedBetsForLot = unifyBets(betsForLot.map(b => ({ ...b, lottery: lotName })));
                 const ticketDate = getTicketDate(ticket);
-                const result = results.find(r => normalizePlainText(r.lotteryName) === lotteryKey && r.date === ticketDate);
+                const result = results.find(r => (
+                  r.date === ticketDate &&
+                  betsForLot.some((bet) => (bet?.lotteryId ? bet.lotteryId === r.lotteryId : normalizePlainText(r.lotteryName) === normalizePlainText(bet?.lottery || '')))
+                ));
 
                 return (
                   <div key={lotName} className="pt-1">

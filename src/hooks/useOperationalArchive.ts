@@ -42,6 +42,7 @@ export function useOperationalArchive({
     const injectionsToArchive = mapSnapshotDocs(sourceSnapshots.injectionsSnapshot.docs);
     const resultsToArchive = mapSnapshotDocs(sourceSnapshots.resultsSnapshot.docs);
     const settlementsToArchive = mapSnapshotDocs(sourceSnapshots.settlementsSnapshot.docs);
+    const appAlertsToArchive = mapSnapshotDocs(sourceSnapshots.appAlertsSnapshot.docs);
 
     const archivePayload = buildArchivePayload({
       targetBusinessDay,
@@ -49,6 +50,7 @@ export function useOperationalArchive({
       resultsToArchive,
       settlementsToArchive,
       injectionsToArchive,
+      appAlertsToArchive,
       createdAt: serverTimestamp(),
       archivedBy,
       trigger,
@@ -64,6 +66,7 @@ export function useOperationalArchive({
       ticketsDocs: sourceSnapshots.ticketsSnapshot.docs,
       resultsDocs: sourceSnapshots.resultsSnapshot.docs,
       injectionsDocs: sourceSnapshots.injectionsSnapshot.docs,
+      appAlertsDocs: sourceSnapshots.appAlertsSnapshot.docs,
     });
 
     await deleteOperationalLiveDocsInChunks({ docsToDelete, chunkSize: 450 });

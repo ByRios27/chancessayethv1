@@ -51,27 +51,20 @@ export function useSalesAvailability({
   }, []);
 
   const activeLotteries = useMemo(() => {
-    const seenNames = new Set<string>();
-    return sortedLotteries
-      .filter((lottery) => isLotteryOpenForSales(lottery))
-      .filter((lottery) => {
-        const key = normalizeLotteryName(lottery.name);
-        if (!key || seenNames.has(key)) return false;
-        seenNames.add(key);
-        return true;
-      });
+    return sortedLotteries.filter((lottery) => isLotteryOpenForSales(lottery));
   }, [isLotteryOpenForSales, sortedLotteries]);
 
   const findActiveLotteryByName = useCallback((name: string) => {
     const key = normalizeLotteryName(name);
-    return activeLotteries.find((lottery) => normalizeLotteryName(lottery.name) === key);
+    return activeLotteries.find((lottery) => lottery.id === name)
+      || activeLotteries.find((lottery) => normalizeLotteryName(lottery.name) === key);
   }, [activeLotteries]);
 
   useEffect(() => {
     if (activeLotteries.length > 0) {
       if (!isMultipleMode) {
         if (!selectedLottery || !findActiveLotteryByName(selectedLottery)) {
-          setSelectedLottery(activeLotteries[0].name);
+          setSelectedLottery(activeLotteries[0].id);
         }
       } else {
         const validMulti = multiLottery.filter((name) => !!findActiveLotteryByName(name));

@@ -90,16 +90,6 @@ export function useGeneralConfigDomain({
         return;
       }
 
-      const hasDuplicateName = lotteries.some(lottery => {
-        if (editingLottery && lottery.id === editingLottery.id) return false;
-        return normalizeLotteryName(lottery.name) === normalizedName;
-      });
-
-      if (hasDuplicateName) {
-        toast.error(ADMIN_CONFIG_DOMAIN_SPEC.expectedErrors.duplicateLottery);
-        return;
-      }
-
       if (editingLottery) {
         const previousName = editingLottery.name || '';
         const nextName = String(lotteryData.name || '').trim();

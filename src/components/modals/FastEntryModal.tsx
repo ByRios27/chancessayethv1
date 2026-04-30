@@ -4,11 +4,17 @@ import { toast } from 'sonner';
 import { ArrowLeftRight, X } from 'lucide-react';
 import type { Bet } from '../../types/bets';
 
+interface SelectedLotteryOption {
+  id: string;
+  name: string;
+  drawTime?: string;
+}
+
 const FastEntryModal = ({ show, onAdd, onClose, selectedLotteries, chancePrice, plAmount }: {
   show: boolean;
   onAdd: (bets: Bet[]) => void;
   onClose: () => void;
-  selectedLotteries: string[];
+  selectedLotteries: SelectedLotteryOption[];
   chancePrice: number;
   plAmount: string;
 }) => {
@@ -72,7 +78,7 @@ const FastEntryModal = ({ show, onAdd, onClose, selectedLotteries, chancePrice, 
             selectedLotteries.forEach(lottery => {
               const existingIdx = validBets.findIndex(b => 
                 b.number === finalNumber && 
-                b.lottery === lottery && 
+                b.lotteryId === lottery.id &&
                 b.type === type
               );
               if (existingIdx !== -1) {
@@ -81,7 +87,9 @@ const FastEntryModal = ({ show, onAdd, onClose, selectedLotteries, chancePrice, 
               } else {
                 validBets.push({
                   number: finalNumber,
-                  lottery,
+                  lottery: lottery.name,
+                  lotteryId: lottery.id,
+                  lotteryDrawTime: lottery.drawTime || '',
                   amount: calculatedAmount,
                   type,
                   quantity

@@ -5,7 +5,6 @@ import { X } from 'lucide-react';
 import { format } from 'date-fns';
 import type { UserProfile } from '../../types/users';
 import { collection, db, doc, serverTimestamp, writeBatch } from '../../firebase';
-import { createCeoAdminAlert } from '../../services/repositories/appAlertsRepo';
 import { logDailyAuditEvent } from '../../services/repositories/auditLogsRepo';
 import { getBusinessDate } from '../../utils/dates';
 
@@ -130,33 +129,6 @@ const TransactionModal = ({
           date: businessDate,
         }).catch((error) => {
           console.error('Daily audit log failed (injection create):', error);
-        });
-      }
-
-      if (actorEmail && (userProfile?.role === 'admin' || userProfile?.role === 'ceo')) {
-        const actorRole = String(userProfile.role || '').toLowerCase();
-        await createCeoAdminAlert({
-          type: `${actorRole}_injection_created`,
-          priority: 80,
-          title: 'Inyeccion creada',
-          message: `${actorName || actorEmail} inyecto USD ${amountValue.toFixed(2)} a ${targetUser?.name || targetEmail.toLowerCase()}.`,
-          createdByEmail: actorEmail,
-          createdByRole: userProfile.role,
-          metadata: {
-            actorName,
-            actorSellerId,
-            actorRole,
-            targetEmail: targetEmail.toLowerCase(),
-            targetSellerId,
-            targetName: targetUser?.name || '',
-            amount: amountValue,
-            injectionType: type,
-            injectionId: transactionRef.id,
-            date: businessDate,
-          },
-          actionRef: `injections/${transactionRef.id}`,
-        }).catch((error) => {
-          console.error('App alert failed (injection create):', error);
         });
       }
 

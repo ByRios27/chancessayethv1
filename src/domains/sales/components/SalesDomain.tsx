@@ -221,7 +221,7 @@ export function SalesDomain(props: SalesDomainProps) {
                       <>
                         <div className="flex items-center justify-between pb-1 border-b border-white/10">
                           <button
-                            onClick={() => setMultiLottery(safeActiveLotteries.map((lottery) => lottery.name))}
+                            onClick={() => setMultiLottery(safeActiveLotteries.map((lottery) => lottery.id))}
                             className="px-2 py-1 text-[10px] font-bold uppercase text-primary hover:text-primary/80"
                           >
                             Todos
@@ -237,17 +237,19 @@ export function SalesDomain(props: SalesDomainProps) {
                           <label key={lottery.id} className="flex items-center gap-2 px-1.5 py-1.5 rounded-lg cursor-pointer hover:bg-white/5">
                             <input
                               type="checkbox"
-                              checked={safeMultiLottery.includes(lottery.name)}
+                              checked={safeMultiLottery.includes(lottery.id)}
                               onChange={(e) => {
                                 if (e.target.checked) {
-                                  setMultiLottery([...safeMultiLottery, lottery.name]);
+                                  setMultiLottery([...safeMultiLottery, lottery.id]);
                                 } else {
-                                  setMultiLottery(safeMultiLottery.filter((name) => name !== lottery.name));
+                                  setMultiLottery(safeMultiLottery.filter((id) => id !== lottery.id));
                                 }
                               }}
                               className="rounded border-border text-primary focus:ring-primary bg-transparent"
                             />
-                            <span className="text-xs font-medium truncate">{cleanText(lottery.name)}</span>
+                            <span className="text-xs font-medium truncate">
+                              {cleanText(lottery.name)} {lottery.drawTime ? `(${formatTime12h(lottery.drawTime)})` : ''}
+                            </span>
                           </label>
                         ))}
                       </>
@@ -270,7 +272,7 @@ export function SalesDomain(props: SalesDomainProps) {
                   {lotteriesLoading ? 'Cargando sorteos...' : hasActiveLotteries ? 'Seleccione Sorteo' : 'Sin sorteos activos'}
                 </option>
                 {safeActiveLotteries.map((lottery) => (
-                  <option key={lottery.id} value={lottery.name} className="bg-background">
+                  <option key={lottery.id} value={lottery.id} className="bg-background">
                     {cleanText(lottery.name)} {lottery.drawTime ? `(${formatTime12h(lottery.drawTime)})` : ''}
                   </option>
                 ))}
@@ -323,7 +325,7 @@ export function SalesDomain(props: SalesDomainProps) {
             Pale
           </button>
         )}
-        {globalSettings.billetesEnabled && (isMultipleMode ? safeMultiLottery.some((name) => findActiveLotteryByName(name)?.isFourDigits) : findActiveLotteryByName(selectedLottery)?.isFourDigits) && (
+        {globalSettings.billetesEnabled && (isMultipleMode ? safeMultiLottery.some((id) => findActiveLotteryByName(id)?.isFourDigits) : findActiveLotteryByName(selectedLottery)?.isFourDigits) && (
           <button
             onClick={() => {
               setBetType('BL');
@@ -469,17 +471,22 @@ export function SalesDomain(props: SalesDomainProps) {
           <div className="max-h-[42vh] overflow-y-auto space-y-0 custom-scrollbar pr-0.5">
             {Object.entries(
               safeCart.reduce((acc: Record<string, (Bet & { originalIdx: number })[]>, bet: Bet, idx: number) => {
-                if (!acc[bet.lottery]) acc[bet.lottery] = [];
-                acc[bet.lottery].push({ ...bet, originalIdx: idx });
+                const groupKey = bet.lotteryId || bet.lottery;
+                if (!acc[groupKey]) acc[groupKey] = [];
+                acc[groupKey].push({ ...bet, originalIdx: idx });
                 return acc;
               }, {})
             ).map(([lotteryName, bets]) => {
               const betList = bets as (Bet & { originalIdx: number })[];
+              const firstBet = betList[0];
               return (
               <div key={lotteryName} className="border-b border-white/10 pb-0 last:border-b-0">
                 <div className="text-[10px] font-bold uppercase tracking-widest text-primary flex items-center gap-1 py-1 leading-none">
                   <span className="w-1.5 h-1.5 bg-primary rounded-full"></span>
-                  {cleanText(lotteryName)}
+                  {cleanText(firstBet?.lottery || lotteryName)}
+                  {firstBet?.lotteryDrawTime ? (
+                    <span className="text-muted-foreground">({formatTime12h(firstBet.lotteryDrawTime)})</span>
+                  ) : null}
                   <span className="text-muted-foreground ml-auto">({betList.length})</span>
                 </div>
                 <div>

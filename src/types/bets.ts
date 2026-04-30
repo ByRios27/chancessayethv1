@@ -1,6 +1,8 @@
 export interface Bet {
   number: string;
   lottery: string;
+  lotteryId?: string;
+  lotteryDrawTime?: string;
   amount: number;
   type: 'CH' | 'PL' | 'BL';
   quantity: number;

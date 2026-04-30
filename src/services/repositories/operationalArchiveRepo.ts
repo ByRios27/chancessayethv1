@@ -40,11 +40,29 @@ export const fetchOperationalArchiveSourceSnapshots = async ({
     where('date', '==', targetBusinessDay)
   ));
 
+  const appAlertsByMetadataDateSnapshot = await getDocs(query(
+    collection(db, 'app_alerts'),
+    where('metadata.date', '==', targetBusinessDay)
+  ));
+
+  const appAlertsByCreatedAtSnapshot = await getDocs(query(
+    collection(db, 'app_alerts'),
+    where('createdAt', '>=', start),
+    where('createdAt', '<', end)
+  ));
+
+  const appAlertDocsById = new Map<string, any>();
+  appAlertsByMetadataDateSnapshot.docs.forEach((docSnap) => appAlertDocsById.set(docSnap.id, docSnap));
+  appAlertsByCreatedAtSnapshot.docs.forEach((docSnap) => appAlertDocsById.set(docSnap.id, docSnap));
+
   return {
     ticketsSnapshot,
     injectionsSnapshot,
     resultsSnapshot,
     settlementsSnapshot,
+    appAlertsSnapshot: {
+      docs: Array.from(appAlertDocsById.values()),
+    },
   };
 };
 

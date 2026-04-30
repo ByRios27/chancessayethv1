@@ -50,7 +50,7 @@ export function useLotteries({
         const sorted = [...docs].sort((a, b) => getSortValue(a.drawTime || '00:00') - getSortValue(b.drawTime || '00:00'));
         const firstActive = sorted.find((l) => l.active);
         if (firstActive) {
-          setSelectedLottery((current) => (current ? current : firstActive.name));
+          setSelectedLottery((current) => (current ? current : firstActive.id));
         }
       }
     }, (error) => {

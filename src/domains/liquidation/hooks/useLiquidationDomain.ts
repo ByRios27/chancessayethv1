@@ -18,6 +18,7 @@ import {
   writeBatch,
 } from '../../../firebase';
 import { useLiquidation } from '../../../hooks/useLiquidation';
+import { createCeoAdminAlert } from '../../../services/repositories/appAlertsRepo';
 import type { Injection, Settlement } from '../../../types/finance';
 import type { LotteryResult } from '../../../types/results';
 import type { LotteryTicket } from '../../../types/bets';
@@ -406,6 +407,7 @@ export function useLiquidationDomain(params: any) {
           const finalNewTotalDebt = baselineDebt + finalDebtAdded;
           const finalAmountReceived = previewAmountDirection === 'received' ? paid : 0;
           const finalAmountSent = previewAmountDirection === 'sent' ? paid : 0;
+          const isUpdatingSettlement = !!existingSettlement;
 
           const settlementPayload = {
             userEmail: normalizedUserEmail,
@@ -565,7 +567,46 @@ export function useLiquidationDomain(params: any) {
           if (typeof setSettlements === 'function') {
             setSettlements((prev: Settlement[]) => upsertSettlement(prev));
           }
-          toastSuccess(existingSettlement ? 'Liquidacion actualizada correctamente' : 'Liquidacion guardada correctamente');
+
+          const actorEmail = String(userProfile?.email || '').toLowerCase();
+          const actorRole = String(userProfile?.role || '').toLowerCase();
+          if (actorEmail && (actorRole === 'admin' || actorRole === 'ceo')) {
+            await createCeoAdminAlert({
+              type: `${actorRole}_${isUpdatingSettlement ? 'liquidation_updated' : 'liquidation_created'}`,
+              priority: 75,
+              title: isUpdatingSettlement ? 'Liquidacion actualizada' : 'Liquidacion registrada',
+              message: `${userProfile?.name || actorEmail} ${isUpdatingSettlement ? 'actualizo' : 'registro'} liquidacion de ${userToLiquidate.name || normalizedUserEmail} para ${liquidationDate}: balance USD ${liquidationBalance.toFixed(2)}, ${previewAmountDirection === 'sent' ? 'enviado' : 'recibido'} USD ${paid.toFixed(2)}.`,
+              createdByEmail: actorEmail,
+              createdByRole: actorRole,
+              metadata: {
+                actorName: userProfile?.name || '',
+                actorSellerId: userProfile?.sellerId || '',
+                actorRole,
+                targetEmail: normalizedUserEmail,
+                targetName: userToLiquidate.name || '',
+                targetSellerId: userToLiquidate.sellerId || '',
+                date: liquidationDate,
+                totalSales,
+                totalCommissions,
+                totalPrizes,
+                totalInjections,
+                operationalProfit,
+                liquidationBalance,
+                amountDirection: previewAmountDirection,
+                amountReceived: finalAmountReceived,
+                amountSent: finalAmountSent,
+                amountEntered: paid,
+                debtAdded: finalDebtAdded,
+                newTotalDebt: finalNewTotalDebt,
+                settlementId: effectiveSettlementId,
+              },
+              actionRef: `settlements/${effectiveSettlementId}`,
+            }).catch((error) => {
+              console.error('App alert failed (liquidation save):', error);
+            });
+          }
+
+          toastSuccess(isUpdatingSettlement ? 'Liquidacion actualizada correctamente' : 'Liquidacion guardada correctamente');
           setAmountPaid(String(paid));
           setAmountDirection(previewAmountDirection);
         } catch (error) {

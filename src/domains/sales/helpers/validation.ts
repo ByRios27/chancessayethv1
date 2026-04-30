@@ -34,7 +34,10 @@ export function validateLotterySellable({
   if (!lottery.active || !isLotteryOpenForSales(lottery)) return `${SALES_DOMAIN_SPEC.expectedErrors.closedLottery} (${lotteryName})`;
 
   const todayStr = format(new Date(), 'yyyy-MM-dd');
-  const hasResult = results.some((result) => cleanText(result.lotteryName) === cleanText(lotteryName) && result.date === todayStr);
+  const hasResult = results.some((result) => (
+    result.date === todayStr &&
+    (result.lotteryId ? result.lotteryId === lottery.id : cleanText(result.lotteryName) === cleanText(lotteryName))
+  ));
   if (hasResult) return `${SALES_DOMAIN_SPEC.expectedErrors.lotteryWithResults} (${lotteryName})`;
 
   return null;

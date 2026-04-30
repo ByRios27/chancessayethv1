@@ -10,6 +10,7 @@ export const buildArchivePayload = ({
   resultsToArchive,
   settlementsToArchive,
   injectionsToArchive,
+  appAlertsToArchive,
   archivedBy,
   trigger,
   createdAt,
@@ -19,6 +20,7 @@ export const buildArchivePayload = ({
   resultsToArchive: Array<Record<string, any>>;
   settlementsToArchive: Array<Record<string, any>>;
   injectionsToArchive: Array<Record<string, any>>;
+  appAlertsToArchive?: Array<Record<string, any>>;
   archivedBy: string;
   trigger: 'manual' | 'automatic';
   createdAt: any;
@@ -28,6 +30,7 @@ export const buildArchivePayload = ({
   results: resultsToArchive,
   settlements: settlementsToArchive,
   injections: injectionsToArchive,
+  appAlerts: appAlertsToArchive || [],
   createdAt,
   archivedBy,
   archiveTrigger: trigger,
@@ -37,11 +40,13 @@ export const buildDocsToDelete = ({
   ticketsDocs,
   resultsDocs,
   injectionsDocs,
+  appAlertsDocs = [],
 }: {
   ticketsDocs: QueryDocumentSnapshot[];
   resultsDocs: QueryDocumentSnapshot[];
   injectionsDocs: QueryDocumentSnapshot[];
-}) => ([...ticketsDocs, ...resultsDocs, ...injectionsDocs]);
+  appAlertsDocs?: QueryDocumentSnapshot[];
+}) => ([...ticketsDocs, ...resultsDocs, ...injectionsDocs, ...appAlertsDocs]);
 
 export const shouldResetOperationalStateAfterArchive = ({
   targetBusinessDay,

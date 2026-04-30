@@ -5,11 +5,13 @@ export const unifyBets = (bets: Bet[]): Bet[] => {
   bets.forEach(bet => {
     const num = (bet.number || '').toString().trim();
     const lot = (bet.lottery || '').toString().trim();
+    const lotId = (bet.lotteryId || '').toString().trim();
     const type = bet.type;
 
     const existing = unified.find(u =>
       u.number.trim() === num &&
-      u.lottery.trim() === lot &&
+      (u.lotteryId || '').trim() === lotId &&
+      (!lotId ? u.lottery.trim() === lot : true) &&
       u.type === type
     );
 

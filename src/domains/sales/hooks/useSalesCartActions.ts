@@ -1,7 +1,7 @@
 import { useCallback, type Dispatch, type RefObject, type SetStateAction } from 'react';
 import { toast } from 'sonner';
 import type { Bet, LotteryTicket } from '../../../types/bets';
-import type { GlobalSettings } from '../../../types/lotteries';
+import type { GlobalSettings, Lottery } from '../../../types/lotteries';
 import type { UserProfile } from '../../../types/users';
 import { toastSuccess } from '../../../utils/toast';
 import { unifyBets } from '../../../utils/bets';
@@ -20,7 +20,7 @@ interface UseSalesCartActionsParams {
   isMultipleMode: boolean;
   multiLottery: string[];
   selectedLottery: string;
-  findActiveLotteryByName: (name: string) => any;
+  findActiveLotteryByName: (name: string) => Lottery | undefined;
   cart: Bet[];
   setCart: Dispatch<SetStateAction<Bet[]>>;
   tickets: LotteryTicket[];
@@ -54,6 +54,10 @@ export function useSalesCartActions({
   numberInputRef,
 }: UseSalesCartActionsParams) {
   const BL_UNIT_PRICE = 1;
+  const betMatchesLottery = (bet: Bet | undefined, lottery: Lottery) => {
+    if (!bet) return false;
+    return bet.lotteryId ? bet.lotteryId === lottery.id : bet.lottery === lottery.name;
+  };
 
   const addToCart = useCallback(() => {
     const salesAccessError = validateSalesAccess({ userProfile, operationalSellerId });
@@ -95,12 +99,12 @@ export function useSalesCartActions({
       return;
     }
 
-    const lotteriesToBuy = new Set<string>();
+    const lotteriesToBuy = new Map<string, Lottery>();
     if (isMultipleMode) {
-      multiLottery.forEach((lotteryName) => {
-        const lottery = findActiveLotteryByName(lotteryName);
+      multiLottery.forEach((lotteryKey) => {
+        const lottery = findActiveLotteryByName(lotteryKey);
         if (betType === 'BL' && !lottery?.isFourDigits) return;
-        lotteriesToBuy.add((lottery?.name || lotteryName).trim());
+        if (lottery) lotteriesToBuy.set(lottery.id, lottery);
       });
     } else if (selectedLottery) {
       const lottery = findActiveLotteryByName(selectedLottery);
@@ -108,7 +112,7 @@ export function useSalesCartActions({
         toast.error('Este sorteo no admite Billetes (4 cifras)');
         return;
       }
-      lotteriesToBuy.add((lottery?.name || selectedLottery).trim());
+      if (lottery) lotteriesToBuy.set(lottery.id, lottery);
     }
 
     if (lotteriesToBuy.size === 0) {
@@ -138,31 +142,33 @@ export function useSalesCartActions({
       calculatedAmount = qInt * costPerUnit;
     }
 
-    for (const lot of lotteriesToBuy) {
+    for (const lot of lotteriesToBuy.values()) {
       if (betType !== 'PL') continue;
 
       const inCart = cart
-        .filter((b) => b && b.number === number && b.lottery === lot && b.type === 'PL')
+        .filter((b) => b && b.number === number && betMatchesLottery(b, lot) && b.type === 'PL')
         .reduce((acc, b) => acc + b.quantity, 0);
 
       const inTickets = tickets
         .filter((ticket) => ticket.status === 'active' && ticket.bets)
         .flatMap((ticket) => ticket.bets)
-        .filter((b) => b && b.number === number && b.lottery === lot && b.type === 'PL')
+        .filter((b) => b && b.number === number && betMatchesLottery(b, lot) && b.type === 'PL')
         .reduce((acc, b) => acc + b.quantity, 0);
 
       if (inCart + inTickets + qInt > 5) {
-        toast.error(`Excede limite de 5 combinaciones para #${number} en ${lot}`);
+        toast.error(`Excede limite de 5 combinaciones para #${number} en ${lot.name}`);
         return;
       }
     }
 
     setCart((prevCart) => {
       const newBets: Bet[] = [];
-      lotteriesToBuy.forEach((lotteryName) => {
+      lotteriesToBuy.forEach((lottery) => {
         newBets.push({
           number: number.trim(),
-          lottery: lotteryName.trim(),
+          lottery: lottery.name.trim(),
+          lotteryId: lottery.id,
+          lotteryDrawTime: lottery.drawTime || '',
           amount: calculatedAmount,
           type: betType,
           quantity: qInt,
@@ -214,17 +220,18 @@ export function useSalesCartActions({
     if (!item) return;
 
     if (item.type === 'PL') {
+      const lottery = item.lotteryId ? findActiveLotteryByName(item.lotteryId) : findActiveLotteryByName(item.lottery);
       const lot = item.lottery;
       const num = item.number;
 
       const inCartOther = cart
-        .filter((bet, i) => bet && i !== index && bet.number === num && bet.lottery === lot && bet.type === 'PL')
+        .filter((bet, i) => bet && i !== index && bet.number === num && (lottery ? betMatchesLottery(bet, lottery) : bet.lottery === lot) && bet.type === 'PL')
         .reduce((acc, bet) => acc + bet.quantity, 0);
 
       const inTickets = tickets
         .filter((ticket) => ticket.status === 'active' && ticket.bets)
         .flatMap((ticket) => ticket.bets)
-        .filter((bet) => bet && bet.number === num && bet.lottery === lot && bet.type === 'PL')
+        .filter((bet) => bet && bet.number === num && (lottery ? betMatchesLottery(bet, lottery) : bet.lottery === lot) && bet.type === 'PL')
         .reduce((acc, bet) => acc + bet.quantity, 0);
 
       if (inCartOther + inTickets + newQty > 5) {
@@ -238,7 +245,7 @@ export function useSalesCartActions({
       const unitAmount = item.type === 'BL' ? BL_UNIT_PRICE : item.amount / item.quantity;
       return { ...item, quantity: newQty, amount: unitAmount * newQty };
     }));
-  }, [BL_UNIT_PRICE, cart, setCart, tickets]);
+  }, [BL_UNIT_PRICE, cart, findActiveLotteryByName, setCart, tickets]);
 
   const updateCartItemAmount = useCallback((index: number, newAmount: number) => {
     if (newAmount < 0) return;
