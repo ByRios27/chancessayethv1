@@ -113,7 +113,7 @@ const LotteryStatsCard: React.FC<LotteryStatsCardProps> = ({
 
   const result = results.find(r => r.lotteryName === lottery.name && r.date === historyDate);
   const hasResult = !!result;
-  const cardBgClass = hasResult ? 'bg-[#3F1616]/80 border-[#7F1D1D]/60' : 'bg-[#111827] border-gray-800';
+  const cardBgClass = hasResult ? 'bg-[#4A1020]/80 border-[#E60032]/55' : 'bg-[#111827] border-gray-800';
 
   return (
     <div className={`rounded-xl border ${cardBgClass} overflow-hidden transition-all duration-300 mb-4`}>

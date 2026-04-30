@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { format } from 'date-fns';
 import { jsPDF } from 'jspdf';
 import { toast } from 'sonner';
@@ -9,6 +9,7 @@ import {
   db,
   doc,
   getDocs,
+  getDoc,
   limit,
   query,
   serverTimestamp,
@@ -20,6 +21,8 @@ import { useLiquidation } from '../../../hooks/useLiquidation';
 import type { Injection, Settlement } from '../../../types/finance';
 import type { LotteryResult } from '../../../types/results';
 import type { LotteryTicket } from '../../../types/bets';
+
+const BALANCE_EPSILON = 0.005;
 
 export function useLiquidationDomain(params: any) {
   const {
@@ -44,6 +47,8 @@ export function useLiquidationDomain(params: any) {
     liquidationResultsSnapshot,
     liquidationSettlementsSnapshot,
     setLiquidationSettlementsSnapshot,
+    setSettlements,
+    setUsers,
     isLiquidationDataLoading,
     setTickets,
     setInjections,
@@ -68,6 +73,10 @@ export function useLiquidationDomain(params: any) {
     return format(d, 'yyyy-MM-dd');
   });
   const [isGeneratingYesterdayReport, setIsGeneratingYesterdayReport] = useState(false);
+  const [liquidationRangeStartDate, setLiquidationRangeStartDate] = useState<string>(businessDayKey);
+  const [liquidationRangeEndDate, setLiquidationRangeEndDate] = useState<string>(businessDayKey);
+  const [liquidationRangeReport, setLiquidationRangeReport] = useState<any>(null);
+  const [isLiquidationRangeLoading, setIsLiquidationRangeLoading] = useState(false);
 
   const {
     amountPaid,
@@ -107,6 +116,229 @@ export function useLiquidationDomain(params: any) {
     });
   }, [getQuickOperationalDate, recentOperationalDates]);
 
+  const normalizeEmail = useCallback((value?: string | null) => (value || '').toLowerCase().trim(), []);
+
+  const getDatesInRange = useCallback((from: string, to: string) => {
+    const safeFrom = from || to;
+    const safeTo = to || from || safeFrom;
+    const start = new Date(`${safeFrom}T00:00:00`);
+    const end = new Date(`${safeTo}T00:00:00`);
+    const dates: string[] = [];
+    const cursor = new Date(start.getTime());
+    let iterations = 0;
+
+    while (cursor <= end && iterations < 62) {
+      dates.push(format(cursor, 'yyyy-MM-dd'));
+      cursor.setDate(cursor.getDate() + 1);
+      iterations += 1;
+    }
+
+    return dates;
+  }, []);
+
+  const dedupeById = useCallback(<T extends { id?: string }>(items: T[]) => {
+    const map = new Map<string, T>();
+    items.forEach((item, index) => {
+      const key = item?.id || `fallback-${index}`;
+      if (!map.has(key)) map.set(key, item);
+    });
+    return Array.from(map.values());
+  }, []);
+
+  const fetchLiquidationDayData = useCallback(async (targetDate: string, userEmail: string) => {
+    const normalizedEmail = normalizeEmail(userEmail);
+
+    if (targetDate === businessDayKey) {
+      return {
+        tickets: tickets.filter((ticket: LotteryTicket) => normalizeEmail(ticket.sellerEmail) === normalizedEmail),
+        injections: injections.filter((injection: Injection) => normalizeEmail(injection.userEmail) === normalizedEmail && injection.date === targetDate),
+        settlements: settlements.filter((settlement: Settlement) => normalizeEmail(settlement.userEmail) === normalizedEmail && settlement.date === targetDate),
+        results: results.filter((result: LotteryResult) => result.date === targetDate),
+      };
+    }
+
+    const archiveSnap = await getDoc(doc(db, 'daily_archives', targetDate));
+    if (archiveSnap.exists()) {
+      const archive = archiveSnap.data() as {
+        tickets?: LotteryTicket[];
+        injections?: Injection[];
+        settlements?: Settlement[];
+        results?: LotteryResult[];
+      };
+
+      return {
+        tickets: (archive.tickets || []).filter((ticket) => normalizeEmail(ticket.sellerEmail) === normalizedEmail),
+        injections: (archive.injections || []).filter((injection) => normalizeEmail(injection.userEmail) === normalizedEmail && injection.date === targetDate),
+        settlements: (archive.settlements || []).filter((settlement) => normalizeEmail(settlement.userEmail) === normalizedEmail && settlement.date === targetDate),
+        results: archive.results || [],
+      };
+    }
+
+    const { start, end } = getBusinessDayRange(targetDate);
+    const [ticketsSnap, injectionsSnap, settlementsSnap, resultsSnap] = await Promise.all([
+      getDocs(query(
+        collection(db, 'tickets'),
+        where('sellerEmail', '==', normalizedEmail),
+        where('timestamp', '>=', start),
+        where('timestamp', '<', end),
+        limit(1200)
+      )),
+      getDocs(query(
+        collection(db, 'injections'),
+        where('userEmail', '==', normalizedEmail),
+        where('date', '==', targetDate),
+        limit(500)
+      )),
+      getDocs(query(
+        collection(db, 'settlements'),
+        where('userEmail', '==', normalizedEmail),
+        where('date', '==', targetDate),
+        limit(500)
+      )),
+      getDocs(query(
+        collection(db, 'results'),
+        where('date', '==', targetDate),
+        limit(400)
+      )),
+    ]);
+
+    return {
+      tickets: ticketsSnap.docs.map((docSnap: any) => ({ id: docSnap.id, ...docSnap.data() } as LotteryTicket)),
+      injections: injectionsSnap.docs.map((docSnap: any) => ({ id: docSnap.id, ...docSnap.data() } as Injection)),
+      settlements: settlementsSnap.docs.map((docSnap: any) => ({ id: docSnap.id, ...docSnap.data() } as Settlement)),
+      results: resultsSnap.docs.map((docSnap: any) => ({ id: docSnap.id, ...docSnap.data() } as LotteryResult)),
+    };
+  }, [
+    businessDayKey,
+    getBusinessDayRange,
+    injections,
+    normalizeEmail,
+    results,
+    settlements,
+    tickets,
+  ]);
+
+  const fetchLiquidationRangeReport = useCallback(async () => {
+    if (!selectedUserToLiquidate) {
+      toast.error('Selecciona un vendedor para ver el rango');
+      return;
+    }
+
+    if (!liquidationRangeStartDate || !liquidationRangeEndDate) {
+      toast.error('Selecciona fecha inicio y fecha fin');
+      return;
+    }
+
+    if (liquidationRangeStartDate > liquidationRangeEndDate) {
+      toast.error('La fecha inicial no puede ser mayor que la final');
+      return;
+    }
+
+    const userToLiquidate = users.find((userItem: any) => normalizeEmail(userItem.email) === normalizeEmail(selectedUserToLiquidate));
+    if (!userToLiquidate) {
+      toast.error('No se encontro el vendedor');
+      return;
+    }
+
+    setIsLiquidationRangeLoading(true);
+
+    try {
+      const dates = getDatesInRange(liquidationRangeStartDate, liquidationRangeEndDate);
+      const days = [];
+
+      for (const dateValue of dates) {
+        const dayData = await fetchLiquidationDayData(dateValue, selectedUserToLiquidate);
+        const uniqueTickets = dedupeById<LotteryTicket>(dayData.tickets as LotteryTicket[]);
+        const uniqueInjections = dedupeById<Injection>(dayData.injections as Injection[]);
+        const uniqueSettlements = dedupeById<Settlement>(dayData.settlements as Settlement[]);
+        const uniqueResults = dedupeById<LotteryResult>(dayData.results as LotteryResult[]);
+
+        const summary = buildFinancialSummary({
+          tickets: uniqueTickets,
+          injections: uniqueInjections,
+          settlements: uniqueSettlements,
+          userEmail: selectedUserToLiquidate,
+          targetDate: dateValue,
+          prizeResolver: (ticketItem: LotteryTicket) => getTicketPrizesFromSource(ticketItem, uniqueResults),
+        });
+
+        const amountReceived = uniqueSettlements.reduce((sum, settlement) => (
+          sum + Number(settlement.amountReceived ?? settlement.amountPaid ?? 0)
+        ), 0);
+        const amountSent = uniqueSettlements.reduce((sum, settlement) => (
+          sum + Number(settlement.amountSent ?? 0)
+        ), 0);
+        const operationalProfit = Number(summary.operationalProfit ?? summary.netProfit ?? 0);
+        const capital = operationalProfit + Number(summary.totalInjections || 0);
+        const pending = capital - amountReceived + amountSent;
+
+        days.push({
+          date: dateValue,
+          totalSales: summary.totalSales,
+          totalPrizes: summary.totalPrizes,
+          totalCommissions: summary.totalCommissions,
+          totalInjections: summary.totalInjections,
+          operationalProfit,
+          capital,
+          amountReceived,
+          amountSent,
+          pending,
+          status: uniqueSettlements.length > 0 && Math.abs(pending) <= BALANCE_EPSILON ? 'liquidated' : 'pending',
+        });
+      }
+
+      const summary = days.reduce((acc, day) => ({
+        totalSales: acc.totalSales + day.totalSales,
+        totalPrizes: acc.totalPrizes + day.totalPrizes,
+        totalCommissions: acc.totalCommissions + day.totalCommissions,
+        totalInjections: acc.totalInjections + day.totalInjections,
+        operationalProfit: acc.operationalProfit + day.operationalProfit,
+        capital: acc.capital + day.capital,
+        amountReceived: acc.amountReceived + day.amountReceived,
+        amountSent: acc.amountSent + day.amountSent,
+        pending: acc.pending + day.pending,
+      }), {
+        totalSales: 0,
+        totalPrizes: 0,
+        totalCommissions: 0,
+        totalInjections: 0,
+        operationalProfit: 0,
+        capital: 0,
+        amountReceived: 0,
+        amountSent: 0,
+        pending: 0,
+      });
+
+      setLiquidationRangeReport({
+        startDate: liquidationRangeStartDate,
+        endDate: liquidationRangeEndDate,
+        user: userToLiquidate,
+        days,
+        summary,
+      });
+    } catch (error) {
+      console.error('Error loading liquidation range:', error);
+      toast.error('No se pudo cargar el rango de liquidacion');
+    } finally {
+      setIsLiquidationRangeLoading(false);
+    }
+  }, [
+    buildFinancialSummary,
+    dedupeById,
+    fetchLiquidationDayData,
+    getDatesInRange,
+    getTicketPrizesFromSource,
+    liquidationRangeEndDate,
+    liquidationRangeStartDate,
+    normalizeEmail,
+    selectedUserToLiquidate,
+    users,
+  ]);
+
+  useEffect(() => {
+    setLiquidationRangeReport(null);
+  }, [liquidationRangeStartDate, liquidationRangeEndDate, selectedUserToLiquidate]);
+
   const handleLiquidate = async () => {
     if (!selectedUserToLiquidate) return;
     if (!userProfile || !['ceo', 'admin'].includes(userProfile.role)) {
@@ -132,8 +364,6 @@ export function useLiquidationDomain(params: any) {
       operationalProfit,
       liquidationBalance,
       debtAdded,
-      newTotalDebt,
-      previousDebt,
       actionLabel,
     } = liquidationPreview;
 
@@ -146,7 +376,7 @@ export function useLiquidationDomain(params: any) {
       ...prev,
       show: true,
       title: selectedLiquidationSettlement ? 'Actualizar Liquidacion' : 'Confirmar Liquidacion Diaria',
-      message: `Seguro de ${actionLabel} a ${userToLiquidate.name} para ${liquidationDate}?\n\nResultado del dia: USD ${operationalProfit.toFixed(2)}\nInyeccion diaria: USD ${totalInjections.toFixed(2)}\nSaldo anterior: USD ${previousDebt.toFixed(2)}\n${previewAmountDirection === 'sent' ? 'Monto enviado' : 'Monto recibido'}: USD ${paid.toFixed(2)}\nSaldo final: USD ${newTotalDebt.toFixed(2)}`,
+      message: `Seguro de ${actionLabel} a ${userToLiquidate.name} para ${liquidationDate}?\n\nResultado del dia: USD ${operationalProfit.toFixed(2)}\nInyeccion del dia: USD ${totalInjections.toFixed(2)}\nCapital del dia: USD ${liquidationBalance.toFixed(2)}\n${previewAmountDirection === 'sent' ? 'Monto enviado' : 'Monto recibido'}: USD ${paid.toFixed(2)}\nPendiente del dia: USD ${debtAdded.toFixed(2)}`,
       onConfirm: async () => {
         try {
           const normalizedUserEmail = userToLiquidate.email.toLowerCase();
@@ -225,6 +455,13 @@ export function useLiquidationDomain(params: any) {
           const effectiveSettlementId = settlementId || existingSettlement?.id || '';
 
           await updateDoc(doc(db, 'users', userToLiquidate.email), { currentDebt: finalNewTotalDebt });
+          if (typeof setUsers === 'function') {
+            setUsers((prev: any[]) => prev.map((userItem) => (
+              String(userItem.email || '').toLowerCase() === normalizedUserEmail
+                ? { ...userItem, currentDebt: finalNewTotalDebt }
+                : userItem
+            )));
+          }
 
           if (isCurrentOperationalDate && effectiveSettlementId) {
             if (ticketsToLiquidate.length > 0) {
@@ -323,6 +560,9 @@ export function useLiquidationDomain(params: any) {
           };
 
           setLiquidationSettlementsSnapshot((prev: Settlement[]) => upsertSettlement(prev));
+          if (typeof setSettlements === 'function') {
+            setSettlements((prev: Settlement[]) => upsertSettlement(prev));
+          }
           toastSuccess(existingSettlement ? 'Liquidacion actualizada correctamente' : 'Liquidacion guardada correctamente');
           setAmountPaid(String(paid));
           setAmountDirection(previewAmountDirection);
@@ -454,7 +694,7 @@ export function useLiquidationDomain(params: any) {
         const totalInjections = userInjections.reduce((sum, i) => sum + (i.amount || 0), 0);
         const totalLiquidations = userSettlements.reduce((sum, s) => sum + (s.amountPaid || 0), 0);
         const operationalProfit = totalSales - totalCommissions - totalPrizes;
-        const liquidationBalance = operationalProfit + totalInjections;
+        const liquidationBalance = operationalProfit;
         u.summary = {
           totalSales,
           totalCommissions,
@@ -550,6 +790,13 @@ export function useLiquidationDomain(params: any) {
     liquidationGlobalSummary,
     liquidationUserSummaries,
     liquidacionQuickDateOptions,
+    liquidationRangeStartDate,
+    setLiquidationRangeStartDate,
+    liquidationRangeEndDate,
+    setLiquidationRangeEndDate,
+    liquidationRangeReport,
+    isLiquidationRangeLoading,
+    fetchLiquidationRangeReport,
     handleLiquidate,
     generateConsolidatedReport,
   };

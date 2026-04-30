@@ -48,7 +48,7 @@ export const buildFinancialSummary = ({
   const totalInjections = validInjections.reduce((sum, injection) => sum + (injection.amount || 0), 0);
   const totalLiquidations = validSettlements.reduce((sum, settlement) => sum + (settlement.amountPaid || 0), 0);
   const operationalProfit = totalSales - totalCommissions - totalPrizes;
-  const liquidationBalance = operationalProfit + totalInjections;
+  const liquidationBalance = operationalProfit;
   const netProfit = operationalProfit;
 
   return {

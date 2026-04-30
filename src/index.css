@@ -18,7 +18,18 @@
   --color-muted-foreground: #9CA3AF;
   --color-accent: #1E293B;
   --color-accent-foreground: #E5E7EB;
-  --color-destructive: #ef4444;
+  --color-red-50: #fff1f3;
+  --color-red-100: #ffe0e7;
+  --color-red-200: #ffb8c6;
+  --color-red-300: #ff7a92;
+  --color-red-400: #ff4d6d;
+  --color-red-500: #ff1744;
+  --color-red-600: #e60032;
+  --color-red-700: #b80027;
+  --color-red-800: #8f001f;
+  --color-red-900: #650016;
+  --color-red-950: #3d000d;
+  --color-destructive: #ff1744;
   --color-destructive-foreground: #ffffff;
   --color-border: #334155;
   --color-input: #334155;
@@ -45,7 +56,7 @@
     --primary-soft: rgba(59, 130, 246, 0.16);
 
     --success: #22C55E;
-    --danger: #EF4444;
+    --danger: #FF1744;
     --warning: #FACC15;
     --orange: #FB923C;
 
@@ -183,9 +194,9 @@
   }
 
   .btn-danger {
-    background: rgba(239, 68, 68, 0.14);
-    border: 1px solid rgba(239, 68, 68, 0.35);
-    color: #FCA5A5;
+    background: rgba(255, 23, 68, 0.16);
+    border: 1px solid rgba(255, 23, 68, 0.42);
+    color: #FF8FA3;
     border-radius: 12px;
     transition: background-color 120ms ease, border-color 120ms ease, transform 80ms ease;
   }

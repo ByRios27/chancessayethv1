@@ -2126,6 +2126,13 @@ function App() {
     liquidationPreview,
     liquidationGlobalSummary,
     liquidationUserSummaries,
+    liquidationRangeStartDate,
+    setLiquidationRangeStartDate,
+    liquidationRangeEndDate,
+    setLiquidationRangeEndDate,
+    liquidationRangeReport,
+    isLiquidationRangeLoading,
+    fetchLiquidationRangeReport,
     handleLiquidate,
     generateConsolidatedReport,
   } = useLiquidationDomain({
@@ -2151,6 +2158,8 @@ function App() {
     liquidationResultsSnapshot,
     liquidationSettlementsSnapshot,
     setLiquidationSettlementsSnapshot,
+    setSettlements,
+    setUsers,
     isLiquidationDataLoading,
     setTickets,
     setInjections,
@@ -3404,6 +3413,13 @@ function App() {
                   selectedLiquidationSettlement={selectedLiquidationSettlement}
                   liquidationGlobalSummary={liquidationGlobalSummary}
                   liquidationUserSummaries={liquidationUserSummaries}
+                  liquidationRangeStartDate={liquidationRangeStartDate}
+                  setLiquidationRangeStartDate={setLiquidationRangeStartDate}
+                  liquidationRangeEndDate={liquidationRangeEndDate}
+                  setLiquidationRangeEndDate={setLiquidationRangeEndDate}
+                  liquidationRangeReport={liquidationRangeReport}
+                  isLiquidationRangeLoading={isLiquidationRangeLoading}
+                  fetchLiquidationRangeReport={fetchLiquidationRangeReport}
                   amountPaid={amountPaid}
                   setAmountPaid={setAmountPaid}
                   amountDirection={amountDirection}

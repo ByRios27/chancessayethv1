@@ -6,6 +6,7 @@ import type { UserProfile } from '../types/users';
 import {
   buildLiquidationDebtMetrics,
   findLatestSettlementForUserDate,
+  getSettlementTimestampMs,
 } from '../services/calculations/liquidation';
 
 const ZERO_BALANCE_EPSILON = 0.005;
@@ -15,8 +16,47 @@ const getSettlementFinalBalance = (settlement: Settlement) => {
   return Number.isFinite(balance) ? balance : null;
 };
 
+const getNumericValue = (...values: unknown[]) => {
+  for (const value of values) {
+    const numericValue = Number(value);
+    if (Number.isFinite(numericValue)) return numericValue;
+  }
+  return 0;
+};
+
+const getNullableNumericValue = (...values: unknown[]) => {
+  for (const value of values) {
+    const numericValue = Number(value);
+    if (Number.isFinite(numericValue)) return numericValue;
+  }
+  return null;
+};
+
+const getSettlementDayBalance = (settlement: Settlement) => {
+  const savedDayBalance = getNullableNumericValue(settlement.debtAdded);
+  if (savedDayBalance !== null) return savedDayBalance;
+
+  const operationalProfit = getNullableNumericValue(
+    settlement.operationalProfit,
+    settlement.dailyResult,
+    settlement.netProfit
+  );
+  const totalInjections = getNullableNumericValue(
+    settlement.dailyInjectionTotal,
+    settlement.totalInjections
+  );
+
+  if (operationalProfit !== null && totalInjections !== null) {
+    const amountReceived = getNumericValue(settlement.amountReceived, settlement.amountPaid);
+    const amountSent = getNumericValue(settlement.amountSent);
+    return operationalProfit - amountReceived + amountSent;
+  }
+
+  return getSettlementFinalBalance(settlement);
+};
+
 const hasLiveSettlementBalance = (settlement: Settlement) => {
-  const balance = getSettlementFinalBalance(settlement);
+  const balance = getSettlementDayBalance(settlement);
   return balance === null || Math.abs(balance) > ZERO_BALANCE_EPSILON;
 };
 
@@ -135,17 +175,58 @@ export function useLiquidation({
     const normalizedFinancialSummary = {
       ...financialSummary,
       operationalProfit: financialSummary.operationalProfit ?? financialSummary.netProfit,
-      liquidationBalance: financialSummary.liquidationBalance ?? ((financialSummary.operationalProfit ?? financialSummary.netProfit) + financialSummary.totalInjections),
+      liquidationBalance: financialSummary.operationalProfit ?? financialSummary.netProfit,
     };
     const normalizedUserEmail = selectedUserToLiquidate.toLowerCase();
-    const previousInjectionTotal = liquidationSettlementsSource
+    const livePreviousSettlementsByDate = liquidationSettlementsSource
       .filter((settlement) =>
         (settlement.userEmail || '').toLowerCase() === normalizedUserEmail &&
         !!settlement.date &&
         settlement.date < liquidationDate &&
         hasLiveSettlementBalance(settlement)
       )
-      .reduce((sum, settlement) => sum + Number(settlement.dailyInjectionTotal ?? settlement.totalInjections ?? 0), 0);
+      .reduce((byDate, settlement) => {
+        const previousSettlement = byDate.get(settlement.date);
+        if (!previousSettlement || getSettlementTimestampMs(settlement) > getSettlementTimestampMs(previousSettlement)) {
+          byDate.set(settlement.date, settlement);
+        }
+        return byDate;
+      }, new Map<string, Settlement>());
+    const pendingBalanceDetails = Array.from(livePreviousSettlementsByDate.values())
+      .sort((a, b) => String(b.date).localeCompare(String(a.date)))
+      .map((settlement) => {
+        const totalSales = getNumericValue(settlement.totalSales, settlement.sales);
+        const totalPrizes = getNumericValue(settlement.totalPrizes, settlement.prizes);
+        const totalCommissions = getNumericValue(settlement.totalCommissions, settlement.commission);
+        const totalInjections = getNumericValue(settlement.dailyInjectionTotal, settlement.totalInjections);
+        const operationalProfit = getNumericValue(
+          settlement.operationalProfit,
+          settlement.dailyResult,
+          settlement.netProfit,
+          totalSales - totalPrizes - totalCommissions
+        );
+        const amountReceived = getNumericValue(settlement.amountReceived, settlement.amountPaid);
+        const amountSent = getNumericValue(settlement.amountSent);
+        const dayBalance = getNumericValue(
+          getSettlementDayBalance(settlement),
+          operationalProfit - amountReceived + amountSent
+        );
+
+        return {
+          id: settlement.id,
+          date: settlement.date,
+          totalSales,
+          totalPrizes,
+          totalCommissions,
+          totalInjections,
+          operationalProfit,
+          amountReceived,
+          amountSent,
+          dayBalance,
+        };
+      });
+    const previousInjectionTotal = pendingBalanceDetails
+      .reduce((sum, settlement) => sum + settlement.totalInjections, 0);
 
     const ticketsToLiquidate = normalizedFinancialSummary.tickets.filter((ticketItem) =>
       ticketItem.status === 'active' && !ticketItem.settlementId && !ticketItem.liquidated
@@ -184,6 +265,7 @@ export function useLiquidation({
       currentDebt,
       existingDebtImpact,
       previousInjectionTotal,
+      pendingBalanceDetails,
       ...debtMetrics,
       actionLabel: selectedLiquidationSettlement ? 'actualizar' : 'liquidar',
     };
@@ -224,7 +306,7 @@ export function useLiquidation({
     return {
       ...summary,
       operationalProfit: summary.operationalProfit ?? summary.netProfit,
-      liquidationBalance: summary.liquidationBalance ?? ((summary.operationalProfit ?? summary.netProfit) + summary.totalInjections),
+      liquidationBalance: summary.operationalProfit ?? summary.netProfit,
     };
   }, [
     buildFinancialSummary,
@@ -260,7 +342,7 @@ export function useLiquidation({
           prizeResolver: (ticketItem: LotteryTicket) => getTicketPrizesFromSource(ticketItem, liquidationResultsSource),
         });
         const operationalProfit = summary.operationalProfit ?? summary.netProfit;
-        const liquidationBalance = summary.liquidationBalance ?? (operationalProfit + summary.totalInjections);
+        const liquidationBalance = operationalProfit;
         const settlement = findLatestSettlementForUserDate({
           settlements: liquidationSettlementsSource,
           userEmail: userItem.email,
