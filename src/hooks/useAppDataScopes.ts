@@ -57,16 +57,62 @@ export function useAppDataScopes({
       ((activeTab === 'history' || activeTab === 'stats' || activeTab === 'cierres') && historyDate === businessDayKey) ||
       (activeTab === 'archivo' && archiveDate === businessDayKey);
 
-    const shouldLoadResults = ['sales', 'history', 'stats', 'cierres', 'results', 'dashboard', 'liquidaciones'].includes(activeTab);
-    const shouldLoadLotteries = true;
+    const shouldListenGlobalSettings = [
+      'sales',
+      'config',
+      'admin',
+      'dashboard',
+      'history',
+      'stats',
+      'cierres',
+      'liquidaciones',
+      'archivo',
+    ].includes(activeTab);
+
+    const shouldLoadLotteries = [
+      'sales',
+      'history',
+      'admin',
+      'dashboard',
+      'results',
+      'liquidaciones',
+      'archivo',
+      'stats',
+      'cierres',
+      'recovery',
+    ].includes(activeTab);
+
+    const shouldListenResults =
+      activeTab === 'sales' ||
+      activeTab === 'results' ||
+      activeTab === 'dashboard' ||
+      activeTab === 'liquidaciones' ||
+      ((activeTab === 'history' || activeTab === 'stats' || activeTab === 'cierres') && historyDate === businessDayKey);
+
+    const shouldListenInjections =
+      activeTab === 'sales' ||
+      activeTab === 'users' ||
+      activeTab === 'dashboard' ||
+      activeTab === 'liquidaciones' ||
+      ((activeTab === 'history' || activeTab === 'stats') && historyDate === businessDayKey) ||
+      (activeTab === 'archivo' && archiveDate === businessDayKey);
+
+    const shouldListenSettlements =
+      activeTab === 'dashboard' ||
+      activeTab === 'liquidaciones' ||
+      (activeTab === 'history' && historyDate === businessDayKey) ||
+      (activeTab === 'archivo' && archiveDate === businessDayKey);
 
     return {
       canAccessManagedUsersData,
       canAccessAllUsers,
       shouldLoadUsersList,
       needsRealtimeOperationalData,
-      shouldLoadResults,
       shouldLoadLotteries,
+      shouldListenGlobalSettings,
+      shouldListenResults,
+      shouldListenInjections,
+      shouldListenSettlements,
     };
   }, [activeTab, archiveDate, businessDayKey, canUseGlobalScope, historyDate, showGlobalScope, userRole]);
 }

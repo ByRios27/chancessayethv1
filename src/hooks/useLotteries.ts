@@ -19,9 +19,18 @@ export function useLotteries({
   onError?: FirestoreErrorHandler;
 }) {
   const [lotteries, setLotteries] = useState<Lottery[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled) {
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
 
     const qLot = onlyActive
       ? query(collection(db, 'lotteries'), where('active', '==', true))
@@ -29,6 +38,7 @@ export function useLotteries({
     const unsubscribe = onSnapshot(qLot, (snapshot) => {
       const docs = snapshot.docs.map((lotteryDoc) => ({ id: lotteryDoc.id, ...lotteryDoc.data() } as Lottery));
       setLotteries(docs);
+      setLoading(false);
 
       if (docs.length > 0) {
         const getSortValue = (time: string) => {
@@ -44,6 +54,9 @@ export function useLotteries({
         }
       }
     }, (error) => {
+      const message = error instanceof Error ? error.message : 'No se pudieron cargar los sorteos';
+      setError(message);
+      setLoading(false);
       onError?.(error, 'get', 'lotteries');
     });
 
@@ -52,5 +65,7 @@ export function useLotteries({
 
   return {
     lotteries,
+    loading,
+    error,
   };
 }

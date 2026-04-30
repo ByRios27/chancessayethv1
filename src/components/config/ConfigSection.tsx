@@ -52,7 +52,7 @@ export function ConfigSection(props: ConfigSectionProps) {
                             value={personalChancePrice}
                             onChange={(e) => setPersonalChancePrice(parseFloat(e.target.value))}
                             className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-primary transition-all"
-                            disabled={!globalSettings.chancePrices || globalSettings.chancePrices.length === 0}
+                            disabled={isUpdatingChancePrice || !canUpdatePersonalChancePrice || !globalSettings.chancePrices || globalSettings.chancePrices.length === 0}
                           >
                             {(globalSettings.chancePrices || []).map((config, index) => (
                               <option key={`${config.price}-${index}`} value={config.price}>

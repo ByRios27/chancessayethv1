@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { collection, getDocs, limit, orderBy, query, where } from '../firebase';
+import { collection, limit, onSnapshot, orderBy, query, where } from '../firebase';
 import { db } from '../firebase';
 import type { Settlement } from '../types/finance';
 
@@ -35,43 +35,38 @@ export function useSettlements({
       setError(null);
       return;
     }
-    let cancelled = false;
     setLoading(true);
     setError(null);
 
-    const run = async () => {
-      try {
-        const qSettlements = canAccessAllUsers
-          ? query(
-            collection(db, 'settlements'),
-            orderBy('timestamp', 'desc'),
-            limit(120)
-          )
-          : query(
-            collection(db, 'settlements'),
-            where('sellerId', '==', sellerId),
-            limit(50)
-          );
+    const qSettlements = canAccessAllUsers
+      ? query(
+        collection(db, 'settlements'),
+        orderBy('timestamp', 'desc'),
+        limit(120)
+      )
+      : query(
+        collection(db, 'settlements'),
+        where('sellerId', '==', sellerId),
+        limit(50)
+      );
 
-        const snapshot = await getDocs(qSettlements);
-        if (cancelled) return;
+    const unsubscribe = onSnapshot(
+      qSettlements,
+      (snapshot) => {
         const docs = snapshot.docs.map((settlementDoc) => ({ id: settlementDoc.id, ...settlementDoc.data() } as Settlement));
         setSettlements(docs);
-      } catch (error) {
+        setLoading(false);
+      },
+      (error) => {
         console.error('Error fetching settlements:', error);
         const message = error instanceof Error ? error.message : 'No se pudieron cargar las liquidaciones';
         setError(message);
         onError?.(error, 'get', 'settlements');
-      } finally {
-        if (!cancelled) setLoading(false);
+        setLoading(false);
       }
-    };
+    );
 
-    void run();
-
-    return () => {
-      cancelled = true;
-    };
+    return unsubscribe;
   }, [enabled, canAccessAllUsers, sellerId, onError, refreshTick]);
 
   return {

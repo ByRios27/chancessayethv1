@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { collection, getDocs, limit, query, where } from '../firebase';
+import { collection, limit, onSnapshot, query, where } from '../firebase';
 import { db } from '../firebase';
 import type { LotteryResult } from '../types/results';
 
@@ -59,7 +59,6 @@ export function useResults({
       setError(null);
       return;
     }
-    let cancelled = false;
     setLoading(true);
     setError(null);
 
@@ -69,26 +68,22 @@ export function useResults({
       limit(300)
     );
 
-    const run = async () => {
-      try {
-        const snapshot = await getDocs(qRes);
-        if (cancelled) return;
+    const unsubscribe = onSnapshot(
+      qRes,
+      (snapshot) => {
         const docs = snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() } as LotteryResult));
         setResults((prev) => mergeResultsWithLiveFeed(prev, docs));
-      } catch (error) {
+        setLoading(false);
+      },
+      (error) => {
         const message = error instanceof Error ? error.message : 'No se pudieron cargar los resultados';
         setError(message);
         onError?.(error, 'get', 'results');
-      } finally {
-        if (!cancelled) setLoading(false);
+        setLoading(false);
       }
-    };
+    );
 
-    void run();
-
-    return () => {
-      cancelled = true;
-    };
+    return unsubscribe;
   }, [businessDayKey, enabled, mergeResultsWithLiveFeed, onError, refreshTick]);
 
   return {

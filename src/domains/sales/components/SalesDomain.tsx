@@ -18,6 +18,7 @@ interface SalesDomainProps {
   multiLottery?: string[];
   setMultiLottery: (value: string[]) => void;
   activeLotteries?: LotteryOption[];
+  lotteriesLoading?: boolean;
   selectedLottery: string;
   setSelectedLottery: (value: string) => void;
   cleanText: (value: string) => string;
@@ -104,6 +105,7 @@ export function SalesDomain(props: SalesDomainProps) {
     multiLottery,
     setMultiLottery,
     activeLotteries,
+    lotteriesLoading,
     selectedLottery,
     setSelectedLottery,
     cleanText,
@@ -153,6 +155,7 @@ export function SalesDomain(props: SalesDomainProps) {
   const safeCart = cart ?? [];
 
   const hasActiveLotteries = safeActiveLotteries.length > 0;
+  const hasLoadedLotteries = !lotteriesLoading;
   const canOperateSales = canSell && hasActiveLotteries;
 
   if (import.meta.env.DEV) {
@@ -189,7 +192,7 @@ export function SalesDomain(props: SalesDomainProps) {
         </div>
       )}
 
-      {!hasActiveLotteries && (
+      {hasLoadedLotteries && !hasActiveLotteries && (
         <div className="surface-card p-4 border border-amber-500/30 bg-amber-500/10">
           <p className="text-xs font-black uppercase tracking-widest text-amber-300">Sin sorteos activos</p>
           <p className="text-xs text-muted-foreground mt-1">No hay sorteos disponibles para vender en este momento.</p>
@@ -249,7 +252,9 @@ export function SalesDomain(props: SalesDomainProps) {
                         ))}
                       </>
                     ) : (
-                      <div className="py-3 text-center text-xs text-muted-foreground">No hay sorteos disponibles</div>
+                      <div className="py-3 text-center text-xs text-muted-foreground">
+                        {lotteriesLoading ? 'Cargando sorteos...' : 'No hay sorteos disponibles'}
+                      </div>
                     )}
                   </div>
                 )}
@@ -259,10 +264,10 @@ export function SalesDomain(props: SalesDomainProps) {
                 value={selectedLottery}
                 onChange={(e) => setSelectedLottery(e.target.value)}
                 className="bg-transparent border-none p-0 font-bold text-xs sm:text-sm focus:outline-none w-full truncate min-h-[28px]"
-                disabled={!hasActiveLotteries}
+                disabled={lotteriesLoading || !hasActiveLotteries}
               >
                 <option key="default" value="" className="bg-background">
-                  {hasActiveLotteries ? 'Seleccione Sorteo' : 'Sin sorteos activos'}
+                  {lotteriesLoading ? 'Cargando sorteos...' : hasActiveLotteries ? 'Seleccione Sorteo' : 'Sin sorteos activos'}
                 </option>
                 {safeActiveLotteries.map((lottery) => (
                   <option key={lottery.id} value={lottery.name} className="bg-background">

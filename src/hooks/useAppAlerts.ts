@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { collection, db, getDocs, limit, query, where } from '../firebase';
+import { collection, db, limit, onSnapshot, query, where } from '../firebase';
 import type { AppAlert } from '../types/alerts';
 
 type FirestoreErrorHandler = (error: unknown, operation: 'get' | 'list', target: string) => void;
@@ -38,56 +38,70 @@ export function useAppAlerts({
       return;
     }
 
-    let cancelled = false;
     setLoading(true);
     setError(null);
 
-    const run = async () => {
-      try {
-        const queries = [
-          getDocs(query(collection(db, 'app_alerts'), where('global', '==', true), limit(limitCount))),
-        ];
+    const alertQueries = [
+      {
+        key: 'global',
+        queryRef: query(collection(db, 'app_alerts'), where('global', '==', true), limit(limitCount)),
+      },
+    ];
 
-        if (normalizedEmail) {
-          queries.push(getDocs(query(collection(db, 'app_alerts'), where('targetUserEmail', '==', normalizedEmail), limit(limitCount))));
-        }
-        if (normalizedRole) {
-          queries.push(getDocs(query(collection(db, 'app_alerts'), where('targetRole', '==', normalizedRole), limit(limitCount))));
-        }
+    if (normalizedEmail) {
+      alertQueries.push({
+        key: `email:${normalizedEmail}`,
+        queryRef: query(collection(db, 'app_alerts'), where('targetUserEmail', '==', normalizedEmail), limit(limitCount)),
+      });
+    }
+    if (normalizedRole) {
+      alertQueries.push({
+        key: `role:${normalizedRole}`,
+        queryRef: query(collection(db, 'app_alerts'), where('targetRole', '==', normalizedRole), limit(limitCount)),
+      });
+    }
 
-        const snapshots = await Promise.all(queries);
-        if (cancelled) return;
+    const sourceAlerts = new Map<string, AppAlert[]>();
+    let receivedInitialSnapshots = 0;
 
-        const merged = new Map<string, AppAlert>();
-        const now = Date.now();
-        snapshots.forEach((snapshot) => {
-          snapshot.docs.forEach((docSnap) => {
-            const alert = { id: docSnap.id, ...docSnap.data() } as AppAlert;
-            const expiresAtMs = timestampMs(alert.expiresAt);
-            if (expiresAtMs && expiresAtMs < now) return;
-            merged.set(docSnap.id, alert);
-          });
+    const publishAlerts = () => {
+      const merged = new Map<string, AppAlert>();
+      const now = Date.now();
+      sourceAlerts.forEach((alertsForSource) => {
+        alertsForSource.forEach((alert) => {
+          const expiresAtMs = timestampMs(alert.expiresAt);
+          if (expiresAtMs && expiresAtMs < now) return;
+          merged.set(alert.id, alert);
         });
+      });
 
-        setAlerts(Array.from(merged.values()).sort((a, b) => {
-          const priorityDiff = Number(b.priority || 0) - Number(a.priority || 0);
-          if (priorityDiff !== 0) return priorityDiff;
-          return timestampMs(b.createdAt) - timestampMs(a.createdAt);
-        }));
-      } catch (error) {
+      setAlerts(Array.from(merged.values()).sort((a, b) => {
+        const priorityDiff = Number(b.priority || 0) - Number(a.priority || 0);
+        if (priorityDiff !== 0) return priorityDiff;
+        return timestampMs(b.createdAt) - timestampMs(a.createdAt);
+      }));
+
+      if (receivedInitialSnapshots >= alertQueries.length) {
+        setLoading(false);
+      }
+    };
+
+    const unsubscribes = alertQueries.map(({ key, queryRef }) =>
+      onSnapshot(queryRef, (snapshot) => {
+        if (!sourceAlerts.has(key)) receivedInitialSnapshots += 1;
+        sourceAlerts.set(key, snapshot.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() } as AppAlert)));
+        publishAlerts();
+      }, (error) => {
         console.error('Error fetching app alerts:', error);
         const message = error instanceof Error ? error.message : 'No se pudieron cargar las alertas';
         setError(message);
         onError?.(error, 'get', 'app_alerts');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-
-    void run();
+        setLoading(false);
+      })
+    );
 
     return () => {
-      cancelled = true;
+      unsubscribes.forEach((unsubscribe) => unsubscribe());
     };
   }, [enabled, limitCount, onError, refreshTick, userEmail, userRole]);
 

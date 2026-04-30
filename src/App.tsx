@@ -80,6 +80,7 @@ import {
   googleProvider,
   increment,
   limit,
+  onSnapshot,
   orderBy,
   query,
   runTransaction,
@@ -315,8 +316,11 @@ function App() {
     canAccessAllUsers,
     shouldLoadUsersList,
     needsRealtimeOperationalData,
-    shouldLoadResults,
     shouldLoadLotteries,
+    shouldListenGlobalSettings,
+    shouldListenResults,
+    shouldListenInjections,
+    shouldListenSettlements,
   } = useAppDataScopes({
     activeTab,
     userRole: userProfile?.role,
@@ -425,9 +429,8 @@ function App() {
     sortedTicketsForLot: Array<{ t: LotteryTicket; prize: number }>;
   }>>(new Map());
   const ticketsRealtimeEnabled = !!user?.uid && !!userProfile?.role && needsRealtimeOperationalData;
-  const punctualFinanceTabs: AppTabId[] = ['users', 'results', 'stats', 'dashboard', 'history', 'liquidaciones', 'archivo', 'cierres'];
-  const injectionsRealtimeEnabled = !!user?.uid && !!userProfile?.role && punctualFinanceTabs.includes(activeTab);
-  const settlementsRealtimeEnabled = !!user?.uid && !!userProfile?.role && activeTab === 'liquidaciones';
+  const injectionsRealtimeEnabled = !!user?.uid && !!userProfile?.role && shouldListenInjections;
+  const settlementsRealtimeEnabled = !!user?.uid && !!userProfile?.role && shouldListenSettlements;
 
   const { tickets, setTickets } = useTickets({
     enabled: ticketsRealtimeEnabled,
@@ -698,7 +701,7 @@ function App() {
   const [personalChancePrice, setPersonalChancePrice] = useState<number>(0.20);
   const [globalChancePriceFilter, setGlobalChancePriceFilter] = useState<string>('');
   const [selectedLottery, setSelectedLottery] = useState('');
-  const { lotteries } = useLotteries({
+  const { lotteries, loading: lotteriesLoading } = useLotteries({
     enabled: !!user?.uid && !!userProfile?.role && shouldLoadLotteries,
     onlyActive: activeTab === 'sales',
     selectedLottery,
@@ -713,7 +716,7 @@ function App() {
     error: resultsError,
     refresh: refreshResults,
   } = useResults({
-    enabled: !!user?.uid && !!userProfile?.role && shouldLoadResults,
+    enabled: !!user?.uid && !!userProfile?.role && shouldListenResults,
     businessDayKey,
     onError: handleOperationalHookError
   });
@@ -743,24 +746,16 @@ function App() {
     onError: handleOperationalHookError,
   });
 
-  const queryTabs = useMemo(
-    () => (['users', 'results', 'stats', 'dashboard', 'history', 'liquidaciones', 'archivo', 'cierres'] as AppTabId[]),
-    []
-  );
-  const tabNeedsPunctualRefresh = queryTabs.includes(activeTab);
+  const tabNeedsPunctualRefresh = auditLogsEnabled;
   const punctualDataLoading = resultsLoading || injectionsLoading || settlementsLoading;
   const [isAutoRefreshing, setIsAutoRefreshing] = useState(false);
 
   const runAutoRefresh = useCallback(() => {
     if (!tabNeedsPunctualRefresh) return;
     setIsAutoRefreshing(true);
-    refreshResults();
-    refreshInjections();
-    refreshSettlements();
     refreshAuditLogs();
-    refreshAppAlerts();
     window.setTimeout(() => setIsAutoRefreshing(false), 600);
-  }, [refreshAppAlerts, refreshAuditLogs, refreshInjections, refreshResults, refreshSettlements, tabNeedsPunctualRefresh]);
+  }, [refreshAuditLogs, tabNeedsPunctualRefresh]);
 
   useEffect(() => {
     if (resultsError) toast.error(`Resultados: ${resultsError}`);
@@ -853,11 +848,6 @@ function App() {
   }, [auditLogsError]);
 
   useEffect(() => {
-    if (!tabNeedsPunctualRefresh) return;
-    runAutoRefresh();
-  }, [activeTab, tabNeedsPunctualRefresh, runAutoRefresh]);
-
-  useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState === 'visible') {
         runAutoRefresh();
@@ -882,7 +872,7 @@ function App() {
   const pullStartYRef = useRef(0);
   const pullDistanceRef = useRef(0);
   const [isPullRefreshing, setIsPullRefreshing] = useState(false);
-  const canUsePullToRefresh = tabNeedsPunctualRefresh && activeTab !== 'sales';
+  const canUsePullToRefresh = tabNeedsPunctualRefresh;
   const handleMainTouchStart = useCallback((event: React.TouchEvent<HTMLElement>) => {
     if (!canUsePullToRefresh || isPullRefreshing) return;
     const el = mainScrollRef.current;
@@ -1046,6 +1036,31 @@ function App() {
     });
   }, []);
 
+  const resolvePreferredChancePrice = useCallback(() => {
+    const availablePrices = (globalSettings.chancePrices || [])
+      .map(cp => Number(cp.price))
+      .filter(price => Number.isFinite(price));
+    if (availablePrices.length === 0) return null;
+
+    const preferredPrice = Number(userProfile?.preferredChancePrice);
+    const hasPreferredPrice = Number.isFinite(preferredPrice) &&
+      availablePrices.some(price => Math.abs(price - preferredPrice) < 0.001);
+
+    return hasPreferredPrice ? preferredPrice : availablePrices[0];
+  }, [globalSettings.chancePrices, userProfile?.preferredChancePrice]);
+
+  const syncChancePriceFromPreference = useCallback(() => {
+    const nextPrice = resolvePreferredChancePrice();
+    if (nextPrice === null) return;
+
+    setChancePrice(currentPrice => (
+      Math.abs(currentPrice - nextPrice) >= 0.001 ? nextPrice : currentPrice
+    ));
+    setPersonalChancePrice(currentPrice => (
+      Math.abs(currentPrice - nextPrice) >= 0.001 ? nextPrice : currentPrice
+    ));
+  }, [resolvePreferredChancePrice]);
+
   const resetOperationalStateAfterArchive = useCallback(() => {
     setTickets([]);
     setResults([]);
@@ -1057,7 +1072,8 @@ function App() {
     setLiquidationResultsSnapshot([]);
     setLiquidationInjectionsSnapshot([]);
     setLiquidationSettlementsSnapshot([]);
-  }, [setInjections, setResults, setTickets]);
+    syncChancePriceFromPreference();
+  }, [setInjections, setResults, setTickets, syncChancePriceFromPreference]);
 
   const { runOperationalArchiveAndCleanup } = useOperationalArchive({
     businessDayKey,
@@ -1104,53 +1120,47 @@ function App() {
     })();
   }, [getQuickOperationalDate, runOperationalArchiveAndCleanup, user?.uid, userProfile?.role, tick]);
 
-  // 1. Static/Global Data
+  // 1. Global Settings
   useEffect(() => {
-    if (!user?.uid || !userProfile?.role) return;
+    if (!user?.uid || !userProfile?.role || !shouldListenGlobalSettings) return;
 
-    let cancelled = false;
-    const loadGlobalSettings = async () => {
-      try {
-        const snapshot = await getDoc(doc(db, 'settings', 'global'));
-        if (cancelled) return;
-
-        if (snapshot.exists()) {
-          const data = snapshot.id ? { id: snapshot.id, ...snapshot.data() } as GlobalSettings : snapshot.data() as GlobalSettings;
-          setGlobalSettings(data);
-          return;
-        }
-
-        if (userProfile.role === 'ceo') {
-          const initialSettings: GlobalSettings = {
-            id: 'global',
-            chancePrices: [
-              { price: 5, ch1: 300, ch2: 50, ch3: 10 },
-              { price: 10, ch1: 600, ch2: 100, ch3: 20 },
-              { price: 20, ch1: 1200, ch2: 200, ch3: 40 }
-            ],
-            palesEnabled: true,
-            billetesEnabled: true,
-            pl12Multiplier: 1000,
-            pl13Multiplier: 1000,
-            pl23Multiplier: 200,
-            nextSellerNumber: 1
-          };
-          await setDoc(doc(db, 'settings', 'global'), initialSettings);
-          await setDoc(doc(db, 'public', 'connectivity'), { lastTested: serverTimestamp() });
-          if (!cancelled) setGlobalSettings(initialSettings);
-        }
-      } catch (error) {
-        console.error("Error fetching global settings:", error);
-        handleFirestoreError(error, OperationType.GET, 'settings/global');
+    const settingsRef = doc(db, 'settings', 'global');
+    const unsubscribe = onSnapshot(settingsRef, (snapshot) => {
+      if (snapshot.exists()) {
+        setGlobalSettings({ id: snapshot.id, ...snapshot.data() } as GlobalSettings);
+        return;
       }
-    };
 
-    void loadGlobalSettings();
+      if (userProfile.role !== 'ceo') return;
 
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.uid, userProfile?.role]);
+      const initialSettings: GlobalSettings = {
+        id: 'global',
+        chancePrices: [
+          { price: 5, ch1: 300, ch2: 50, ch3: 10 },
+          { price: 10, ch1: 600, ch2: 100, ch3: 20 },
+          { price: 20, ch1: 1200, ch2: 200, ch3: 40 }
+        ],
+        palesEnabled: true,
+        billetesEnabled: true,
+        pl12Multiplier: 1000,
+        pl13Multiplier: 1000,
+        pl23Multiplier: 200,
+        nextSellerNumber: 1
+      };
+
+      setDoc(settingsRef, initialSettings)
+        .then(() => setDoc(doc(db, 'public', 'connectivity'), { lastTested: serverTimestamp() }))
+        .catch((error) => {
+          console.error("Error creating global settings:", error);
+          handleFirestoreError(error, OperationType.WRITE, 'settings/global');
+        });
+    }, (error) => {
+      console.error("Error listening global settings:", error);
+      handleFirestoreError(error, OperationType.GET, 'settings/global');
+    });
+
+    return unsubscribe;
+  }, [shouldListenGlobalSettings, user?.uid, userProfile?.role]);
 
   // 4. History Data (Conditional on Date)
   useEffect(() => {
@@ -1322,21 +1332,8 @@ function App() {
   ]);
 
   useEffect(() => {
-    if (!globalSettings.chancePrices || globalSettings.chancePrices.length === 0) return;
-
-    const availablePrices = globalSettings.chancePrices.map(cp => cp.price);
-    const hasPrice = (value: number | undefined) => value !== undefined && availablePrices.some(price => Math.abs(price - value) < 0.001);
-    const preferredPrice = userProfile?.preferredChancePrice;
-    const fallbackPrice = availablePrices[0];
-    const nextPrice = hasPrice(preferredPrice) ? preferredPrice! : fallbackPrice;
-
-    setChancePrice(currentPrice => (
-      Math.abs(currentPrice - nextPrice) >= 0.001 ? nextPrice : currentPrice
-    ));
-    setPersonalChancePrice(currentPrice => (
-      Math.abs(currentPrice - nextPrice) >= 0.001 ? nextPrice : currentPrice
-    ));
-  }, [globalSettings.chancePrices, userProfile?.preferredChancePrice]);
+    syncChancePriceFromPreference();
+  }, [businessDayKey, syncChancePriceFromPreference]);
 
   const getTicketChancePrice = (ticket: LotteryTicket): number | null => {
     if (typeof ticket.chancePrice === 'number' && !Number.isNaN(ticket.chancePrice)) {
@@ -2871,6 +2868,7 @@ function App() {
             onSave={async (data) => {
               try {
                 await setDoc(doc(db, 'settings', 'global'), data);
+                setGlobalSettings(data);
                 toastSuccess('Ajustes globales guardados');
                 setShowSettingsModal(false);
               } catch (error) {
@@ -3159,6 +3157,7 @@ function App() {
                 multiLottery={multiLottery}
                 setMultiLottery={setMultiLottery}
                 activeLotteries={activeLotteries}
+                lotteriesLoading={lotteriesLoading}
                 selectedLottery={selectedLottery}
                 setSelectedLottery={setSelectedLottery}
                 cleanText={cleanText}

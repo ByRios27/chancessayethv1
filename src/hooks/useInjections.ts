@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { collection, getDocs, limit, query, where } from '../firebase';
+import { collection, limit, onSnapshot, query, where } from '../firebase';
 import { db } from '../firebase';
 import type { Injection } from '../types/finance';
 
@@ -37,44 +37,39 @@ export function useInjections({
       setError(null);
       return;
     }
-    let cancelled = false;
     setLoading(true);
     setError(null);
 
-    const run = async () => {
-      try {
-        const qInj = canAccessAllUsers
-          ? query(
-            collection(db, 'injections'),
-            where('date', '==', businessDayKey),
-            limit(500)
-          )
-          : query(
-            collection(db, 'injections'),
-            where('sellerId', '==', sellerId),
-            where('date', '==', businessDayKey),
-            limit(50)
-          );
+    const qInj = canAccessAllUsers
+      ? query(
+        collection(db, 'injections'),
+        where('date', '==', businessDayKey),
+        limit(500)
+      )
+      : query(
+        collection(db, 'injections'),
+        where('sellerId', '==', sellerId),
+        where('date', '==', businessDayKey),
+        limit(50)
+      );
 
-        const snapshot = await getDocs(qInj);
-        if (cancelled) return;
+    const unsubscribe = onSnapshot(
+      qInj,
+      (snapshot) => {
         const docs = snapshot.docs.map((injDoc) => ({ id: injDoc.id, ...injDoc.data() } as Injection));
         setInjections(docs);
-      } catch (error) {
+        setLoading(false);
+      },
+      (error) => {
         console.error('Error fetching injections:', error);
         const message = error instanceof Error ? error.message : 'No se pudieron cargar las inyecciones';
         setError(message);
         onError?.(error, 'get', 'injections');
-      } finally {
-        if (!cancelled) setLoading(false);
+        setLoading(false);
       }
-    };
+    );
 
-    void run();
-
-    return () => {
-      cancelled = true;
-    };
+    return unsubscribe;
   }, [enabled, canAccessAllUsers, businessDayKey, sellerId, onError, refreshTick]);
 
   return {

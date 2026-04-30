@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
-import { auth, collection, db, doc, getDoc, getDocs, limit, query, setDoc, signOut } from '../firebase';
+import { auth, collection, db, doc, getDoc, getDocs, limit, onSnapshot, query, setDoc, signOut } from '../firebase';
 import type { User as FirebaseUser } from 'firebase/auth';
 import type { UserProfile } from '../types/users';
 import { getBusinessDate } from '../utils/dates';
@@ -33,7 +33,67 @@ export function useAuthSession(enforceSessionByOperationalDay: boolean) {
   }, [clearSessionDay]);
 
   useEffect(() => {
+    let unsubscribeProfile: (() => void) | null = null;
+
+    const clearProfileListener = () => {
+      if (!unsubscribeProfile) return;
+      unsubscribeProfile();
+      unsubscribeProfile = null;
+    };
+
+    const subscribeToUserProfile = (email: string, isCeoLogin: boolean) => {
+      const userRef = doc(db, 'users', email);
+      unsubscribeProfile = onSnapshot(userRef, (userDoc) => {
+        if (!userDoc.exists()) {
+          console.warn('User profile not found in Firestore for:', email);
+          toast.error(isCeoLogin
+            ? 'No se encontro el perfil del owner. Contacta al administrador.'
+            : 'Tu perfil no existe en la base de datos. Contacta al administrador.');
+          setUserProfile(null);
+          setLoading(false);
+          return;
+        }
+
+        const data = userDoc.data() as UserProfile;
+        if (!isCeoLogin && !['ceo', 'admin', 'seller'].includes(String(data.role || '').toLowerCase())) {
+          toast.error('Tu rol ya no es valido en el sistema. Contacta al administrador.');
+          setUserProfile(null);
+          setLoading(false);
+          return;
+        }
+
+        const normalizedSellerId = (data.sellerId || '').trim() || email.split('@')[0].toUpperCase();
+        const normalizedProfile: UserProfile = isCeoLogin
+          ? {
+            ...data,
+            email,
+            name: data.name || 'CEO',
+            role: 'ceo',
+            commissionRate: typeof data.commissionRate === 'number' ? data.commissionRate : 0,
+            status: data.status || 'active',
+            sellerId: normalizedSellerId || 'CEO01',
+            currentDebt: typeof data.currentDebt === 'number' ? data.currentDebt : 0,
+            canLiquidate: data.canLiquidate ?? true,
+            preferredChancePrice: typeof data.preferredChancePrice === 'number' ? data.preferredChancePrice : undefined,
+          }
+          : {
+            ...data,
+            email,
+            sellerId: normalizedSellerId,
+          } as UserProfile;
+
+        setUserProfile(normalizedProfile);
+        setLoading(false);
+      }, (error) => {
+        console.error('Error listening user profile:', error);
+        toast.error('Error cargando tu perfil. Intenta iniciar sesion de nuevo.');
+        setUserProfile(null);
+        setLoading(false);
+      });
+    };
+
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
+      clearProfileListener();
       setLoading(true);
       if (u) {
         try {
@@ -58,7 +118,7 @@ export function useAuthSession(enforceSessionByOperationalDay: boolean) {
             setUser(null);
             setUserProfile(null);
             setLoading(false);
-            toast.info('Debe iniciar sesión nuevamente por cambio de día operativo.');
+            toast.info('Debe iniciar sesion nuevamente por cambio de dia operativo.');
             return;
           }
           markSessionDay();
@@ -94,65 +154,35 @@ export function useAuthSession(enforceSessionByOperationalDay: boolean) {
               }
             }
 
-            if (userDoc.exists()) {
-              const data = userDoc.data() as UserProfile;
-              const normalizedSellerId = (data.sellerId || '').trim() || email.split('@')[0].toUpperCase();
-              const normalizedProfile: UserProfile = {
-                email,
-                name: data.name || 'CEO',
-                role: 'ceo',
-                commissionRate: typeof data.commissionRate === 'number' ? data.commissionRate : 0,
-                status: data.status || 'active',
-                sellerId: normalizedSellerId || 'CEO01',
-                currentDebt: typeof data.currentDebt === 'number' ? data.currentDebt : 0,
-                canLiquidate: data.canLiquidate ?? true,
-              };
-              setUserProfile(normalizedProfile);
-            } else {
+            if (!userDoc.exists()) {
               console.warn('CEO profile missing and bootstrap did not run.', { email });
-              toast.error('No se encontró el perfil del owner. Contacta al administrador.');
+              toast.error('No se encontro el perfil del owner. Contacta al administrador.');
               setUserProfile(null);
+              setLoading(false);
+              return;
             }
+
+            subscribeToUserProfile(email, true);
           } catch (error) {
             console.error('Error fetching CEO profile:', error);
-            toast.error('Error cargando perfil del owner. Intenta cerrar e iniciar sesión nuevamente.');
+            toast.error('Error cargando perfil del owner. Intenta cerrar e iniciar sesion nuevamente.');
             setUserProfile(null);
+            setLoading(false);
           }
         } else {
-          try {
-            console.log('Non-CEO user logged in:', email, u.uid);
-            const userDoc = await getDoc(doc(db, 'users', email));
-            if (userDoc.exists()) {
-              const data = userDoc.data() as UserProfile;
-              if (!['ceo', 'admin', 'seller'].includes(String(data.role || '').toLowerCase())) {
-                toast.error('Tu rol ya no es válido en el sistema. Contacta al administrador.');
-                setUserProfile(null);
-                setLoading(false);
-                return;
-              }
-              const normalizedSellerId = (data.sellerId || '').trim() || email.split('@')[0].toUpperCase();
-              setUserProfile({
-                ...data,
-                email,
-                sellerId: normalizedSellerId,
-              } as UserProfile);
-            } else {
-              console.warn('User profile not found in Firestore for:', email);
-              toast.error('Tu perfil no existe en la base de datos. Contacta al administrador.');
-              setUserProfile(null);
-            }
-          } catch (error) {
-            console.error('Error fetching user profile:', error);
-            toast.error('Error cargando tu perfil. Intenta iniciar sesión de nuevo.');
-            setUserProfile(null);
-          }
+          console.log('Non-CEO user logged in:', email, u.uid);
+          subscribeToUserProfile(email, false);
         }
       } else {
         setUserProfile(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
-    return () => unsubscribe();
+
+    return () => {
+      clearProfileListener();
+      unsubscribe();
+    };
   }, [enforceSessionByOperationalDay, getCurrentOperationalSessionDay, getStoredSessionDay, handleLogout, markSessionDay]);
 
   useEffect(() => {
@@ -162,7 +192,7 @@ export function useAuthSession(enforceSessionByOperationalDay: boolean) {
       if (!isSessionValid()) {
         console.log('Session expired by operational day change. Signing out.');
         handleLogout();
-        toast.info('Su sesión expiró por cambio de día operativo. Inicie sesión nuevamente.');
+        toast.info('Su sesion expiro por cambio de dia operativo. Inicie sesion nuevamente.');
       }
     }, 60000);
 
