@@ -1,6 +1,7 @@
 import { toast } from 'sonner';
 import type { Lottery } from '../../../types/lotteries';
 import type { UserProfile } from '../../../types/users';
+import { logDailyAuditEvent } from '../../../services/repositories/auditLogsRepo';
 import { createCeoAdminAlert } from '../../../services/repositories/appAlertsRepo';
 import { createLottery, deleteLottery as deleteLotteryById, renameLotteryReferences, setLotteryActive, updateLottery } from '../../../services/repositories/lotteriesRepo';
 import { ADMIN_CONFIG_DOMAIN_SPEC, canExecuteAdminConfigAction } from '../domainSpec';
@@ -115,6 +116,39 @@ export function useGeneralConfigDomain({
           });
         }
 
+        await logDailyAuditEvent({
+          type: 'LOTTERY_UPDATED',
+          actor: {
+            email: currentUserProfile?.email,
+            sellerId: currentUserProfile?.sellerId,
+            name: currentUserProfile?.name,
+            role: currentUserProfile?.role || userRole,
+          },
+          target: {
+            name: nextName || previousName,
+          },
+          details: {
+            lotteryId: editingLottery.id,
+            previousName,
+            nextName,
+            previousActive: editingLottery.active,
+            nextActive: lotteryData.active ?? editingLottery.active,
+            renamed: shouldRenameReferences,
+            liveTickets: renameSummary?.liveTickets ?? 0,
+            liveTicketBets: renameSummary?.liveTicketBets ?? 0,
+            liveResults: renameSummary?.liveResults ?? 0,
+            archiveDays: renameSummary?.archiveDays ?? 0,
+            archivedTickets: renameSummary?.archivedTickets ?? 0,
+            archivedTicketBets: renameSummary?.archivedTicketBets ?? 0,
+            archivedResults: renameSummary?.archivedResults ?? 0,
+            migratedReferences: renameSummary
+              ? renameSummary.liveTicketBets + renameSummary.archivedTicketBets + renameSummary.liveResults + renameSummary.archivedResults
+              : 0,
+          },
+        }).catch((error) => {
+          console.error('Daily audit log failed (lottery update):', error);
+        });
+
         await notifyLotteryChange({
           type: 'lottery_updated',
           title: 'Sorteo editado',
@@ -158,6 +192,28 @@ export function useGeneralConfigDomain({
 
     try {
       await setLotteryActive(lottery.id, !lottery.active);
+      await logDailyAuditEvent({
+        type: 'LOTTERY_UPDATED',
+        actor: {
+          email: currentUserProfile?.email,
+          sellerId: currentUserProfile?.sellerId,
+          name: currentUserProfile?.name,
+          role: currentUserProfile?.role || userRole,
+        },
+        target: {
+          name: lottery.name,
+        },
+        details: {
+          lotteryId: lottery.id,
+          previousName: lottery.name,
+          nextName: lottery.name,
+          previousActive: lottery.active,
+          nextActive: !lottery.active,
+          action: lottery.active ? 'pause' : 'activate',
+        },
+      }).catch((error) => {
+        console.error('Daily audit log failed (lottery toggle):', error);
+      });
       await notifyLotteryChange({
         type: 'lottery_toggled',
         title: lottery.active ? 'Sorteo desactivado' : 'Sorteo activado',

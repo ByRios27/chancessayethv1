@@ -728,6 +728,7 @@ function App() {
   } = useDailyAuditLogs({
     enabled: auditLogsEnabled,
     date: auditLogsDateScope,
+    limitCount: activeTab === 'archivo' ? 200 : 40,
     onError: handleOperationalHookError,
   });
   const {

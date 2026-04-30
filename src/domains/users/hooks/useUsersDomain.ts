@@ -298,7 +298,20 @@ export function useUsersDomain({
           },
           details: {
             updatedFields: Object.keys(cleanData),
+            targetUsername: normalizedFirestoreEmail.split('@')[0] || normalizedFirestoreEmail,
             targetRole: cleanData.role,
+            nextRole: cleanData.role,
+            previousRole: previousUserData?.role || '',
+            commissionRate: Number(cleanData.commissionRate || 0),
+            nextCommissionRate: Number(cleanData.commissionRate || 0),
+            previousCommissionRate: Number(previousUserData?.commissionRate || 0),
+            nextName: String(cleanData.name || ''),
+            previousName: String(previousUserData?.name || ''),
+            nextSellerId: String(cleanData.sellerId || ''),
+            previousSellerId: String(previousUserData?.sellerId || ''),
+            status: String(cleanData.status || ''),
+            createdByEmail: String(cleanData.createdByEmail || ''),
+            updatedByEmail: actorEmail,
           },
         }).catch((error) => {
           console.error('Daily audit log failed (users save):', error);
