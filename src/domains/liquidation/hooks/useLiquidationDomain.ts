@@ -31,9 +31,11 @@ export function useLiquidationDomain(params: any) {
     tickets,
     injections,
     results,
+    lotteries = [],
     settlements,
     userProfile,
     getQuickOperationalDate,
+    getOperationalTimeSortValue,
     recentOperationalDates,
     getBusinessDayRange,
     buildFinancialSummary,
@@ -646,15 +648,64 @@ export function useLiquidationDomain(params: any) {
       ]);
 
       const normalizeText = (value?: string) => (value || '').toLowerCase().trim();
+      const toDate = (value: any) => {
+        if (!value) return null;
+        if (typeof value.toDate === 'function') return value.toDate();
+        if (value instanceof Date) return value;
+        const parsed = new Date(value);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+      };
+      const getTicketTime = (ticket: LotteryTicket) => {
+        const ticketDate = toDate(ticket.timestamp);
+        return ticketDate ? format(ticketDate, 'hh:mm a') : '--:--';
+      };
+      const getTicketSortValue = (ticket: LotteryTicket) => {
+        const ticketDate = toDate(ticket.timestamp);
+        return ticketDate ? ticketDate.getTime() : 0;
+      };
+      const fallbackTimeSortValue = (time?: string) => {
+        const [h, m] = String(time || '00:00').split(':').map(Number);
+        let value = (Number.isFinite(h) ? h : 0) * 60 + (Number.isFinite(m) ? m : 0);
+        if (value < 11 * 60) value += 24 * 60;
+        return value;
+      };
+      const lotteryMetaByName = new Map<string, { name: string; drawTime: string; sortValue: number }>(
+        (lotteries || []).map((lottery: any) => {
+          const drawTime = lottery?.drawTime || '00:00';
+          const sortValue = typeof getOperationalTimeSortValue === 'function'
+            ? getOperationalTimeSortValue(drawTime)
+            : fallbackTimeSortValue(drawTime);
+          return [normalizeText(lottery?.name), {
+            name: lottery?.name || 'Sorteo',
+            drawTime,
+            sortValue,
+          }];
+        })
+      );
+      const getLotteryMeta = (lotteryName?: string) => {
+        const key = normalizeText(lotteryName);
+        return lotteryMetaByName.get(key) || {
+          name: lotteryName || 'Sorteo',
+          drawTime: '--:--',
+          sortValue: 99999,
+        };
+      };
+      const usersByEmail = new Map<string, any>(
+        (users || [])
+          .filter((userItem: any) => userItem?.email)
+          .map((userItem: any) => [normalizeText(userItem.email), userItem])
+      );
       const reportUsersMap = new Map<string, any>();
 
       const ensureUser = (key: string, fallback: any = {}) => {
+        const normalizedEmail = normalizeText(fallback.email);
+        const knownUser = normalizedEmail ? usersByEmail.get(normalizedEmail) : null;
         if (!reportUsersMap.has(key)) {
           reportUsersMap.set(key, {
             key,
-            email: fallback.email || '',
-            name: fallback.name || fallback.email || 'Usuario',
-            sellerId: fallback.sellerId,
+            email: normalizedEmail || fallback.email || '',
+            name: knownUser?.name || fallback.name || fallback.email || 'Usuario',
+            sellerId: knownUser?.sellerId || fallback.sellerId,
             tickets: [],
             summary: {
               totalSales: 0,
@@ -662,6 +713,9 @@ export function useLiquidationDomain(params: any) {
               totalPrizes: 0,
               totalInjections: 0,
               totalLiquidations: 0,
+              totalReceived: 0,
+              totalSent: 0,
+              pending: 0,
               operationalProfit: 0,
               liquidationBalance: 0,
               netProfit: 0,
@@ -682,6 +736,24 @@ export function useLiquidationDomain(params: any) {
         u.tickets.push(ticket);
       });
 
+      reportInjections.forEach(injection => {
+        const email = normalizeText(injection.userEmail);
+        if (!email) return;
+        ensureUser(`email:${email}`, {
+          email,
+          sellerId: injection.sellerId,
+        });
+      });
+
+      reportSettlements.forEach(settlement => {
+        const email = normalizeText(settlement.userEmail);
+        if (!email) return;
+        ensureUser(`email:${email}`, {
+          email,
+          sellerId: settlement.sellerId,
+        });
+      });
+
       reportUsersMap.forEach((u: any) => {
         const email = normalizeText(u.email);
         const userTickets = u.tickets as LotteryTicket[];
@@ -692,15 +764,21 @@ export function useLiquidationDomain(params: any) {
         const totalCommissions = userTickets.reduce((sum, t) => sum + ((t.totalAmount || 0) * ((t.commissionRate || 0) / 100)), 0);
         const totalPrizes = userTickets.reduce((sum, t) => sum + (getTicketPrizesFromSource(t, reportResults).totalPrize || 0), 0);
         const totalInjections = userInjections.reduce((sum, i) => sum + (i.amount || 0), 0);
-        const totalLiquidations = userSettlements.reduce((sum, s) => sum + (s.amountPaid || 0), 0);
+        const totalReceived = userSettlements.reduce((sum, s) => sum + Number(s.amountReceived ?? s.amountPaid ?? 0), 0);
+        const totalSent = userSettlements.reduce((sum, s) => sum + Number(s.amountSent ?? 0), 0);
+        const totalLiquidations = totalReceived - totalSent;
         const operationalProfit = totalSales - totalCommissions - totalPrizes;
         const liquidationBalance = operationalProfit;
+        const pending = operationalProfit + totalInjections - totalReceived + totalSent;
         u.summary = {
           totalSales,
           totalCommissions,
           totalPrizes,
           totalInjections,
           totalLiquidations,
+          totalReceived,
+          totalSent,
+          pending,
           operationalProfit,
           liquidationBalance,
           netProfit: operationalProfit,
@@ -714,21 +792,36 @@ export function useLiquidationDomain(params: any) {
         u.summary.totalLiquidations > 0
       )).sort((a: any, b: any) => a.name.localeCompare(b.name));
 
-      const pdf = new jsPDF({ unit: 'mm', format: 'a4' });
-      const marginX = 12;
-      const maxWidth = 186;
+      const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+      const marginX = 6;
+      const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const lineHeight = 5;
-      let y = 14;
+      const maxWidth = pageWidth - (marginX * 2);
+      const lineHeight = 3.55;
+      let y = 8;
 
       const ensureSpace = (lines = 1) => {
-        if (y + (lines * lineHeight) > pageHeight - 12) {
+        if (y + (lines * lineHeight) > pageHeight - 7) {
           pdf.addPage();
-          y = 14;
+          y = 8;
         }
       };
 
-      const writeLine = (text: string, font: 'normal' | 'bold' = 'normal', size = 9) => {
+      const fitText = (text: string, width: number, size = 6.7) => {
+        pdf.setFontSize(size);
+        const safeText = String(text || '-');
+        if (pdf.getTextWidth(safeText) <= width) return safeText;
+
+        let trimmed = safeText;
+        while (trimmed.length > 4 && pdf.getTextWidth(`${trimmed}...`) > width) {
+          trimmed = trimmed.slice(0, -1);
+        }
+        return `${trimmed}...`;
+      };
+
+      const formatCompactMoney = (value?: number) => Number(value || 0).toFixed(2);
+
+      const writeLine = (text: string, font: 'normal' | 'bold' = 'normal', size = 7.5) => {
         pdf.setFont('helvetica', font);
         pdf.setFontSize(size);
         const lines = pdf.splitTextToSize(text, maxWidth) as string[];
@@ -739,24 +832,264 @@ export function useLiquidationDomain(params: any) {
         });
       };
 
+      const writeSection = (title: string) => {
+        ensureSpace(2);
+        y += 1.2;
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(8.3);
+        pdf.text(title, marginX, y);
+        pdf.line(marginX, y + 1.3, pageWidth - marginX, y + 1.3);
+        y += 4.2;
+      };
+
+      const writeMetricGrid = (metrics: Array<[string, string | number]>) => {
+        const colWidth = maxWidth / 3;
+        for (let i = 0; i < metrics.length; i += 3) {
+          ensureSpace(1);
+          metrics.slice(i, i + 3).forEach(([label, value], colIndex) => {
+            const text = `${label}: ${value}`;
+            pdf.setFont('helvetica', 'bold');
+            pdf.setFontSize(6.7);
+            pdf.text(fitText(text, colWidth - 2, 6.7), marginX + (colIndex * colWidth), y);
+          });
+          y += 3.6;
+        }
+      };
+
+      const writeTableRow = (
+        cells: Array<string | number>,
+        widths: number[],
+        options: { bold?: boolean; size?: number; height?: number } = {}
+      ) => {
+        const size = options.size || 6.6;
+        const rowHeight = options.height || 3.8;
+        ensureSpace(1);
+        pdf.setFont('helvetica', options.bold ? 'bold' : 'normal');
+        pdf.setFontSize(size);
+        let x = marginX;
+        cells.forEach((cell, index) => {
+          pdf.text(fitText(String(cell ?? '-'), widths[index] - 1.5, size), x, y);
+          x += widths[index];
+        });
+        y += rowHeight;
+      };
+
+      const writeTicketRow = (
+        cells: Array<string | number>,
+        widths: number[],
+        betSegments: Array<{ text: string; bold?: boolean }>
+      ) => {
+        const size = 6.1;
+        const rowHeight = 3.3;
+        const betSize = 5.8;
+        const betLineHeight = 3.15;
+        const separatorBottomSpace = 1.4;
+        const betLineStart = marginX + 2;
+        const betLineEnd = pageWidth - marginX;
+        const betLineWidth = betLineEnd - betLineStart;
+        const safeBetSegments = betSegments.length > 0 ? betSegments : [{ text: 'Jugadas: -' }];
+        const getSegmentWidth = (segment: { text: string; bold?: boolean }) => {
+          pdf.setFont('helvetica', segment.bold ? 'bold' : 'normal');
+          pdf.setFontSize(betSize);
+          return pdf.getTextWidth(segment.text);
+        };
+        let measuredLineWidth = 0;
+        let measuredLines = 1;
+        safeBetSegments.forEach((segment) => {
+          const segmentWidth = getSegmentWidth(segment);
+          if (measuredLineWidth > 0 && measuredLineWidth + segmentWidth > betLineWidth) {
+            measuredLines += 1;
+            measuredLineWidth = 0;
+          }
+          measuredLineWidth += segmentWidth;
+        });
+
+        ensureSpace(2 + measuredLines);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(size);
+
+        let x = marginX;
+        cells.forEach((cell, index) => {
+          pdf.text(fitText(String(cell ?? '-'), widths[index] - 1.5, size), x, y);
+          x += widths[index];
+        });
+        y += rowHeight;
+
+        let betX = betLineStart;
+        safeBetSegments.forEach((segment) => {
+          const segmentWidth = getSegmentWidth(segment);
+          if (betX > betLineStart && betX + segmentWidth > betLineEnd) {
+            y += betLineHeight;
+            betX = betLineStart;
+          }
+          pdf.setFont('helvetica', segment.bold ? 'bold' : 'normal');
+          pdf.setFontSize(betSize);
+          pdf.text(segment.text, betX, y);
+          betX += segmentWidth;
+        });
+        y += betLineHeight;
+        pdf.setDrawColor(190);
+        pdf.setLineWidth(0.08);
+        pdf.line(marginX, y - 0.65, pageWidth - marginX, y - 0.65);
+        y += separatorBottomSpace;
+      };
+
       const globalSales = reportUsers.reduce((acc: number, u: any) => acc + u.summary.totalSales, 0);
       const globalPrizes = reportUsers.reduce((acc: number, u: any) => acc + u.summary.totalPrizes, 0);
       const globalInjections = reportUsers.reduce((acc: number, u: any) => acc + u.summary.totalInjections, 0);
       const globalCommissions = reportUsers.reduce((acc: number, u: any) => acc + u.summary.totalCommissions, 0);
       const globalLiquidations = reportUsers.reduce((acc: number, u: any) => acc + u.summary.totalLiquidations, 0);
+      const globalReceived = reportUsers.reduce((acc: number, u: any) => acc + u.summary.totalReceived, 0);
+      const globalSent = reportUsers.reduce((acc: number, u: any) => acc + u.summary.totalSent, 0);
+      const globalPending = reportUsers.reduce((acc: number, u: any) => acc + u.summary.pending, 0);
       const globalOperationalProfit = globalSales - globalCommissions - globalPrizes;
 
-      writeLine('REPORTE CONSOLIDADO EJECUTIVO', 'bold', 15);
-      writeLine(`Rango operativo: ${reportStartDate} -> ${reportEndDate}`, 'bold', 10);
-      writeLine(`Generado: ${format(new Date(), 'dd/MM/yyyy hh:mm a')}`, 'normal', 9);
-      writeLine('==================================================', 'normal', 8);
-      writeLine('RESUMEN GLOBAL', 'bold', 11);
-      writeLine(`Usuarios con actividad: ${reportUsers.length}`);
-      writeLine(`Total ventas: USD ${globalSales.toFixed(2)}`);
-      writeLine(`Total premios: USD ${globalPrizes.toFixed(2)}`);
-      writeLine(`Total inyecciones: USD ${globalInjections.toFixed(2)}`);
-      writeLine(`Total liquidaciones: USD ${globalLiquidations.toFixed(2)}`);
-      writeLine(`Resultado operativo: USD ${globalOperationalProfit.toFixed(2)}`, 'bold', 10);
+      writeLine('REPORTE CONSOLIDADO EJECUTIVO', 'bold', 12);
+      writeLine(`Periodo: ${reportStartDate} -> ${reportEndDate} | Generado: ${format(new Date(), 'dd/MM/yyyy hh:mm a')} | Montos en USD`, 'normal', 7);
+      writeSection('RESUMEN GLOBAL');
+      writeMetricGrid([
+        ['Usuarios', reportUsers.length],
+        ['Ventas', formatCompactMoney(globalSales)],
+        ['Premios', formatCompactMoney(globalPrizes)],
+        ['Comisiones', formatCompactMoney(globalCommissions)],
+        ['Utilidad', formatCompactMoney(globalOperationalProfit)],
+        ['Inyecciones', formatCompactMoney(globalInjections)],
+        ['Recibido', formatCompactMoney(globalReceived)],
+        ['Enviado', formatCompactMoney(globalSent)],
+        ['Liquidado neto', formatCompactMoney(globalLiquidations)],
+        ['Por liquidar', formatCompactMoney(globalPending)],
+      ]);
+
+      writeSection('RESUMEN GLOBAL POR USUARIO');
+      if (reportUsers.length === 0) {
+        writeLine('Sin usuarios con actividad en el periodo seleccionado.');
+      }
+
+      const userSummaryWidths = [7, 44, 20, 20, 18, 20, 18, 17, 17, 17];
+      writeTableRow(
+        ['#', 'Usuario', 'Ventas', 'Premios', 'Comis.', 'Utilidad', 'Iny.', 'Recib.', 'Env.', 'Pend.'],
+        userSummaryWidths,
+        { bold: true, size: 5.9, height: 3.5 }
+      );
+      reportUsers.forEach((u: any, index: number) => {
+        const s = u.summary;
+        writeTableRow(
+          [
+            index + 1,
+            `${u.sellerId || 'SIN ID'} ${u.name || u.email || ''}`,
+            formatCompactMoney(s.totalSales),
+            formatCompactMoney(s.totalPrizes),
+            formatCompactMoney(s.totalCommissions),
+            formatCompactMoney(s.operationalProfit),
+            formatCompactMoney(s.totalInjections),
+            formatCompactMoney(s.totalReceived),
+            formatCompactMoney(s.totalSent),
+            formatCompactMoney(s.pending),
+          ],
+          userSummaryWidths,
+          { size: 5.8, height: 3.35 }
+        );
+      });
+
+      if (consolidatedMode === 'day') {
+        writeSection('DETALLE DE VENTAS POR USUARIO');
+        const ticketWidths = [7, 54, 55, 27, 27, 28];
+        reportUsers.forEach((u: any) => {
+          const userTickets = (u.tickets as LotteryTicket[])
+            .slice()
+            .sort((a, b) => getTicketSortValue(a) - getTicketSortValue(b));
+
+          if (userTickets.length === 0) return;
+
+          ensureSpace(3);
+          y += 1;
+          writeLine(`${u.sellerId || 'SIN ID'} - ${u.name || u.email || 'Usuario'} (${userTickets.length} ticket${userTickets.length === 1 ? '' : 's'})`, 'bold', 7.2);
+          writeTableRow(
+            ['#', 'Ticket / Hora', 'Cliente', 'Total', 'Premio', 'Comis.'],
+            ticketWidths,
+            { bold: true, size: 6.2, height: 3.5 }
+          );
+
+          const groupsByLottery = new Map<string, {
+            name: string;
+            drawTime: string;
+            sortValue: number;
+            rows: Array<{ ticket: LotteryTicket; bets: Array<{ bet: any; idx: number }> }>;
+          }>();
+
+          userTickets.forEach((ticket) => {
+            const ticketBets = (ticket.bets || []).map((bet, idx) => ({ bet, idx }));
+            const lotteryNames = Array.from(new Set(ticketBets.map(({ bet }) => bet.lottery).filter(Boolean)));
+            lotteryNames.forEach((lotteryName) => {
+              const meta = getLotteryMeta(lotteryName);
+              const key = normalizeText(lotteryName);
+              if (!groupsByLottery.has(key)) {
+                groupsByLottery.set(key, {
+                  name: meta.name,
+                  drawTime: meta.drawTime,
+                  sortValue: meta.sortValue,
+                  rows: [],
+                });
+              }
+              groupsByLottery.get(key)?.rows.push({
+                ticket,
+                bets: ticketBets.filter(({ bet }) => normalizeText(bet.lottery) === key),
+              });
+            });
+          });
+
+          Array.from(groupsByLottery.values())
+            .sort((a, b) => a.sortValue - b.sortValue || a.name.localeCompare(b.name))
+            .forEach((group) => {
+              ensureSpace(2);
+              pdf.setFont('helvetica', 'bold');
+              pdf.setFontSize(6.8);
+              pdf.text(`Sorteo: ${group.name} (${group.drawTime || '--:--'})`, marginX, y);
+              y += 3.6;
+
+              group.rows
+                .sort((a, b) => getTicketSortValue(a.ticket) - getTicketSortValue(b.ticket))
+                .forEach(({ ticket, bets }, ticketIndex) => {
+                  const ticketAmount = bets.reduce((sum, row) => sum + Number(row.bet.amount || 0), 0);
+                  const ticketPrizes = getTicketPrizesFromSource(ticket, reportResults, group.name);
+                  const ticketPrize = ticketPrizes.totalPrize || 0;
+                  const winningIndexes = new Set((ticketPrizes.winningBets || []).map((winningBet: any) => winningBet.idx));
+                  const ticketCommission = ticketAmount * (Number(ticket.commissionRate || 0) / 100);
+                  const ticketRef = ticket.sequenceNumber || ticket.id || `Ticket ${ticketIndex + 1}`;
+                  const betSegments: Array<{ text: string; bold?: boolean }> = [{ text: 'Jugadas: ' }];
+                  bets.forEach(({ bet, idx }, betIndex) => {
+                    const suffix = `${betIndex < bets.length - 1 ? ' ; ' : ''}`;
+                    if (winningIndexes.has(idx)) {
+                      betSegments.push({
+                        text: `${bet.type} ${bet.number} x${Number(bet.quantity || 1)}=${formatCompactMoney(bet.amount)}`,
+                        bold: true,
+                      });
+                      if (suffix) {
+                        betSegments.push({ text: suffix });
+                      }
+                    } else {
+                      betSegments.push({ text: `${bet.type} ${bet.number} x${Number(bet.quantity || 1)}=${formatCompactMoney(bet.amount)}${suffix}` });
+                    }
+                  });
+                  writeTicketRow(
+                    [
+                      ticketIndex + 1,
+                      `${ticketRef} / ${getTicketTime(ticket)}`,
+                      ticket.customerName || 'General',
+                      formatCompactMoney(ticketAmount),
+                      formatCompactMoney(ticketPrize),
+                      formatCompactMoney(ticketCommission),
+                    ],
+                    ticketWidths,
+                    betSegments
+                  );
+                });
+          });
+        });
+      } else {
+        y += 1.5;
+        writeLine('Modo rango: resumen global y resumen global por usuario entre las fechas seleccionadas.', 'normal', 6.8);
+      }
 
       pdf.save(`Reporte-Consolidado-${reportStartDate}-a-${reportEndDate}.pdf`);
       toastSuccess(`Reporte consolidado listo (${reportStartDate} -> ${reportEndDate})`, { id: toastId });

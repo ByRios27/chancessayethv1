@@ -147,7 +147,7 @@ export function LiquidationSection(props: LiquidationSectionProps) {
   ];
 
   const paymentRows: Array<{ label: string; value: string; tone: string; emphasis?: boolean }> = [
-    { label: amountMovementLabel, value: formatCurrency(amountEntered), tone: amountDirection === 'sent' ? 'text-sky-300' : 'text-white' },
+    { label: amountMovementLabel, value: formatCurrency(amountEntered), tone: 'text-white' },
     { label: 'Liquidacion total', value: formatSignedCurrency(dailyRemainingBalance), tone: 'text-orange-400', emphasis: true },
   ];
 
@@ -162,7 +162,7 @@ export function LiquidationSection(props: LiquidationSectionProps) {
     { label: 'Utilidad acumulada', value: formatSignedCurrency(rangeSummary?.operationalProfit), tone: getResultTone(Number(rangeSummary?.operationalProfit || 0)), emphasis: true },
     { label: 'Inyecciones acumuladas', value: formatCurrency(rangeSummary?.totalInjections), tone: 'text-sky-300' },
     { label: 'Pagos recibidos', value: formatCurrency(rangeSummary?.amountReceived), tone: 'text-white' },
-    { label: 'Pagos enviados', value: formatCurrency(rangeSummary?.amountSent), tone: 'text-sky-300' },
+    { label: 'Pagos enviados', value: formatCurrency(rangeSummary?.amountSent), tone: 'text-white' },
     { label: 'Pendiente acumulado', value: formatSignedCurrency(rangeSummary?.pending), tone: 'text-orange-400', emphasis: true },
   ];
 
