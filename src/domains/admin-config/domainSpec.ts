@@ -1,5 +1,3 @@
-﻿import type { DomainRole } from '../sales/domainSpec';
-
 export const ADMIN_CONFIG_DOMAIN_SPEC = {
   id: 'admin-config',
   primaryAction: 'manageLotteries',
@@ -11,7 +9,6 @@ export const ADMIN_CONFIG_DOMAIN_SPEC = {
   },
   expectedErrors: {
     unauthorizedAction: 'No tienes permisos para esta accion de configuracion.',
-    duplicateLottery: 'Ya existe un sorteo con ese nombre.',
   },
   mobileRules: {
     useStackedLotteryCards: true,

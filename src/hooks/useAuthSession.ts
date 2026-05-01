@@ -113,7 +113,6 @@ export function useAuthSession(enforceSessionByOperationalDay: boolean) {
           markSessionDay();
         } else if (storedSessionDay !== currentSessionDay) {
           if (enforceSessionByOperationalDay) {
-            console.log('Session expired by operational day change. Signing out.');
             handleLogout();
             setUser(null);
             setUserProfile(null);
@@ -132,7 +131,6 @@ export function useAuthSession(enforceSessionByOperationalDay: boolean) {
         const ownerEmail = 'zsayeth09@gmail.com';
 
         if (email === ceoEmail) {
-          console.log('CEO logged in:', email, u.uid);
           try {
             let userDoc = await getDoc(doc(db, 'users', email));
             if (!userDoc.exists() && email === ownerEmail) {
@@ -170,7 +168,6 @@ export function useAuthSession(enforceSessionByOperationalDay: boolean) {
             setLoading(false);
           }
         } else {
-          console.log('Non-CEO user logged in:', email, u.uid);
           subscribeToUserProfile(email, false);
         }
       } else {
@@ -190,7 +187,6 @@ export function useAuthSession(enforceSessionByOperationalDay: boolean) {
 
     const interval = setInterval(() => {
       if (!isSessionValid()) {
-        console.log('Session expired by operational day change. Signing out.');
         handleLogout();
         toast.info('Su sesion expiro por cambio de dia operativo. Inicie sesion nuevamente.');
       }

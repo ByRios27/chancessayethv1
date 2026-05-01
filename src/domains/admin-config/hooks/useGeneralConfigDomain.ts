@@ -28,7 +28,6 @@ interface UseGeneralConfigDomainParams {
 export function useGeneralConfigDomain({
   userRole,
   currentUserProfile,
-  lotteries,
   editingLottery,
   setEditingLottery,
   setShowLotteryModal,

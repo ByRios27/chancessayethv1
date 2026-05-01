@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { toast } from 'sonner';
-import { signInWithPopup, signInWithRedirect, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, googleProvider, auth, db, doc, setDoc, getDoc, signOut } from '../../firebase';
-import { AlertTriangle, ChevronRight, Lock, ShieldCheck, Ticket as TicketIcon, User as UserIcon } from 'lucide-react';
+import { signInWithPopup, signInWithRedirect, signInWithEmailAndPassword, sendPasswordResetEmail, googleProvider, auth, db, doc, getDoc, signOut } from '../../firebase';
+import { ChevronRight, Lock, Ticket as TicketIcon, User as UserIcon } from 'lucide-react';
 import { motion } from 'motion/react';
 import { format } from 'date-fns';
 import type { UserProfile } from '../../types/users';
@@ -30,13 +30,8 @@ const Login = () => {
     }
   };
 
-  useEffect(() => {
-    console.log("Login component mounted. Auth state:", auth.currentUser ? "Logged in" : "Logged out");
-  }, []);
-
   const handleCredentialsLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("handleCredentialsLogin triggered", { username });
     
     if (!username || !password) {
       toast.error('Ingrese usuario y contraseña');
@@ -62,9 +57,6 @@ const Login = () => {
         email = ceoEmail;
       }
       
-      console.log("Attempting auth with email:", email);
-      
-      console.log("Calling signInWithEmailAndPassword...");
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const signedInEmail = (userCredential.user.email || email).toLowerCase();
 
@@ -86,7 +78,6 @@ const Login = () => {
           return;
         }
       }
-      console.log("User signed in successfully:", userCredential.user.uid);
       localStorage.setItem('sessionBusinessDay', format(getBusinessDate(), 'yyyy-MM-dd'));
       
       toast.success('Sesión iniciada', { id: toastId });

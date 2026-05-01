@@ -1,15 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { X } from 'lucide-react';
-import type { Lottery, GlobalSettings } from '../../types/lotteries';
+import type { Lottery } from '../../types/lotteries';
 import { cleanText } from '../../utils/text';
 
-const LotteryModal = ({ show, lottery, onSave, onClose, globalSettings }: {
+const LotteryModal = ({ show, lottery, onSave, onClose }: {
   show: boolean;
   lottery: Lottery | null;
   onSave: (data: Partial<Lottery>) => void;
   onClose: () => void;
-  globalSettings: GlobalSettings | null;
 }) => {
   const [name, setName] = useState('');
   const [drawTime, setDrawTime] = useState('');

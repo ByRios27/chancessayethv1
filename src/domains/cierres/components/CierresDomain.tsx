@@ -43,7 +43,6 @@ export function CierresDomain(props: CierresDomainProps) {
     setGlobalChancePriceFilter,
     globalSettings,
     historyDate,
-    setHistoryDate,
     lotteries,
     cleanText,
     userProfile,

@@ -41,8 +41,6 @@ export function useTickets({
       });
     };
 
-    console.log("Fetching today's tickets for sellerId:", sellerId);
-
     if (canAccessAllUsers) {
       const qToday = query(
         collection(db, 'tickets'),
@@ -51,7 +49,6 @@ export function useTickets({
       );
 
       const unsubscribeTickets = onSnapshot(qToday, (snapshot) => {
-        console.log("Today's tickets fetched successfully:", snapshot.size);
         setTickets(mergeTicketSnapshots(snapshot));
       }, (error) => {
         console.error("Error fetching today's tickets:", error);
@@ -71,7 +68,6 @@ export function useTickets({
     let sellerIdSnapshot: { docs: Array<{ id: string; data: () => unknown }> } | null = null;
     const publishSellerTickets = () => {
       const merged = mergeTicketSnapshots(sellerIdSnapshot);
-      console.log("Today's seller tickets fetched successfully:", merged.length);
       setTickets(merged);
     };
 

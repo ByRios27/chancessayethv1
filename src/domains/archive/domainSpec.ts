@@ -1,5 +1,3 @@
-﻿import type { DomainRole } from '../sales/domainSpec';
-
 export const ARCHIVE_DOMAIN_SPEC = {
   id: 'archive',
   primaryAction: 'consultHistoricalData',

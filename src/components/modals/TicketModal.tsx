@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
@@ -7,16 +7,15 @@ import { Share } from '@capacitor/share';
 import { Filesystem, Directory } from '@capacitor/filesystem';
 import { jsPDF } from 'jspdf';
 import QRCode from 'react-qr-code';
-import { DollarSign, Download, Printer, Share2, X } from 'lucide-react';
+import { DollarSign, Download, Printer, Share2 } from 'lucide-react';
 import type { LotteryTicket } from '../../types/bets';
 import type { LotteryResult } from '../../types/results';
 import type { Lottery, GlobalSettings } from '../../types/lotteries';
 import type { UserProfile } from '../../types/users';
 import { cleanText, normalizePlainText } from '../../utils/text';
-import { formatTime12h } from '../../utils/time';
 import { unifyBets } from '../../utils/bets';
 
-const TicketModal = ({ ticket, results, lotteries, globalSettings, users, onClose, selectedLotteryName }: { ticket: LotteryTicket, results: LotteryResult[], lotteries: Lottery[], globalSettings: GlobalSettings, users: UserProfile[], onClose: () => void, selectedLotteryName?: string }) => {
+const TicketModal = ({ ticket, results, globalSettings, onClose, selectedLotteryName }: { ticket: LotteryTicket, results: LotteryResult[], lotteries: Lottery[], globalSettings: GlobalSettings, users: UserProfile[], onClose: () => void, selectedLotteryName?: string }) => {
   const ticketRef = useRef<HTMLDivElement>(null);
   const [showFullTicket, setShowFullTicket] = useState(!selectedLotteryName);
 
@@ -253,7 +252,7 @@ const TicketModal = ({ ticket, results, lotteries, globalSettings, users, onClos
             shared = true;
           }
         } catch (capErr) {
-          console.log('Native share failed, trying web fallback', capErr);
+          console.warn('Native share failed, trying web fallback', capErr);
         }
       }
 
@@ -453,9 +452,9 @@ const TicketModal = ({ ticket, results, lotteries, globalSettings, users, onClos
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(10);
       const betsForLot = (ticket.bets || []).filter(b => getBetGroupKey(b) === groupKey && matchesSelectedLottery(b));
-      betsForLot.forEach((bet, bIdx) => {
+      betsForLot.forEach((bet) => {
         // Find original index in ticket.bets
-        const originalIdx = (ticket.bets || []).findIndex((tb, i) => tb === bet);
+        const originalIdx = (ticket.bets || []).findIndex((tb) => tb === bet);
         const betWinnings = winningBets.filter(wb => wb.idx === originalIdx);
         const hasWon = betWinnings.length > 0;
         const betTotalPrize = betWinnings.reduce((sum, wb) => sum + wb.prize, 0);

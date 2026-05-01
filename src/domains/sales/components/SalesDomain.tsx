@@ -39,8 +39,6 @@ interface SalesDomainProps {
   number: string;
   quantity: string;
   plAmount: string;
-  isAmountSelected: boolean;
-  setIsAmountSelected: (value: boolean) => void;
   handleKeyPress: (key: string) => void;
   handleBackspace: () => void;
   handleClear: () => void;
@@ -126,8 +124,6 @@ export function SalesDomain(props: SalesDomainProps) {
     number,
     quantity,
     plAmount,
-    isAmountSelected,
-    setIsAmountSelected,
     handleKeyPress,
     handleBackspace,
     handleClear,

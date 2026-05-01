@@ -1,5 +1,3 @@
-﻿import type { DomainRole } from '../sales/domainSpec';
-
 export const LIQUIDATION_DOMAIN_SPEC = {
   id: 'liquidation',
   primaryAction: 'liquidateDailyBalance',

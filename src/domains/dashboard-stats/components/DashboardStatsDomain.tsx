@@ -141,22 +141,6 @@ export function DashboardStatsDomain(props: any) {
       .slice(0, 5);
   }, [canViewInjections, safeUsers, userStats]);
 
-  const latestInjectionByTargetEmail = useMemo(() => {
-    const grouped = new Map<string, any>();
-    const sorted = [...todaysGlobalInjections].sort((a: any, b: any) => {
-      const aTime = a?.timestamp?.toDate?.()?.getTime?.() ?? (a?.timestamp?.seconds ? a.timestamp.seconds * 1000 : 0);
-      const bTime = b?.timestamp?.toDate?.()?.getTime?.() ?? (b?.timestamp?.seconds ? b.timestamp.seconds * 1000 : 0);
-      return bTime - aTime;
-    });
-    sorted.forEach((inj: any) => {
-      const key = String(inj?.userEmail || '').toLowerCase();
-      if (key && !grouped.has(key)) {
-        grouped.set(key, inj);
-      }
-    });
-    return grouped;
-  }, [todaysGlobalInjections]);
-
   const visibleDashboardAlerts = useMemo(() => {
     const visibleAppAlerts = safeAppAlerts.filter((alert: any) => (
       isSameOperationalDay(alert) && !isInjectionAlertType(alert?.type)

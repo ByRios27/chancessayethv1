@@ -1,4 +1,3 @@
-import React from 'react';
 import { motion } from 'motion/react';
 import { Clock3, Edit3, Plus, Settings, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';

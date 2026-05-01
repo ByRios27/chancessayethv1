@@ -9,7 +9,7 @@ if ('serviceWorker' in navigator) {
         .then(() => navigator.serviceWorker.getRegistrations())
         .then((registrations) => Promise.all(registrations.map((registration) => registration.update())))
         .catch((err) => {
-          console.log('ServiceWorker registration failed:', err);
+          console.warn('ServiceWorker registration failed:', err);
         });
     });
   } else {
@@ -17,14 +17,14 @@ if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations()
         .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
         .catch((err) => {
-          console.log('ServiceWorker unregister failed:', err);
+          console.warn('ServiceWorker unregister failed:', err);
         });
 
       if ('caches' in window) {
         caches.keys()
           .then((keys) => Promise.all(keys.map((key) => caches.delete(key))))
           .catch((err) => {
-            console.log('Cache cleanup failed:', err);
+            console.warn('Cache cleanup failed:', err);
           });
       }
     });

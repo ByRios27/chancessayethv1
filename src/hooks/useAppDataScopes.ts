@@ -11,8 +11,7 @@ export type AppTabId =
   | 'config'
   | 'archivo'
   | 'stats'
-  | 'cierres'
-  | 'recovery';
+  | 'cierres';
 
 interface UseAppDataScopesParams {
   activeTab: AppTabId;
@@ -79,7 +78,6 @@ export function useAppDataScopes({
       'archivo',
       'stats',
       'cierres',
-      'recovery',
     ].includes(activeTab);
 
     const shouldListenResults =
@@ -104,7 +102,6 @@ export function useAppDataScopes({
       (activeTab === 'archivo' && archiveDate === businessDayKey);
 
     return {
-      canAccessManagedUsersData,
       canAccessAllUsers,
       shouldLoadUsersList,
       needsRealtimeOperationalData,

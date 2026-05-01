@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { toast } from 'sonner';
 import { jsPDF } from 'jspdf';
+import { stripEmojis } from '../../utils/text';
 
 type ArchiveSectionProps = any;
 type ArchiveTab = 'ventas' | 'tickets' | 'logs' | 'liquidaciones';
@@ -89,6 +90,7 @@ export function ArchiveSection(props: ArchiveSectionProps) {
 
   const formatCurrency = (value: unknown) => `$${Number(value || 0).toFixed(2)}`;
   const formatPercent = (value: unknown) => `${Number(value || 0).toFixed(2)}%`;
+  const documentText = (value: unknown) => stripEmojis(String(value ?? '-')) || '-';
   const formatEventDateTime = (value: any) => {
     const seconds = Number(value?.seconds ?? NaN);
     const date = Number.isFinite(seconds) && seconds > 0
@@ -133,13 +135,13 @@ export function ArchiveSection(props: ArchiveSectionProps) {
       const size = options.size || 7;
       const indent = options.indent || 0;
       const gap = options.gap || 3.5;
-      const lines = pdf.splitTextToSize(String(text || '-'), contentWidth - indent);
+      const lines = pdf.splitTextToSize(documentText(text), contentWidth - indent);
       ensureSpace(lines.length * gap + 1);
       pdf.setFont('helvetica', options.bold ? 'bold' : 'normal');
       pdf.setFontSize(size);
       pdf.setTextColor(...(options.color || [30, 30, 30]));
       lines.forEach((line: string) => {
-        pdf.text(line, marginX + indent, y);
+        pdf.text(documentText(line), marginX + indent, y);
         y += gap;
       });
     };
@@ -167,7 +169,7 @@ export function ArchiveSection(props: ArchiveSectionProps) {
       pdf.setTextColor(20, 20, 20);
       let x = marginX;
       headers.forEach((header, index) => {
-        pdf.text(String(header), x, y);
+        pdf.text(documentText(header), x, y);
         x += widths[index];
       });
       y += 3.2;
@@ -179,8 +181,8 @@ export function ArchiveSection(props: ArchiveSectionProps) {
         ensureSpace(4.4);
         let rowX = marginX;
         row.forEach((cell, index) => {
-          const text = pdf.splitTextToSize(String(cell ?? '-'), widths[index] - 1)[0] || '';
-          pdf.text(text, rowX, y);
+          const text = pdf.splitTextToSize(documentText(cell), widths[index] - 1)[0] || '';
+          pdf.text(documentText(text), rowX, y);
           rowX += widths[index];
         });
         y += 3.35;
@@ -801,14 +803,6 @@ export function ArchiveSection(props: ArchiveSectionProps) {
                   type="button"
                   disabled={filteredLogs.length === 0}
                   onClick={() => {
-                    const text = filteredLogs
-                      .slice(0, 30)
-                      .map((item: any) => {
-                        const actor = item.actorName || item.actorEmail || '-';
-                        const target = item.targetName || item.targetEmail || item.targetSellerId || '-';
-                        return `${item.type || 'EVENTO'} · ${actor} -> ${target}`;
-                      })
-                      .join('\n');
                     void shareLogPdf();
                   }}
                   className="h-10 w-full rounded-lg border border-white/10 bg-white/[0.04] text-[11px] font-bold uppercase disabled:opacity-60"
@@ -869,12 +863,6 @@ export function ArchiveSection(props: ArchiveSectionProps) {
               type="button"
               disabled={settlementRows.length === 0}
               onClick={() => {
-                const text = settlementRows
-                  .slice(0, 30)
-                  .map((item: any) =>
-                    `${item.userEmail || item.sellerId || '-'} · ${item.date || '-'} · Pagado $${Number(item.amountPaid || 0).toFixed(2)}`
-                  )
-                  .join('\n');
                 void shareLiquidationsPdf();
               }}
               className="h-10 w-full rounded-lg border border-white/10 bg-white/[0.04] text-[11px] font-bold uppercase disabled:opacity-60"

@@ -8,13 +8,11 @@ type FirestoreErrorHandler = (error: unknown, operation: 'get' | 'list', target:
 export function useLotteries({
   enabled,
   onlyActive = false,
-  selectedLottery,
   setSelectedLottery,
   onError,
 }: {
   enabled: boolean;
   onlyActive?: boolean;
-  selectedLottery: string;
   setSelectedLottery: Dispatch<SetStateAction<string>>;
   onError?: FirestoreErrorHandler;
 }) {

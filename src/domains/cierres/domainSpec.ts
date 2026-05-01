@@ -1,5 +1,3 @@
-﻿import type { DomainRole } from '../sales/domainSpec';
-
 export const CIERRES_DOMAIN_SPEC = {
   id: 'cierres',
   primaryAction: 'generateLotteryCloseReport',

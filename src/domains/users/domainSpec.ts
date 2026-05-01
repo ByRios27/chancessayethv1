@@ -1,5 +1,3 @@
-﻿import type { DomainRole } from '../sales/domainSpec';
-
 export const USERS_DOMAIN_SPEC = {
   id: 'users',
   primaryAction: 'manageUserProfiles',

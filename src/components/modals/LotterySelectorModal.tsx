@@ -1,4 +1,3 @@
-import React from 'react';
 import { motion } from 'motion/react';
 import { ChevronRight, X } from 'lucide-react';
 import type { Lottery } from '../../types/lotteries';

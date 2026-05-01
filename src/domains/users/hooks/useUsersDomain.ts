@@ -225,17 +225,6 @@ export function useUsersDomain({
           }
         : null;
 
-      console.log('[saveUser debug]', {
-        mode: editingUser ? 'edit' : 'create',
-        authEmail: auth.currentUser?.email,
-        authUid: auth.currentUser?.uid,
-        currentUserProfile,
-        targetEmail: normalizedFirestoreEmail,
-        payload: isSelfEdit ? selfUpdatePayload : cleanData,
-      });
-      console.log('[saveUser FULL PAYLOAD]', JSON.stringify(isSelfEdit ? selfUpdatePayload : cleanData, null, 2));
-      console.log('[saveUser KEYS]', Object.keys(isSelfEdit ? (selfUpdatePayload || {}) : cleanData));
-
       try {
         if (isSelfEdit && selfUpdatePayload) {
           await updateDoc(doc(db, 'users', normalizedFirestoreEmail), selfUpdatePayload);

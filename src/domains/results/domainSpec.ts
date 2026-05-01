@@ -1,5 +1,3 @@
-﻿import type { DomainRole } from '../sales/domainSpec';
-
 export const RESULTS_DOMAIN_SPEC = {
   id: 'results',
   primaryAction: 'registerLotteryResults',

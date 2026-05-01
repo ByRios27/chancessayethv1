@@ -22,7 +22,6 @@ export function useUsers({
       return;
     }
 
-    console.log('Listening to users for role:', role);
     const q = query(collection(db, 'users'));
     const unsubscribe = onSnapshot(
       q,

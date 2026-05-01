@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { Edit2, Plus, Send, Settings, Trash2, User as UserIcon, Zap } from 'lucide-react';
 import { USERS_DOMAIN_SPEC, canExecuteUsersAction } from '../../domains/users/domainSpec';

@@ -18,3 +18,14 @@ export const normalizePlainText = (text: string) => {
 };
 
 export const normalizeLotteryName = (name: string) => cleanText(name || '').trim().toLowerCase();
+
+export const stripEmojis = (text: string) => {
+  if (!text) return '';
+  return text
+    .replace(/[\u{1F1E6}-\u{1F1FF}]{2}/gu, '')
+    .replace(/[\u{1F3FB}-\u{1F3FF}]/gu, '')
+    .replace(/[\u200D\uFE0E\uFE0F]/g, '')
+    .replace(/\p{Extended_Pictographic}/gu, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+};

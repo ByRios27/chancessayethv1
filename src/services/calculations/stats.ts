@@ -1,5 +1,7 @@
 import { format } from 'date-fns';
 import type { LotteryTicket } from '../../types/bets';
+import type { Injection } from '../../types/finance';
+import type { UserProfile } from '../../types/users';
 
 interface LotteryDayStatsParams {
   lotteryName: string;
@@ -161,3 +163,59 @@ export const getUserLotteryDayStats = ({
 
   return { sales, commissions, prizes, netProfit, isLoss: netProfit < 0 };
 };
+
+export type UserStatsMap = Record<string, {
+  sales: number;
+  commissions: number;
+  prizes: number;
+  injections: number;
+  utility: number;
+}>;
+
+export function calculateUserStats({
+  users,
+  tickets,
+  injections,
+  targetDate,
+  getTicketPrizes,
+}: {
+  users: UserProfile[];
+  tickets: LotteryTicket[];
+  injections: Injection[];
+  targetDate: string;
+  getTicketPrizes: (ticket: LotteryTicket) => { totalPrize: number };
+}): UserStatsMap {
+  const stats: UserStatsMap = {};
+
+  users.forEach(user => {
+    if (user.email) {
+      stats[user.email.toLowerCase()] = { sales: 0, commissions: 0, prizes: 0, injections: 0, utility: 0 };
+    }
+  });
+
+  tickets.forEach(ticket => {
+    if (ticket.status === 'cancelled') return;
+    const email = ticket.sellerEmail?.toLowerCase();
+    if (email && stats[email]) {
+      const lotSales = (ticket.bets || []).reduce((sum, bet) => sum + (bet.amount || 0), 0);
+      stats[email].sales += lotSales;
+      stats[email].commissions += (lotSales * (ticket.commissionRate || 0) / 100);
+      const { totalPrize } = getTicketPrizes(ticket);
+      stats[email].prizes += (totalPrize || 0);
+    }
+  });
+
+  injections.forEach(injection => {
+    const email = injection.userEmail?.toLowerCase();
+    if (email && stats[email] && injection.date === targetDate) {
+      stats[email].injections += injection.amount;
+    }
+  });
+
+  Object.keys(stats).forEach(email => {
+    const stat = stats[email];
+    stat.utility = stat.sales - stat.commissions - stat.prizes;
+  });
+
+  return stats;
+}
