@@ -87,10 +87,20 @@ export function useSalesAvailability({
   ]);
 
   useEffect(() => {
+    const selected = isMultipleMode ? undefined : findActiveLotteryByName(selectedLottery);
+    if (selected?.isSpecial4D && betType !== 'CH') {
+      setBetType('CH');
+      setNumber('');
+      return;
+    }
+
     if (betType === 'BL') {
       const supportsBL = isMultipleMode
-        ? multiLottery.some((name) => findActiveLotteryByName(name)?.isFourDigits)
-        : findActiveLotteryByName(selectedLottery)?.isFourDigits;
+        ? multiLottery.some((name) => {
+          const lottery = findActiveLotteryByName(name);
+          return Boolean(lottery?.isFourDigits && !lottery?.isSpecial4D);
+        })
+        : Boolean(selected?.isFourDigits && !selected?.isSpecial4D);
 
       if (!supportsBL) {
         setBetType('CH');

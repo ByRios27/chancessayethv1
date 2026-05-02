@@ -6,6 +6,7 @@ export interface Lottery {
   pricePerUnit?: number;
   closingTime?: string;
   isFourDigits?: boolean;
+  isSpecial4D?: boolean;
 }
 
 export interface ChancePriceConfig {
@@ -23,6 +24,25 @@ export interface BilletePrizeMultipliers {
   last2: number;
 }
 
+export interface Special4DPrizePayouts {
+  first2: number;
+  last2: number;
+}
+
+export interface Special4DSettings {
+  enabled: boolean;
+  name: string;
+  drawTime: string;
+  closingTime: string;
+  unitPrice: number;
+  commissionRate: number;
+  payouts: {
+    p1: Special4DPrizePayouts;
+    p2: Special4DPrizePayouts;
+    p3: Special4DPrizePayouts;
+  };
+}
+
 export interface GlobalSettings {
   id: string;
   chancePrices: ChancePriceConfig[];
@@ -37,4 +57,5 @@ export interface GlobalSettings {
     p2: BilletePrizeMultipliers;
     p3: BilletePrizeMultipliers;
   };
+  special4d?: Special4DSettings;
 }

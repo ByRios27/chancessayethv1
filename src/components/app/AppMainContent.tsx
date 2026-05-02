@@ -62,6 +62,7 @@ export function AppMainContent(props: any) {
     historyTickets,
     ticketMatchesGlobalChancePrice,
     lotteries,
+    reportLotteries,
     cleanText,
     formatTime12h,
     dailyAuditLogs,
@@ -111,6 +112,12 @@ export function AppMainContent(props: any) {
     cartTotal,
     handleSell,
     setShowFastEntryModal,
+    canSeeSpecial4D,
+    isSpecial4DSelected,
+    special4DUnitPrice,
+    handleSpecial4DSell,
+    isSubmittingSpecial4D,
+    special4DSalesSummary,
     historyDate,
     setHistoryDate,
     applyOperationalQuickDate,
@@ -218,6 +225,10 @@ export function AppMainContent(props: any) {
     handleLiquidate,
     handleLiquidateRange,
     liquidationPreview,
+    special4DPreview,
+    special4DUserSummaries,
+    isLiquidatingSpecial4D,
+    handleLiquidateSpecial4D,
     archiveDate,
     setArchiveDate,
     archiveUserEmail,
@@ -237,6 +248,8 @@ export function AppMainContent(props: any) {
     setPersonalChancePrice,
     canUpdatePersonalChancePrice,
     isUpdatingChancePrice,
+    isUpdatingSpecial4dPreference,
+    requestSpecial4dPreferenceChange,
     handleUpdatePassword,
     newPassword,
     setNewPassword,
@@ -278,7 +291,7 @@ export function AppMainContent(props: any) {
                 operationalSellerId={operationalSellerId}
                 historyTickets={historyTickets}
                 ticketMatchesGlobalChancePrice={ticketMatchesGlobalChancePrice}
-                lotteries={lotteries}
+                lotteries={reportLotteries || lotteries}
                 cleanText={cleanText}
                 formatTime12h={formatTime12h}
                 auditLogs={dailyAuditLogs}
@@ -336,6 +349,12 @@ export function AppMainContent(props: any) {
               cartTotal={cartTotal}
               handleSell={handleSell}
               setShowFastEntryModal={setShowFastEntryModal}
+              canSeeSpecial4D={canSeeSpecial4D}
+              isSpecial4DSelected={isSpecial4DSelected}
+              special4DUnitPrice={special4DUnitPrice}
+              handleSpecial4DSell={handleSpecial4DSell}
+              isSubmittingSpecial4D={isSubmittingSpecial4D}
+              special4DSalesSummary={special4DSalesSummary}
               userProfile={userProfile}
               todayStr={todayStr}
               todayStats={todayStats}
@@ -380,7 +399,7 @@ export function AppMainContent(props: any) {
                 setHistoryDate={setHistoryDate}
                 historyTickets={historyTickets}
                 ticketMatchesGlobalChancePrice={ticketMatchesGlobalChancePrice}
-                lotteries={lotteries}
+                lotteries={reportLotteries || lotteries}
                 cleanText={cleanText}
                 formatTime12h={formatTime12h}
                 injections={injections}
@@ -402,7 +421,7 @@ export function AppMainContent(props: any) {
                 globalSettings={globalSettings}
                 historyDate={historyDate}
                 setHistoryDate={setHistoryDate}
-                lotteries={lotteries}
+                lotteries={reportLotteries || lotteries}
                 cleanText={cleanText}
                 userProfile={userProfile}
                 user={user}
@@ -536,6 +555,10 @@ export function AppMainContent(props: any) {
                 handleLiquidate={handleLiquidate}
                 handleLiquidateRange={handleLiquidateRange}
                 liquidationPreview={liquidationPreview}
+                special4DPreview={special4DPreview}
+                special4DUserSummaries={special4DUserSummaries}
+                isLiquidatingSpecial4D={isLiquidatingSpecial4D}
+                handleLiquidateSpecial4D={handleLiquidateSpecial4D}
                 shareImageDataUrl={shareImageDataUrl}
                 downloadDataUrlFile={downloadDataUrlFile}
               />
@@ -581,6 +604,9 @@ export function AppMainContent(props: any) {
                 globalSettings={globalSettings}
                 canUpdatePersonalChancePrice={canUpdatePersonalChancePrice}
                 isUpdatingChancePrice={isUpdatingChancePrice}
+                userProfile={userProfile}
+                isUpdatingSpecial4dPreference={isUpdatingSpecial4dPreference}
+                requestSpecial4dPreferenceChange={requestSpecial4dPreferenceChange}
                 handleUpdatePassword={handleUpdatePassword}
                 newPassword={newPassword}
                 setNewPassword={setNewPassword}

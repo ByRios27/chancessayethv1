@@ -85,9 +85,13 @@ export function LiquidationSection(props: LiquidationSectionProps) {
     isLiquidationRangeLoading,
     fetchLiquidationRangeReport,
     handleLiquidateRange,
+    special4DPreview,
+    special4DUserSummaries = [],
+    isLiquidatingSpecial4D,
+    handleLiquidateSpecial4D,
   } = props;
 
-  const [liquidationMode, setLiquidationMode] = useState<'daily' | 'range'>('daily');
+  const [liquidationMode, setLiquidationMode] = useState<'daily' | 'range' | 'special4d'>('daily');
   const [rangeViewMode, setRangeViewMode] = useState<'global' | 'daily'>('global');
 
   const canManageDailyLiquidation = userProfile?.role === 'ceo' || userProfile?.role === 'admin';
@@ -138,6 +142,33 @@ export function LiquidationSection(props: LiquidationSectionProps) {
         String(b.user.sellerId || b.user.name || b.user.email)
       );
     });
+
+  const specialUserToLiquidate = special4DPreview?.userToLiquidate;
+  const specialSummary = special4DPreview?.financialSummary;
+  const hasSpecialReport = !!specialSummary && (!!selectedUserToLiquidate || !!specialUserToLiquidate?.email || isSeller);
+  const specialPending = Number(specialSummary?.pendingBalance || 0);
+  const specialNet = Number(specialSummary?.netProfit || 0);
+  const specialStatus = hasSpecialReport && Math.abs(specialPending) <= BALANCE_EPSILON
+    ? {
+      label: 'Liquidado',
+      className: 'border-emerald-400/30 bg-emerald-500/10 text-emerald-300',
+    }
+    : hasSpecialReport
+      ? {
+        label: 'Pendiente',
+        className: 'border-orange-400/30 bg-orange-500/10 text-orange-300',
+      }
+      : null;
+
+  const specialRows: Array<{ label: string; value: string; tone: string; emphasis?: boolean }> = [
+    { label: 'Vendido especial', value: formatCurrency(specialSummary?.totalSales), tone: 'text-white' },
+    { label: 'Premios especiales', value: formatCurrency(specialSummary?.totalPrizes), tone: 'text-red-300' },
+    { label: 'Comision especial', value: formatCurrency(specialSummary?.totalCommissions), tone: 'text-amber-300' },
+    { label: 'Neto especial', value: formatSignedCurrency(specialNet), tone: getResultTone(specialNet), emphasis: true },
+    { label: 'Recibido especial', value: formatCurrency(specialSummary?.amountReceived), tone: 'text-white' },
+    { label: 'Enviado especial', value: formatCurrency(specialSummary?.amountSent), tone: 'text-white' },
+    { label: 'Pendiente especial', value: formatSignedCurrency(specialPending), tone: 'text-orange-400', emphasis: true },
+  ];
 
   const dayRows: Array<{ label: string; value: string; tone: string; emphasis?: boolean }> = [
     { label: 'Ventas', value: formatCurrency(summary?.totalSales), tone: 'text-white' },
@@ -514,6 +545,104 @@ export function LiquidationSection(props: LiquidationSectionProps) {
                 </p>
                 <p className="mt-1 text-[10px] text-muted-foreground">
                   {isSeller ? 'Revise la fecha.' : 'Use el menu de vendedores.'}
+                </p>
+              </div>
+            </div>
+          )}
+        </>
+      ) : liquidationMode === 'special4d' ? (
+        <>
+          <section className="rounded-md border border-cyan-400/20 bg-cyan-500/[0.06] p-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <label className="inline-flex h-8 min-w-[145px] items-center gap-1.5 px-1">
+                <CalendarDays className="h-3.5 w-3.5 text-cyan-200" />
+                <input
+                  type="date"
+                  value={liquidationDate}
+                  onChange={(event) => setLiquidationDate(event.target.value)}
+                  className="h-8 min-w-0 flex-1 border-0 bg-transparent p-0 font-mono text-[11px] text-white [box-shadow:none] [outline:none]"
+                />
+              </label>
+              {renderSellerSelector(true)}
+              <span className="ml-auto rounded border border-cyan-400/20 bg-cyan-500/10 px-2 py-1 text-[8px] font-black uppercase tracking-widest text-cyan-200">
+                {special4DUserSummaries.length} usuario{special4DUserSummaries.length === 1 ? '' : 's'}
+              </span>
+            </div>
+          </section>
+
+          {hasSpecialReport ? (
+            <article className="rounded-lg border border-cyan-400/20 bg-black p-2.5">
+              <div className="flex items-start justify-between gap-2 border-b border-white/10 pb-2">
+                <div className="min-w-0">
+                  <p className="text-[8px] font-mono uppercase tracking-widest text-muted-foreground">{liquidationDate}</p>
+                  <p className="truncate text-sm font-black text-white">{specialUserToLiquidate?.name || specialUserToLiquidate?.email}</p>
+                  <p className="text-[9px] font-mono uppercase text-muted-foreground">{specialUserToLiquidate?.sellerId || 'SIN ID'}</p>
+                </div>
+                {specialStatus && (
+                  <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest ${specialStatus.className}`}>
+                    {specialStatus.label}
+                  </span>
+                )}
+              </div>
+
+              <section className={`mt-2 rounded-md border px-2 py-2 ${
+                specialNet >= 0 ? 'border-emerald-400/25 bg-emerald-500/10' : 'border-red-500/30 bg-red-500/10'
+              }`}>
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground">Resultado especial</p>
+                    <p className={`text-[11px] font-black uppercase tracking-widest ${getResultTone(specialNet)}`}>
+                      {specialNet >= 0 ? 'Ganancia' : 'Perdida'}
+                    </p>
+                  </div>
+                  <span className={`text-lg font-black ${getResultTone(specialNet)}`}>{formatSignedCurrency(specialNet)}</span>
+                </div>
+              </section>
+
+              <section className="mt-3 rounded-md border border-white/10 bg-white/[0.025]">
+                <div className="border-b border-white/10 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-white">
+                  Finanzas Especial 4D
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2">
+                  {specialRows.map((row) => (
+                    <div key={row.label} className={`flex items-center justify-between gap-2 border-b border-white/10 px-2 py-1.5 sm:odd:border-r ${row.emphasis ? 'bg-white/[0.035]' : ''}`}>
+                      <span className={`font-mono uppercase tracking-widest ${row.emphasis ? 'text-[11px] font-black text-white' : 'text-[10px] text-muted-foreground'}`}>{row.label}</span>
+                      <span className={`${row.emphasis ? 'text-sm' : 'text-xs'} font-black ${row.tone}`}>{row.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {canManageDailyLiquidation && (
+                <section className="mt-3 rounded-md border border-cyan-400/20 bg-cyan-500/10 p-2">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-cyan-200">Liquidacion especial separada</p>
+                      <p className="mt-0.5 text-[10px] text-muted-foreground">
+                        Cierra completo el pendiente Especial 4D sin tocar tickets normales.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleLiquidateSpecial4D}
+                      disabled={isLiquidatingSpecial4D || Math.abs(specialPending) <= BALANCE_EPSILON}
+                      className="h-8 rounded-md bg-cyan-400 px-2 text-[8px] font-black uppercase tracking-widest text-black transition-all hover:brightness-110 active:scale-95 disabled:cursor-not-allowed disabled:opacity-45"
+                    >
+                      {isLiquidatingSpecial4D ? 'Liquidando' : 'Liquidar Especial'}
+                    </button>
+                  </div>
+                </section>
+              )}
+            </article>
+          ) : (
+            <div className="min-h-[110px] rounded-lg border border-dashed border-cyan-400/20 bg-cyan-500/[0.04] p-4 flex items-center justify-center text-center">
+              <div>
+                <CheckCircle2 className="mx-auto mb-2 h-5 w-5 text-cyan-200" />
+                <p className="text-[11px] font-black uppercase tracking-widest text-white">
+                  {isSeller ? 'Sin resumen especial' : 'Seleccione un vendedor'}
+                </p>
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  Especial 4D usa ventas y liquidaciones separadas.
                 </p>
               </div>
             </div>

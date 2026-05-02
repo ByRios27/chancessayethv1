@@ -1,6 +1,7 @@
 import type { LotteryTicket } from '../../types/bets';
 import type { LotteryResult } from '../../types/results';
 import type { GlobalSettings } from '../../types/lotteries';
+import { SPECIAL4D_LOTTERY_ID, normalizeSpecial4DSettings } from '../../config/special4d';
 
 export interface TicketWinningBet {
   idx: number;
@@ -43,7 +44,10 @@ export const getTicketPrizesFromSource = ({
   const ticketDate = getTicketDateKey(ticket);
 
   (ticket.bets || []).forEach((bet, idx) => {
-    if (filterLottery && cleanText(bet.lottery) !== cleanText(filterLottery)) return;
+    if (filterLottery) {
+      const matchesFilter = bet.lotteryId === filterLottery || cleanText(bet.lottery) === cleanText(filterLottery);
+      if (!matchesFilter) return;
+    }
     if (typeFilter && bet.type !== typeFilter) return;
 
     const result = resultsSource.find(r => (
@@ -56,6 +60,49 @@ export const getTicketPrizesFromSource = ({
 
     if (bet.type === 'CH') {
       const quantity = bet.quantity || 1;
+      const isSpecial4DChance = bet.lotteryId === SPECIAL4D_LOTTERY_ID;
+
+      if (isSpecial4DChance) {
+        const specialSettings = normalizeSpecial4DSettings(globalSettings.special4d);
+        const prizes: Array<{ rank: 1 | 2 | 3; value: string; payouts: { first2: number; last2: number } }> = [
+          { rank: 1, value: result.firstPrize, payouts: specialSettings.payouts.p1 },
+          { rank: 2, value: result.secondPrize, payouts: specialSettings.payouts.p2 },
+          { rank: 3, value: result.thirdPrize, payouts: specialSettings.payouts.p3 },
+        ];
+
+        prizes.forEach(({ rank, value, payouts }) => {
+          const winningNumber = String(value || '').replace(/\D/g, '');
+          if (winningNumber.length < 4) return;
+
+          if (last2 === winningNumber.slice(0, 2)) {
+            const p = Number(payouts.first2 || 0) * quantity;
+            totalPrize += p;
+            winningBets.push({
+              idx,
+              prize: p,
+              rank,
+              lotteryName: bet.lottery,
+              winningNumber,
+              matchType: '2 Primeras',
+            });
+          }
+
+          if (last2 === winningNumber.slice(-2)) {
+            const p = Number(payouts.last2 || 0) * quantity;
+            totalPrize += p;
+            winningBets.push({
+              idx,
+              prize: p,
+              rank,
+              lotteryName: bet.lottery,
+              winningNumber,
+              matchType: '2 Ultimas',
+            });
+          }
+        });
+        return;
+      }
+
       const pricePerChance = (bet.amount || 0) / quantity;
 
       const priceConfig = globalSettings.chancePrices?.find(cp => Math.abs(cp.price - pricePerChance) < 0.001);

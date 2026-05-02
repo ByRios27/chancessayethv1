@@ -9,6 +9,7 @@ export interface UserProfile {
   requiresInjection?: boolean;
   sellerId?: string;
   preferredChancePrice?: number;
+  special4dEnabled?: boolean;
   isPrimaryCeo?: boolean;
   createdBy?: string;
   createdByEmail?: string;

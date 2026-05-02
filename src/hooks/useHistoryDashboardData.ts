@@ -10,6 +10,10 @@ import type { LotteryResult } from '../types/results';
 import type { UserProfile } from '../types/users';
 import { cleanText } from '../utils/text';
 
+const betMatchesLottery = (bet: any, lottery: Lottery) => (
+  bet?.lotteryId ? bet.lotteryId === lottery.id : cleanText(bet?.lottery || '') === cleanText(lottery.name)
+);
+
 export type ClosedLotteryCardsCacheEntry = {
   sales: number;
   commissions: number;
@@ -150,7 +154,7 @@ export function useHistoryDashboardData({
     return sortedLotteries.map(lot => {
       const ticketsForLot = filteredTickets.filter(ticket =>
         ticket.bets && ticket.bets.some(bet =>
-          bet && cleanText(bet.lottery) === cleanText(lot.name) && (!historyTypeFilterCode || bet.type === historyTypeFilterCode)
+          bet && betMatchesLottery(bet, lot) && (!historyTypeFilterCode || bet.type === historyTypeFilterCode)
         )
       );
       if (!ticketsForLot.length) return null;
@@ -167,13 +171,13 @@ export function useHistoryDashboardData({
       if (!cachedCard) {
         const sales = ticketsForLot.reduce((acc, ticket) => {
           const lotBets = (ticket.bets || []).filter(bet =>
-            bet && cleanText(bet.lottery) === cleanText(lot.name) && (!historyTypeFilterCode || bet.type === historyTypeFilterCode)
+            bet && betMatchesLottery(bet, lot) && (!historyTypeFilterCode || bet.type === historyTypeFilterCode)
           );
           return acc + lotBets.reduce((sum, bet) => sum + (bet.amount || 0), 0);
         }, 0);
         const commissions = ticketsForLot.reduce((acc, ticket) => {
           const lotBets = (ticket.bets || []).filter(bet =>
-            bet && cleanText(bet.lottery) === cleanText(lot.name) && (!historyTypeFilterCode || bet.type === historyTypeFilterCode)
+            bet && betMatchesLottery(bet, lot) && (!historyTypeFilterCode || bet.type === historyTypeFilterCode)
           );
           const lotSales = lotBets.reduce((sum, bet) => sum + (bet.amount || 0), 0);
           return acc + (lotSales * (ticket.commissionRate || 0) / 100);

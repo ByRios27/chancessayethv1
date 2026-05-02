@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import type { Lottery } from '../../../types/lotteries';
 import type { LotteryResult } from '../../../types/results';
 import type { LotteryTicket } from '../../../types/bets';
+import type { Special4DTicket } from '../../../types/special4d';
 import type { UserProfile } from '../../../types/users';
 import { toastSuccess } from '../../../utils/toast';
 import { RESULTS_DOMAIN_SPEC, canExecuteResultsAction } from '../domainSpec';
@@ -24,6 +25,7 @@ interface UseResultsDomainParams {
   results: LotteryResult[];
   sortedLotteries: Lottery[];
   tickets: LotteryTicket[];
+  special4DTickets?: Special4DTicket[];
   currentUserProfile?: UserProfile | null;
   currentSellerId?: string;
   getOperationalTimeSortValue: (time: string) => number;
@@ -31,6 +33,7 @@ interface UseResultsDomainParams {
   getResultKey: (result: LotteryResult) => string;
   getTicketDateKey: (ticket: LotteryTicket) => string;
   getTicketPrizesFromSource: (ticket: LotteryTicket, source: LotteryResult[], lotteryName: string) => { totalPrize: number };
+  getSpecial4DTicketPrizes?: (ticket: Special4DTicket, source: LotteryResult[]) => { totalPrize: number };
   setConfirmModal: (updater: (prev: ConfirmModalState) => ConfirmModalState) => void;
   onError: (error: unknown, operation: 'create' | 'update' | 'delete', path: string) => void;
   onResultsMutated?: () => void;
@@ -42,6 +45,7 @@ export function useResultsDomain({
   results,
   sortedLotteries,
   tickets,
+  special4DTickets = [],
   currentUserProfile,
   currentSellerId,
   getOperationalTimeSortValue,
@@ -49,6 +53,7 @@ export function useResultsDomain({
   getResultKey,
   getTicketDateKey,
   getTicketPrizesFromSource,
+  getSpecial4DTicketPrizes,
   setConfirmModal,
   onError,
   onResultsMutated,
@@ -120,10 +125,47 @@ export function useResultsDomain({
     visibleResults.forEach(result => {
       let sales = 0;
       let prizes = 0;
+      const resultLottery = lotteryById.get(result.lotteryId);
+
+      if (resultLottery?.isSpecial4D) {
+        const normalSpecialTickets = relevantTickets.filter(ticket => {
+          if (getTicketDateKey(ticket) !== result.date) return false;
+          return (ticket.bets || []).some(bet => (
+            bet.lotteryId ? bet.lotteryId === result.lotteryId : cleanText(bet.lottery) === cleanText(result.lotteryName)
+          ));
+        });
+        const legacySpecialTickets = special4DTickets.filter(ticket => {
+          if (ticket.status !== 'active') return false;
+          if (ticket.date !== result.date) return false;
+          if ((ticket.specialLotteryId || ticket.sourceLotteryId) !== result.lotteryId) return false;
+          if (canManageResults) return true;
+          return currentSellerId ? ticket.sellerId === currentSellerId : true;
+        });
+
+        sales = normalSpecialTickets.reduce((sum, ticket) => {
+          const matchingBets = (ticket.bets || []).filter(bet => (
+            bet.lotteryId ? bet.lotteryId === result.lotteryId : cleanText(bet.lottery) === cleanText(result.lotteryName)
+          ));
+          return sum + matchingBets.reduce((betSum, bet) => betSum + Number(bet.amount || 0), 0);
+        }, 0);
+        prizes = normalSpecialTickets.reduce((sum, ticket) => (
+          sum + Number(getTicketPrizesFromSource(ticket, [result], result.lotteryName).totalPrize || 0)
+        ), 0);
+
+        sales += legacySpecialTickets.reduce((sum, ticket) => sum + Number(ticket.totalAmount || 0), 0);
+        prizes += legacySpecialTickets.reduce((sum, ticket) => (
+          sum + Number(getSpecial4DTicketPrizes?.(ticket, [result])?.totalPrize || 0)
+        ), 0);
+
+        map.set(getResultKey(result), { sales, prizes, hasWinners: prizes > 0 });
+        return;
+      }
 
       relevantTickets.forEach(ticket => {
         if (getTicketDateKey(ticket) !== result.date) return;
-        const matchingBets = (ticket.bets || []).filter(bet => cleanText(bet.lottery) === cleanText(result.lotteryName));
+        const matchingBets = (ticket.bets || []).filter(bet => (
+          bet.lotteryId ? bet.lotteryId === result.lotteryId : cleanText(bet.lottery) === cleanText(result.lotteryName)
+        ));
         if (!matchingBets.length) return;
         sales += matchingBets.reduce((sum, bet) => sum + (bet.amount || 0), 0);
         prizes += getTicketPrizesFromSource(ticket, [result], result.lotteryName).totalPrize;
@@ -133,7 +175,19 @@ export function useResultsDomain({
     });
 
     return map;
-  }, [canManageResults, cleanText, currentSellerId, getResultKey, getTicketDateKey, getTicketPrizesFromSource, tickets, visibleResults]);
+  }, [
+    canManageResults,
+    cleanText,
+    currentSellerId,
+    getResultKey,
+    getSpecial4DTicketPrizes,
+    getTicketDateKey,
+    getTicketPrizesFromSource,
+    lotteryById,
+    special4DTickets,
+    tickets,
+    visibleResults,
+  ]);
 
   const resetResultForm = useCallback(() => {
     setResultFormLotteryId('');

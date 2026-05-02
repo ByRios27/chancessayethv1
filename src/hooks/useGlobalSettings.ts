@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import { DEFAULT_SPECIAL4D_SETTINGS, normalizeSpecial4DSettings } from '../config/special4d';
 import { db, doc, onSnapshot, serverTimestamp, setDoc } from '../firebase';
 import type { GlobalSettings } from '../types/lotteries';
 
@@ -14,7 +15,8 @@ const DEFAULT_GLOBAL_SETTINGS: GlobalSettings = {
   pl12Multiplier: 1000,
   pl13Multiplier: 1000,
   pl23Multiplier: 200,
-  nextSellerNumber: 2
+  nextSellerNumber: 2,
+  special4d: DEFAULT_SPECIAL4D_SETTINGS
 };
 
 const INITIAL_CEO_GLOBAL_SETTINGS: GlobalSettings = {
@@ -29,7 +31,8 @@ const INITIAL_CEO_GLOBAL_SETTINGS: GlobalSettings = {
   pl12Multiplier: 1000,
   pl13Multiplier: 1000,
   pl23Multiplier: 200,
-  nextSellerNumber: 1
+  nextSellerNumber: 1,
+  special4d: DEFAULT_SPECIAL4D_SETTINGS
 };
 
 interface UseGlobalSettingsParams {
@@ -47,7 +50,13 @@ export function useGlobalSettings({ enabled, userRole, onError }: UseGlobalSetti
     const settingsRef = doc(db, 'settings', 'global');
     const unsubscribe = onSnapshot(settingsRef, (snapshot) => {
       if (snapshot.exists()) {
-        setGlobalSettings({ id: snapshot.id, ...snapshot.data() } as GlobalSettings);
+        const data = snapshot.data() as Partial<GlobalSettings>;
+        setGlobalSettings({
+          ...DEFAULT_GLOBAL_SETTINGS,
+          ...data,
+          id: snapshot.id,
+          special4d: normalizeSpecial4DSettings(data.special4d),
+        } as GlobalSettings);
         return;
       }
 

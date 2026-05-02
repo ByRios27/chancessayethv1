@@ -2,12 +2,14 @@
 import { motion } from 'motion/react';
 import { Calendar, ChevronDown, LayoutDashboard, Plus, Trash2, Zap } from 'lucide-react';
 import type { Bet } from '../../../types/bets';
+import type { Special4DSettings } from '../../../types/lotteries';
 
 interface LotteryOption {
   id: string;
   name: string;
   drawTime?: string;
   isFourDigits?: boolean;
+  isSpecial4D?: boolean;
 }
 
 interface SalesDomainProps {
@@ -23,7 +25,7 @@ interface SalesDomainProps {
   setSelectedLottery: (value: string) => void;
   cleanText: (value: string) => string;
   formatTime12h: (value: string) => string;
-  globalSettings: { palesEnabled: boolean; billetesEnabled: boolean };
+  globalSettings: { palesEnabled: boolean; billetesEnabled: boolean; special4d?: Special4DSettings };
   betType: 'CH' | 'PL' | 'BL';
   setBetType: (value: 'CH' | 'PL' | 'BL') => void;
   setNumber: (value: string) => void;
@@ -56,7 +58,19 @@ interface SalesDomainProps {
   cartTotal: number;
   handleSell: (e: React.FormEvent) => void;
   setShowFastEntryModal: (value: boolean) => void;
-  userProfile?: { role?: string };
+  userProfile?: { role?: string; special4dEnabled?: boolean };
+  canSeeSpecial4D?: boolean;
+  isSpecial4DSelected?: boolean;
+  special4DUnitPrice?: number;
+  handleSpecial4DSell?: (e: React.FormEvent) => void;
+  isSubmittingSpecial4D?: boolean;
+  special4DSalesSummary?: {
+    totalSales: number;
+    totalPrizes: number;
+    totalCommissions: number;
+    netProfit: number;
+    pendingBalance: number;
+  };
   todayStr: string;
   todayStats: { sales: number; injections: number; prizes: number; bankProfit: number; pendingDebt: number; netProfit: number };
 }
@@ -142,6 +156,12 @@ export function SalesDomain(props: SalesDomainProps) {
     handleSell,
     setShowFastEntryModal,
     userProfile,
+    canSeeSpecial4D,
+    isSpecial4DSelected: providedIsSpecial4DSelected,
+    special4DUnitPrice: providedSpecial4DUnitPrice,
+    handleSpecial4DSell,
+    isSubmittingSpecial4D,
+    special4DSalesSummary,
     todayStr,
     todayStats,
   } = props;
@@ -153,6 +173,20 @@ export function SalesDomain(props: SalesDomainProps) {
   const hasActiveLotteries = safeActiveLotteries.length > 0;
   const hasLoadedLotteries = !lotteriesLoading;
   const canOperateSales = canSell && hasActiveLotteries;
+  const selectedActiveLottery = isMultipleMode ? undefined : findActiveLotteryByName(selectedLottery);
+  const isSpecial4DSelected = providedIsSpecial4DSelected ?? Boolean(selectedActiveLottery?.isSpecial4D);
+  const special4DUnitPrice = Number(providedSpecial4DUnitPrice || globalSettings.special4d?.unitPrice || 0);
+  const effectiveBetType = isSpecial4DSelected ? 'CH' : betType;
+  const multiSelectableLotteries = safeActiveLotteries.filter((lottery) => !lottery.isSpecial4D);
+
+  React.useEffect(() => {
+    if (!isSpecial4DSelected || betType === 'CH') return;
+    setBetType('CH');
+    setNumber('');
+    setQuantity('1');
+    setPlAmount('1.00');
+    setFocusedField('number');
+  }, [betType, isSpecial4DSelected, setBetType, setFocusedField, setNumber, setPlAmount, setQuantity]);
 
   if (import.meta.env.DEV) {
     const requiredCallbacks = {
@@ -213,11 +247,11 @@ export function SalesDomain(props: SalesDomainProps) {
                 </button>
                 {showMultiSelect && (
                   <div className="absolute top-full left-0 mt-1 w-full surface-card border border-white/12 rounded-xl p-2 space-y-1.5 max-h-56 overflow-y-auto custom-scrollbar z-40">
-                    {safeActiveLotteries.length > 0 ? (
+                    {multiSelectableLotteries.length > 0 ? (
                       <>
                         <div className="flex items-center justify-between pb-1 border-b border-white/10">
                           <button
-                            onClick={() => setMultiLottery(safeActiveLotteries.map((lottery) => lottery.id))}
+                            onClick={() => setMultiLottery(multiSelectableLotteries.map((lottery) => lottery.id))}
                             className="px-2 py-1 text-[10px] font-bold uppercase text-primary hover:text-primary/80"
                           >
                             Todos
@@ -229,7 +263,7 @@ export function SalesDomain(props: SalesDomainProps) {
                             Ninguno
                           </button>
                         </div>
-                        {safeActiveLotteries.map((lottery) => (
+                        {multiSelectableLotteries.map((lottery) => (
                           <label key={lottery.id} className="flex items-center gap-2 px-1.5 py-1.5 rounded-lg cursor-pointer hover:bg-white/5">
                             <input
                               type="checkbox"
@@ -251,7 +285,7 @@ export function SalesDomain(props: SalesDomainProps) {
                       </>
                     ) : (
                       <div className="py-3 text-center text-xs text-muted-foreground">
-                        {lotteriesLoading ? 'Cargando sorteos...' : 'No hay sorteos disponibles'}
+                    {lotteriesLoading ? 'Cargando sorteos...' : 'No hay sorteos disponibles para multi'}
                       </div>
                     )}
                   </div>
@@ -260,7 +294,20 @@ export function SalesDomain(props: SalesDomainProps) {
             ) : (
               <select
                 value={selectedLottery}
-                onChange={(e) => setSelectedLottery(e.target.value)}
+                onChange={(e) => {
+                  const nextLotteryId = e.target.value;
+                  const nextLottery = safeActiveLotteries.find((lottery) => lottery.id === nextLotteryId);
+                  setSelectedLottery(nextLotteryId);
+                  if (nextLottery?.isSpecial4D) {
+                    setIsMultipleMode(false);
+                    setShowMultiSelect(false);
+                    setBetType('CH');
+                    setNumber('');
+                    setQuantity('1');
+                    setPlAmount('1.00');
+                    setFocusedField('number');
+                  }
+                }}
                 className="bg-transparent border-none p-0 font-bold text-xs sm:text-sm focus:outline-none w-full truncate min-h-[28px]"
                 disabled={lotteriesLoading || !hasActiveLotteries}
               >
@@ -278,6 +325,7 @@ export function SalesDomain(props: SalesDomainProps) {
         </div>
         <button
           onClick={() => {
+            if (isSpecial4DSelected) return;
             const next = !isMultipleMode;
             setIsMultipleMode(next);
             setShowMultiSelect(next);
@@ -285,7 +333,7 @@ export function SalesDomain(props: SalesDomainProps) {
           className={`px-2.5 py-1.5 min-h-[30px] rounded-lg text-[9px] font-bold uppercase transition-all border shrink-0 ${
             isMultipleMode ? 'bg-primary border-primary text-primary-foreground' : 'surface-panel text-muted-foreground'
           }`}
-          disabled={!hasActiveLotteries}
+          disabled={!hasActiveLotteries || isSpecial4DSelected}
         >
           Multi
         </button>
@@ -300,12 +348,12 @@ export function SalesDomain(props: SalesDomainProps) {
             setFocusedField('number');
           }}
           className={`flex-1 min-w-0 py-3 rounded-xl text-[11px] font-bold uppercase tracking-wider transition-all ${
-            betType === 'CH' ? 'bg-primary text-primary-foreground shadow-lg' : 'text-muted-foreground hover:text-foreground'
+            effectiveBetType === 'CH' ? 'bg-primary text-primary-foreground shadow-lg' : 'text-muted-foreground hover:text-foreground'
           }`}
         >
-          Chance
+          {isSpecial4DSelected ? 'Chance Especial' : 'Chance'}
         </button>
-        {globalSettings.palesEnabled && (
+        {!isSpecial4DSelected && globalSettings.palesEnabled && (
           <button
             onClick={() => {
               setBetType('PL');
@@ -321,7 +369,7 @@ export function SalesDomain(props: SalesDomainProps) {
             Pale
           </button>
         )}
-        {globalSettings.billetesEnabled && (isMultipleMode ? safeMultiLottery.some((id) => findActiveLotteryByName(id)?.isFourDigits) : findActiveLotteryByName(selectedLottery)?.isFourDigits) && (
+        {!isSpecial4DSelected && globalSettings.billetesEnabled && (isMultipleMode ? safeMultiLottery.some((id) => findActiveLotteryByName(id)?.isFourDigits) : findActiveLotteryByName(selectedLottery)?.isFourDigits) && (
           <button
             onClick={() => {
               setBetType('BL');
@@ -357,7 +405,7 @@ export function SalesDomain(props: SalesDomainProps) {
               value={number === 'NaN' ? '' : number}
               onChange={(e) => {
                 const val = e.target.value.replace(/\D/g, '');
-                const maxLen = betType === 'CH' ? 2 : 4;
+                const maxLen = effectiveBetType === 'CH' ? 2 : 4;
                 if (val.length <= maxLen) {
                   setNumber(val);
                   if (val.length === maxLen) {
@@ -370,7 +418,7 @@ export function SalesDomain(props: SalesDomainProps) {
                 }
               }}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && number.length === (betType === 'CH' ? 2 : 4)) {
+                if (e.key === 'Enter' && number.length === (effectiveBetType === 'CH' ? 2 : 4)) {
                   setFocusedField('amount');
                   setAmountEntryStarted(false);
                   setTimeout(() => {
@@ -381,7 +429,7 @@ export function SalesDomain(props: SalesDomainProps) {
               onFocus={() => setFocusedField('number')}
               className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
             />
-            <span className="text-2xl font-bold tracking-widest">{number || (betType === 'CH' ? '--' : '----')}</span>
+            <span className="text-2xl font-bold tracking-widest">{number || (effectiveBetType === 'CH' ? '--' : '----')}</span>
             {focusedField === 'number' && <Cursor />}
           </div>
         </div>
@@ -398,19 +446,19 @@ export function SalesDomain(props: SalesDomainProps) {
           }`}
         >
           <span className="text-[11px] font-mono uppercase text-muted-foreground font-medium">
-            {betType === 'PL' ? 'Inversion' : 'Cantidad'}
+            {effectiveBetType === 'PL' ? 'Inversion' : 'Cantidad'}
           </span>
           <div className="flex items-center justify-center min-h-[28px] relative w-full">
             <input
               ref={amountInputRef}
               type="text"
               inputMode="none"
-              value={(betType === 'CH' || betType === 'BL') ? (quantity === 'NaN' ? '' : quantity) : (plAmount === 'NaN' ? '' : plAmount)}
+              value={(effectiveBetType === 'CH' || effectiveBetType === 'BL') ? (quantity === 'NaN' ? '' : quantity) : (plAmount === 'NaN' ? '' : plAmount)}
               onChange={(e) => {
                 const val = e.target.value.replace(/[^0-9.]/g, '');
                 setAmountEntryStarted(val.length > 0);
-                if (betType === 'CH' || betType === 'BL') {
-                  if (betType === 'BL') {
+                if (effectiveBetType === 'CH' || effectiveBetType === 'BL') {
+                  if (effectiveBetType === 'BL') {
                     const parsed = parseInt(val, 10);
                     if (!Number.isNaN(parsed) && parsed > 5) return;
                   }
@@ -420,7 +468,9 @@ export function SalesDomain(props: SalesDomainProps) {
                 }
               }}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') addToCart();
+                if (e.key === 'Enter') {
+                  addToCart();
+                }
               }}
               onFocus={() => {
                 setFocusedField('amount');
@@ -431,16 +481,16 @@ export function SalesDomain(props: SalesDomainProps) {
               className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
             />
             <span className="text-2xl font-bold">
-              {(betType === 'CH' || betType === 'BL')
+              {(effectiveBetType === 'CH' || effectiveBetType === 'BL')
                 ? (focusedField === 'amount' && !amountEntryStarted ? '' : quantity)
                 : (focusedField === 'amount' && !amountEntryStarted ? '' : plAmount)}
             </span>
             {focusedField === 'amount' && <Cursor />}
           </div>
           <span className="text-[10px] font-mono text-muted-foreground">
-            {betType === 'PL'
+            {effectiveBetType === 'PL'
               ? 'USD'
-              : `$${((parseFloat(quantity) || 0) * (betType === 'BL' ? 1 : chancePrice)).toFixed(2)}`}
+              : `$${((parseFloat(quantity) || 0) * (isSpecial4DSelected ? special4DUnitPrice : effectiveBetType === 'BL' ? 1 : chancePrice)).toFixed(2)}`}
           </span>
         </div>
       </div>
@@ -540,7 +590,7 @@ export function SalesDomain(props: SalesDomainProps) {
                         }`}
                       />
                       <span className="text-sm font-bold leading-none text-right">
-                        ${(bet.type === 'PL' ? bet.amount : (bet.quantity * (bet.type === 'BL' ? 1 : chancePrice))).toFixed(2)}
+                        ${Number(bet.amount || 0).toFixed(2)}
                       </span>
                       <button onClick={() => removeFromCart(bet.originalIdx)} className="text-red-500/70 hover:text-red-500 p-1 transition-colors flex items-center justify-center">
                         <Trash2 className="w-4 h-4" />
@@ -593,19 +643,21 @@ export function SalesDomain(props: SalesDomainProps) {
         </div>
       )}
 
-      <button
-        onClick={() => {
-          if (typeof setShowFastEntryModal !== 'function') {
-            console.error('[SalesDomain] setShowFastEntryModal is not a function', setShowFastEntryModal);
-            return;
-          }
-          setShowFastEntryModal(true);
-        }}
-        className="w-full py-3 surface-panel text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground transition-all flex items-center justify-center gap-2"
-      >
-        <Zap className="w-4 h-4" />
-        Copiado rapido
-      </button>
+      {!isSpecial4DSelected && (
+        <button
+          onClick={() => {
+            if (typeof setShowFastEntryModal !== 'function') {
+              console.error('[SalesDomain] setShowFastEntryModal is not a function', setShowFastEntryModal);
+              return;
+            }
+            setShowFastEntryModal(true);
+          }}
+          className="w-full py-3 surface-panel text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground transition-all flex items-center justify-center gap-2"
+        >
+          <Zap className="w-4 h-4" />
+          Copiado rapido
+        </button>
+      )}
 
       {userProfile?.role === 'seller' && (
         <div className="surface-card p-4 space-y-4 border-primary/30 bg-primary/10">

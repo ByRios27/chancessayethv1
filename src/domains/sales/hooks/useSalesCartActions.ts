@@ -120,16 +120,12 @@ export function useSalesCartActions({
       return;
     }
 
-    let calculatedAmount = 0;
-    if (betType === 'CH') {
-      calculatedAmount = qInt * chancePrice;
-    } else if (betType === 'BL') {
+    if (betType === 'BL') {
       if (qInt > 5) {
         toast.error('Maximo 5 billetes por jugada');
         return;
       }
-      calculatedAmount = qInt * BL_UNIT_PRICE;
-    } else {
+    } else if (betType === 'PL') {
       const costPerUnit = parseFloat(plAmount);
       if (isNaN(costPerUnit) || costPerUnit < 0.1 || costPerUnit > 5) {
         toast.error('Costo de Pale (PL) debe ser entre USD 0.10 y USD 5.00');
@@ -139,7 +135,19 @@ export function useSalesCartActions({
         toast.error('Maximo 5 combinaciones por numero en Pale (PL)');
         return;
       }
-      calculatedAmount = qInt * costPerUnit;
+    }
+
+    const specialLottery = Array.from(lotteriesToBuy.values()).find((lottery) => lottery.isSpecial4D);
+    if (specialLottery && betType !== 'CH') {
+      toast.error('Especial 4D solo permite Chance Especial');
+      return;
+    }
+    if (specialLottery) {
+      const specialUnitPrice = Number(specialLottery.pricePerUnit || globalSettings.special4d?.unitPrice || 0);
+      if (!Number.isFinite(specialUnitPrice) || specialUnitPrice <= 0) {
+        toast.error('Configure el precio unitario del Especial 4D');
+        return;
+      }
     }
 
     for (const lot of lotteriesToBuy.values()) {
@@ -164,6 +172,13 @@ export function useSalesCartActions({
     setCart((prevCart) => {
       const newBets: Bet[] = [];
       lotteriesToBuy.forEach((lottery) => {
+        const unitPrice = betType === 'CH'
+          ? Number(lottery.isSpecial4D ? (lottery.pricePerUnit || globalSettings.special4d?.unitPrice || 0) : chancePrice)
+          : betType === 'BL'
+            ? BL_UNIT_PRICE
+            : parseFloat(plAmount);
+        if (!Number.isFinite(unitPrice) || unitPrice <= 0) return;
+        const calculatedAmount = qInt * unitPrice;
         newBets.push({
           number: number.trim(),
           lottery: lottery.name.trim(),
@@ -192,6 +207,7 @@ export function useSalesCartActions({
     findActiveLotteryByName,
     globalSettings.billetesEnabled,
     globalSettings.palesEnabled,
+    globalSettings.special4d?.unitPrice,
     isMultipleMode,
     multiLottery,
     number,

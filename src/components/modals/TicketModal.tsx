@@ -14,6 +14,7 @@ import type { Lottery, GlobalSettings } from '../../types/lotteries';
 import type { UserProfile } from '../../types/users';
 import { cleanText, normalizePlainText } from '../../utils/text';
 import { unifyBets } from '../../utils/bets';
+import { SPECIAL4D_LOTTERY_ID, normalizeSpecial4DSettings } from '../../config/special4d';
 
 const TicketModal = ({ ticket, results, globalSettings, onClose, selectedLotteryName }: { ticket: LotteryTicket, results: LotteryResult[], lotteries: Lottery[], globalSettings: GlobalSettings, users: UserProfile[], onClose: () => void, selectedLotteryName?: string }) => {
   const ticketRef = useRef<HTMLDivElement>(null);
@@ -64,6 +65,35 @@ const TicketModal = ({ ticket, results, globalSettings, onClose, selectedLottery
       
       if (bet.type === 'CH') {
         const quantity = bet.quantity || 1;
+        const isSpecial4DChance = bet.lotteryId === SPECIAL4D_LOTTERY_ID;
+
+        if (isSpecial4DChance) {
+          const specialSettings = normalizeSpecial4DSettings(globalSettings.special4d);
+          const prizes: Array<{ rank: 1 | 2 | 3; value: string; payouts: { first2: number; last2: number } }> = [
+            { rank: 1, value: result.firstPrize, payouts: specialSettings.payouts.p1 },
+            { rank: 2, value: result.secondPrize, payouts: specialSettings.payouts.p2 },
+            { rank: 3, value: result.thirdPrize, payouts: specialSettings.payouts.p3 },
+          ];
+
+          prizes.forEach(({ rank, value, payouts }) => {
+            const winningNumber = String(value || '').replace(/\D/g, '');
+            if (winningNumber.length < 4) return;
+
+            if (last2 === winningNumber.slice(0, 2)) {
+              const p = Number(payouts.first2 || 0) * quantity;
+              totalPrize += p;
+              winningBets.push({ idx, prize: p, rank, lotteryName: bet.lottery, winningNumber, matchType: '2 Primeras' });
+            }
+
+            if (last2 === winningNumber.slice(-2)) {
+              const p = Number(payouts.last2 || 0) * quantity;
+              totalPrize += p;
+              winningBets.push({ idx, prize: p, rank, lotteryName: bet.lottery, winningNumber, matchType: '2 Ultimas' });
+            }
+          });
+          return;
+        }
+
         const pricePerChance = (bet.amount || 0) / quantity;
         
         const priceConfig = globalSettings.chancePrices?.find(cp => Math.abs(cp.price - pricePerChance) < 0.001);
@@ -655,7 +685,7 @@ const TicketModal = ({ ticket, results, globalSettings, onClose, selectedLottery
                               original &&
                               original.number === bet.number &&
                               original.type === bet.type &&
-                              normalizePlainText(original.lottery || '') === lotteryKey
+                              getBetGroupKey(original) === lotteryKey
                             );
                           });
                           const hasWon = betWinnings.length > 0;

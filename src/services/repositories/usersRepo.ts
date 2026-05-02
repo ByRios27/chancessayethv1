@@ -17,6 +17,10 @@ export const updatePreferredChancePrice = async (email: string, preferredChanceP
   return updateDoc(doc(db, 'users', email.toLowerCase()), { preferredChancePrice });
 };
 
+export const updateSpecial4DPreference = async (email: string, special4dEnabled: boolean) => {
+  return updateDoc(doc(db, 'users', email.toLowerCase()), { special4dEnabled });
+};
+
 export const reserveNextSellerId = async (role: UserProfile['role']) => {
   return runTransaction(db, async (transaction) => {
     const settingsRef = doc(db, 'settings', 'global');

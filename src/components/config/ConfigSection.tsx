@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { Lock, Ticket as TicketIcon } from 'lucide-react';
+import { BadgeDollarSign, Lock, Ticket as TicketIcon } from 'lucide-react';
 
 type ConfigSectionProps = any;
 
@@ -11,6 +11,9 @@ export function ConfigSection(props: ConfigSectionProps) {
     globalSettings,
     canUpdatePersonalChancePrice,
     isUpdatingChancePrice,
+    userProfile,
+    isUpdatingSpecial4dPreference,
+    requestSpecial4dPreferenceChange,
     handleUpdatePassword,
     newPassword,
     setNewPassword,
@@ -18,6 +21,10 @@ export function ConfigSection(props: ConfigSectionProps) {
     setConfirmPassword,
     isUpdatingPassword,
   } = props;
+
+  const special4dSettings = globalSettings?.special4d;
+  const isSpecial4dGloballyEnabled = Boolean(special4dSettings?.enabled);
+  const isSpecial4dUserEnabled = userProfile ? userProfile.special4dEnabled !== false : false;
 
   return (
               <motion.div
@@ -76,6 +83,54 @@ export function ConfigSection(props: ConfigSectionProps) {
                           {isUpdatingChancePrice ? 'Actualizando...' : 'Guardar Precio de Chance'}
                         </button>
                       </form>
+                    </div>
+
+                    <div className="glass-card p-6 border-white/5 bg-white/[0.02] space-y-6">
+                      <div className="flex items-center gap-3 border-b border-white/5 pb-4">
+                        <div className="p-2 rounded-lg bg-cyan-500/20 text-cyan-300">
+                          <BadgeDollarSign className="w-5 h-5" />
+                        </div>
+                        <h3 className="font-black uppercase tracking-widest text-sm">Especial Chances 4D</h3>
+                      </div>
+
+                      <div className="space-y-3">
+                        <div className="rounded-xl border border-white/10 bg-white/[0.035] p-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Preferencia personal</p>
+                              <p className="mt-1 text-sm font-black text-white">{special4dSettings?.name || 'Especial Chances 4D'}</p>
+                            </div>
+                            <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[9px] font-black uppercase tracking-widest ${
+                              isSpecial4dGloballyEnabled
+                                ? 'border-green-400/30 bg-green-500/15 text-green-300'
+                                : 'border-amber-400/30 bg-amber-500/15 text-amber-300'
+                            }`}>
+                              {isSpecial4dGloballyEnabled ? 'Global activo' : 'Global inactivo'}
+                            </span>
+                          </div>
+                          <div className="mt-3 grid grid-cols-2 gap-2 text-[10px] font-mono uppercase text-muted-foreground">
+                            <span>Cierre {special4dSettings?.closingTime || '--:--'}</span>
+                            <span className="text-right">USD {(Number(special4dSettings?.unitPrice) || 0).toFixed(2)}</span>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={requestSpecial4dPreferenceChange}
+                          disabled={isUpdatingSpecial4dPreference}
+                          className={`w-full py-3 rounded-xl font-black uppercase tracking-widest text-xs transition-all disabled:opacity-50 ${
+                            isSpecial4dUserEnabled
+                              ? 'bg-cyan-500/15 text-cyan-200 border border-cyan-400/30 hover:bg-cyan-500/25'
+                              : 'bg-white/5 text-muted-foreground border border-white/10 hover:text-white hover:bg-white/10'
+                          }`}
+                        >
+                          {isUpdatingSpecial4dPreference
+                            ? 'Actualizando...'
+                            : isSpecial4dUserEnabled
+                              ? 'Especial 4D activado'
+                              : 'Activar Especial 4D'}
+                        </button>
+                      </div>
                     </div>
 
                     {/* Seguridad */}

@@ -1,11 +1,37 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { AlertTriangle, Plus, ShieldCheck, SlidersHorizontal, Ticket, Trash2, X } from 'lucide-react';
-import type { ChancePriceConfig, GlobalSettings } from '../../types/lotteries';
+import { normalizeSpecial4DSettings } from '../../config/special4d';
+import type { ChancePriceConfig, GlobalSettings, Special4DSettings } from '../../types/lotteries';
 
 type SettingsTab = 'chances' | 'palesBilletes' | 'operacion' | 'mantenimiento';
+type Special4DPrizeKey = keyof Special4DSettings['payouts'];
+type Special4DPayoutField = keyof Special4DSettings['payouts']['p1'];
+type Special4DPayoutForm = Record<Special4DPrizeKey, Record<Special4DPayoutField, string>>;
 
 const CONFIRM_DELETE_PHRASE = 'BORRAR VENTAS';
+
+const numberToInput = (value: number) => (Number.isFinite(value) ? String(value) : '');
+
+const toNumber = (value: string, fallback = 0) => {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const buildSpecial4DPayoutForm = (settings: Special4DSettings): Special4DPayoutForm => ({
+  p1: {
+    first2: numberToInput(settings.payouts.p1.first2),
+    last2: numberToInput(settings.payouts.p1.last2),
+  },
+  p2: {
+    first2: numberToInput(settings.payouts.p2.first2),
+    last2: numberToInput(settings.payouts.p2.last2),
+  },
+  p3: {
+    first2: numberToInput(settings.payouts.p3.first2),
+    last2: numberToInput(settings.payouts.p3.last2),
+  },
+});
 
 const GlobalSettingsModal = ({
   show,
@@ -29,6 +55,7 @@ const GlobalSettingsModal = ({
     first2: 20,
     last2: 20,
   }), []);
+  const normalizedSpecial4d = useMemo(() => normalizeSpecial4DSettings(settings.special4d), [settings.special4d]);
 
   const [activeTab, setActiveTab] = useState<SettingsTab>('chances');
   const [deletePhrase, setDeletePhrase] = useState('');
@@ -43,8 +70,16 @@ const GlobalSettingsModal = ({
     p2: { ...defaultBilletePrizes },
     p3: { ...defaultBilletePrizes },
   });
+  const [special4dEnabled, setSpecial4dEnabled] = useState(normalizedSpecial4d.enabled);
+  const [special4dName, setSpecial4dName] = useState(normalizedSpecial4d.name);
+  const [special4dDrawTime, setSpecial4dDrawTime] = useState(normalizedSpecial4d.drawTime);
+  const [special4dClosingTime, setSpecial4dClosingTime] = useState(normalizedSpecial4d.closingTime);
+  const [special4dUnitPrice, setSpecial4dUnitPrice] = useState(numberToInput(normalizedSpecial4d.unitPrice));
+  const [special4dCommissionRate, setSpecial4dCommissionRate] = useState(numberToInput(normalizedSpecial4d.commissionRate));
+  const [special4dPayouts, setSpecial4dPayouts] = useState<Special4DPayoutForm>(buildSpecial4DPayoutForm(normalizedSpecial4d));
 
   useEffect(() => {
+    const nextSpecial4d = normalizeSpecial4DSettings(settings.special4d);
     setChancePrices(settings.chancePrices || []);
     setPalesEnabled(settings.palesEnabled);
     setBilletesEnabled(settings.billetesEnabled);
@@ -56,6 +91,13 @@ const GlobalSettingsModal = ({
       p2: { ...defaultBilletePrizes },
       p3: { ...defaultBilletePrizes },
     });
+    setSpecial4dEnabled(nextSpecial4d.enabled);
+    setSpecial4dName(nextSpecial4d.name);
+    setSpecial4dDrawTime(nextSpecial4d.drawTime);
+    setSpecial4dClosingTime(nextSpecial4d.closingTime);
+    setSpecial4dUnitPrice(numberToInput(nextSpecial4d.unitPrice));
+    setSpecial4dCommissionRate(numberToInput(nextSpecial4d.commissionRate));
+    setSpecial4dPayouts(buildSpecial4DPayoutForm(nextSpecial4d));
     setActiveTab('chances');
     setDeletePhrase('');
   }, [defaultBilletePrizes, settings, show]);
@@ -83,6 +125,16 @@ const GlobalSettingsModal = ({
     setChancePrices(newPrices);
   };
 
+  const handleSpecial4dPayoutChange = (prizeKey: Special4DPrizeKey, field: Special4DPayoutField, value: string) => {
+    setSpecial4dPayouts((prev) => ({
+      ...prev,
+      [prizeKey]: {
+        ...prev[prizeKey],
+        [field]: value,
+      },
+    }));
+  };
+
   const handleSave = () => {
     onSave({
       ...settings,
@@ -93,6 +145,28 @@ const GlobalSettingsModal = ({
       pl13Multiplier: parseFloat(pl13),
       pl23Multiplier: parseFloat(pl23),
       billeteMultipliers,
+      special4d: normalizeSpecial4DSettings({
+        enabled: special4dEnabled,
+        name: special4dName,
+        drawTime: special4dDrawTime,
+        closingTime: special4dClosingTime,
+        unitPrice: toNumber(special4dUnitPrice, normalizedSpecial4d.unitPrice),
+        commissionRate: toNumber(special4dCommissionRate, normalizedSpecial4d.commissionRate),
+        payouts: {
+          p1: {
+            first2: toNumber(special4dPayouts.p1.first2),
+            last2: toNumber(special4dPayouts.p1.last2),
+          },
+          p2: {
+            first2: toNumber(special4dPayouts.p2.first2),
+            last2: toNumber(special4dPayouts.p2.last2),
+          },
+          p3: {
+            first2: toNumber(special4dPayouts.p3.first2),
+            last2: toNumber(special4dPayouts.p3.last2),
+          },
+        },
+      }),
     });
   };
 
@@ -336,14 +410,118 @@ const GlobalSettingsModal = ({
             )}
 
             {activeTab === 'operacion' && (
-              <div className="rounded-xl border border-white/10 bg-white/[0.035] p-4 space-y-3">
-                <div className="flex items-start gap-3">
-                  <ShieldCheck className="w-5 h-5 text-primary mt-0.5" />
+              <div className="space-y-4">
+                <div className="rounded-xl border border-white/10 bg-white/[0.035] p-4 space-y-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <ShieldCheck className="w-5 h-5 text-primary mt-0.5 shrink-0" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-black uppercase tracking-widest text-white">Especial Chances 4D</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          Configuracion independiente para la modalidad especial.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSpecial4dEnabled(!special4dEnabled)}
+                      className={`shrink-0 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-wider border transition-all active:scale-95 ${
+                        special4dEnabled ? 'bg-green-500/15 border-green-400/30 text-green-300' : 'bg-amber-500/15 border-amber-400/30 text-amber-300'
+                      }`}
+                      aria-label={special4dEnabled ? 'Desactivar Especial Chances 4D' : 'Activar Especial Chances 4D'}
+                    >
+                      {special4dEnabled ? 'Activo' : 'Inactivo'}
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="sm:col-span-2">
+                      <label className="text-[10px] font-mono uppercase text-muted-foreground block mb-1">Nombre visible</label>
+                      <input
+                        value={special4dName}
+                        onChange={(event) => setSpecial4dName(event.target.value)}
+                        className="h-11 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/60"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-mono uppercase text-muted-foreground block mb-1">Hora de sorteo</label>
+                      <input
+                        type="time"
+                        value={special4dDrawTime}
+                        onChange={(event) => setSpecial4dDrawTime(event.target.value)}
+                        className="h-11 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/60"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-mono uppercase text-muted-foreground block mb-1">Hora de cierre</label>
+                      <input
+                        type="time"
+                        value={special4dClosingTime}
+                        onChange={(event) => setSpecial4dClosingTime(event.target.value)}
+                        className="h-11 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/60"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-mono uppercase text-muted-foreground block mb-1">Precio unitario USD</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={special4dUnitPrice}
+                        onChange={(event) => setSpecial4dUnitPrice(event.target.value)}
+                        className="h-11 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/60"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-mono uppercase text-muted-foreground block mb-1">Comision especial %</label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={special4dCommissionRate}
+                        onChange={(event) => setSpecial4dCommissionRate(event.target.value)}
+                        className="h-11 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/60"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-white/10 bg-white/[0.035] p-4 space-y-4">
                   <div>
-                    <p className="text-xs font-black uppercase tracking-widest text-white">Configuracion operativa</p>
-                    <p className="text-[11px] text-muted-foreground">
-                      Parametros generales de funcionamiento. Sorteos, horarios y pausas se administran desde la pantalla principal.
-                    </p>
+                    <p className="text-xs font-black uppercase tracking-widest text-primary">Tabla de pago especial</p>
+                    <p className="text-[11px] text-muted-foreground">Pagos separados para primeras 2 y ultimas 2 cifras.</p>
+                  </div>
+
+                  <div className="space-y-3">
+                    {([
+                      ['p1', '1er premio'],
+                      ['p2', '2do premio'],
+                      ['p3', '3er premio'],
+                    ] as Array<[Special4DPrizeKey, string]>).map(([prizeKey, label]) => (
+                      <div key={prizeKey} className="rounded-xl border border-white/10 bg-black/15 p-3">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-white mb-3">{label}</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-[9px] font-mono uppercase text-muted-foreground block mb-1">Primeros 2 digitos</label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={special4dPayouts[prizeKey].first2}
+                              onChange={(event) => handleSpecial4dPayoutChange(prizeKey, 'first2', event.target.value)}
+                              className="h-10 w-full rounded-lg border border-white/10 bg-black/20 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/60"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[9px] font-mono uppercase text-muted-foreground block mb-1">Ultimos 2 digitos</label>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={special4dPayouts[prizeKey].last2}
+                              onChange={(event) => handleSpecial4dPayoutChange(prizeKey, 'last2', event.target.value)}
+                              className="h-10 w-full rounded-lg border border-white/10 bg-black/20 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/60"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>

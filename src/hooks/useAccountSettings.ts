@@ -3,7 +3,7 @@ import { useCallback, useState, type Dispatch, type FormEvent, type SetStateActi
 import { toast } from 'sonner';
 
 import { auth, updatePassword } from '../firebase';
-import { updatePreferredChancePrice } from '../services/repositories/usersRepo';
+import { updatePreferredChancePrice, updateSpecial4DPreference } from '../services/repositories/usersRepo';
 import type { GlobalSettings } from '../types/lotteries';
 import type { UserProfile } from '../types/users';
 import { toastSuccess } from '../utils/toast';
@@ -14,6 +14,7 @@ interface UseAccountSettingsParams {
   canUpdatePersonalChancePrice: boolean;
   setUserProfile: Dispatch<SetStateAction<UserProfile | null | undefined>>;
   setChancePrice: Dispatch<SetStateAction<number>>;
+  setConfirmModal?: (updater: (prev: any) => any) => void;
 }
 
 export function useAccountSettings({
@@ -22,12 +23,14 @@ export function useAccountSettings({
   canUpdatePersonalChancePrice,
   setUserProfile,
   setChancePrice,
+  setConfirmModal,
 }: UseAccountSettingsParams) {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
   const [personalChancePrice, setPersonalChancePrice] = useState<number>(0.20);
   const [isUpdatingChancePrice, setIsUpdatingChancePrice] = useState(false);
+  const [isUpdatingSpecial4dPreference, setIsUpdatingSpecial4dPreference] = useState(false);
 
   const handleUpdatePassword = useCallback(async (e: FormEvent) => {
     e.preventDefault();
@@ -111,6 +114,59 @@ export function useAccountSettings({
     userProfile,
   ]);
 
+  const updateSpecial4dPreference = useCallback(async (enabled: boolean) => {
+    if (!userProfile?.email) {
+      toast.error('No hay un usuario autenticado');
+      return;
+    }
+
+    setIsUpdatingSpecial4dPreference(true);
+    try {
+      await updateSpecial4DPreference(userProfile.email.toLowerCase(), enabled);
+      setUserProfile({
+        ...userProfile,
+        special4dEnabled: enabled,
+      });
+      toastSuccess(enabled ? 'Especial Chances 4D activado' : 'Especial Chances 4D desactivado');
+    } catch (error: any) {
+      console.error('Error updating Special 4D preference:', error);
+      toast.error(`Error: ${error.message || 'No se pudo actualizar Especial Chances 4D'}`);
+    } finally {
+      setIsUpdatingSpecial4dPreference(false);
+    }
+  }, [setUserProfile, userProfile]);
+
+  const requestSpecial4dPreferenceChange = useCallback(() => {
+    if (!userProfile?.email || isUpdatingSpecial4dPreference) return;
+
+    const currentEnabled = userProfile.special4dEnabled !== false;
+    const nextEnabled = !currentEnabled;
+    const title = nextEnabled ? 'Activar Especial 4D' : 'Desactivar Especial 4D';
+    const message = nextEnabled
+      ? 'Confirma que deseas mostrar Especial Chances 4D en ventas cuando este activo globalmente.'
+      : 'Confirma que deseas ocultar Especial Chances 4D de tu pantalla de ventas.';
+
+    if (!setConfirmModal) {
+      if (window.confirm(message)) void updateSpecial4dPreference(nextEnabled);
+      return;
+    }
+
+    setConfirmModal(() => ({
+      show: true,
+      title,
+      message,
+      onConfirm: () => {
+        void updateSpecial4dPreference(nextEnabled);
+      },
+    }));
+  }, [
+    isUpdatingSpecial4dPreference,
+    setConfirmModal,
+    updateSpecial4dPreference,
+    userProfile?.email,
+    userProfile?.special4dEnabled,
+  ]);
+
   return {
     newPassword,
     setNewPassword,
@@ -122,5 +178,7 @@ export function useAccountSettings({
     setPersonalChancePrice,
     isUpdatingChancePrice,
     handleUpdateChancePrice,
+    isUpdatingSpecial4dPreference,
+    requestSpecial4dPreferenceChange,
   };
 }
