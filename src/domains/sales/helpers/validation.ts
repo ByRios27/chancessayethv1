@@ -10,8 +10,10 @@ interface ValidateSalesAccessParams {
 }
 
 export function validateSalesAccess({ userProfile, operationalSellerId }: ValidateSalesAccessParams) {
-  if (!operationalSellerId?.trim()) return SALES_DOMAIN_SPEC.expectedErrors.missingSellerId;
+  const hasRegisteredProfile = Boolean(userProfile?.email || userProfile?.role);
+  if (!hasRegisteredProfile) return SALES_DOMAIN_SPEC.expectedErrors.missingSellerId;
   if (userProfile?.status && userProfile.status !== 'active') return SALES_DOMAIN_SPEC.expectedErrors.inactiveSeller;
+  if (!operationalSellerId?.trim() && !userProfile?.email) return SALES_DOMAIN_SPEC.expectedErrors.missingSellerId;
   return null;
 }
 

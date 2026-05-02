@@ -23,14 +23,20 @@ export function AdminSection(props: AdminSectionProps) {
   } = props;
 
   const role = userProfile?.role;
+  const isCeoOwner = Boolean(props.isPrimaryCeoUser);
   const safeSortedLotteries = Array.isArray(sortedLotteries) ? sortedLotteries : [];
 
   const canCreateLottery = canExecuteAdminConfigAction(role, 'createLottery');
   const canEditLottery = canExecuteAdminConfigAction(role, 'editLottery');
   const canDeleteLottery = canExecuteAdminConfigAction(role, 'deleteLottery');
   const canToggleLottery = canExecuteAdminConfigAction(role, 'toggleLotteryActive');
-  const canUpdateGlobalSettings = canExecuteAdminConfigAction(role, 'updateGlobalSettings');
+  const canUpdateGlobalSettings = canExecuteAdminConfigAction(role, 'updateGlobalSettings', isCeoOwner);
   const canSeedInitialLotteries = safeSortedLotteries.length === 0 && canCreateLottery;
+  const configSubtitle = canUpdateGlobalSettings
+    ? 'Sorteos, ajustes globales y mantenimiento'
+    : role === 'admin'
+      ? 'Activacion y pausa de sorteos'
+      : 'Gestion de sorteos';
 
   const handleSeedInitialLotteries = async () => {
     const defaults = [
@@ -70,7 +76,7 @@ export function AdminSection(props: AdminSectionProps) {
               Configuracion General
             </h2>
             <p className="text-[9px] sm:text-[10px] font-mono text-muted-foreground uppercase tracking-wider max-w-2xl">
-              Sorteos, ajustes globales y mantenimiento
+              {configSubtitle}
             </p>
           </div>
 

@@ -220,7 +220,6 @@ export function useAppViewDepartment({ access, data, management, operations, sal
     setInjectionDefaultType: ui.setInjectionDefaultType,
     setIsInjectionOnly: ui.setIsInjectionOnly,
     canManageResults: management.canManageResults,
-    isCeoUser: management.isCeoUser,
     businessDayKey: access.businessDayKey,
     setEditingResult: management.setEditingResult,
     deleteResult: management.deleteResult,

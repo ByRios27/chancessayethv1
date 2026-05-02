@@ -25,9 +25,23 @@ export function HistorySection(props: HistorySectionProps) {
     isTicketClosed,
     isTicketHasResults,
     user,
+    userProfile,
+    operationalSellerId,
     editTicket,
     reuseTicket,
   } = props;
+  const currentUserEmail = String(userProfile?.email || user?.email || '').toLowerCase();
+  const currentSellerId = String(operationalSellerId || userProfile?.sellerId || '').toLowerCase();
+  const currentUserUid = String(user?.uid || '').toLowerCase();
+  const ticketBelongsToCurrentUser = (ticket: any) => Boolean(
+    (currentUserEmail && String(ticket?.sellerEmail || '').toLowerCase() === currentUserEmail) ||
+    (currentUserEmail && String(ticket?.userEmail || '').toLowerCase() === currentUserEmail) ||
+    (currentUserEmail && String(ticket?.createdByEmail || '').toLowerCase() === currentUserEmail) ||
+    (currentSellerId && String(ticket?.sellerId || '').toLowerCase() === currentSellerId) ||
+    (currentSellerId && String(ticket?.sellerCode || '').toLowerCase() === currentSellerId) ||
+    (currentUserUid && String(ticket?.userId || '').toLowerCase() === currentUserUid) ||
+    (currentUserUid && String(ticket?.createdBy || '').toLowerCase() === currentUserUid)
+  );
 
   return (
               <motion.div
@@ -148,6 +162,7 @@ export function HistorySection(props: HistorySectionProps) {
                                 <div className="space-y-3 p-4">
                                   {paginatedTickets.map(({ t: ticket }) => {
                                     const { totalPrize, winningBets } = getTicketPrizes(ticket, lot.name, historyTypeFilterCode);
+                                    const isOwnTicket = ticketBelongsToCurrentUser(ticket);
 
                                     return (
                                       <div key={ticket.id} className={`glass-card p-2 border-white/10 bg-[#0A0F1A]/92 hover:bg-[#111827] transition-all relative overflow-hidden ${totalPrize > 0 ? 'ring-1 ring-green-500/30' : ''}`}>
@@ -172,7 +187,7 @@ export function HistorySection(props: HistorySectionProps) {
                                             </div>
                                             
                                             <div className="flex items-center gap-1 py-0.5">
-                                              {ticket.status === 'active' && !isTicketClosed(ticket) && !isTicketHasResults(ticket) && ticket.sellerEmail?.toLowerCase() === user?.email?.toLowerCase() && (
+                                              {ticket.status === 'active' && !isTicketClosed(ticket) && !isTicketHasResults(ticket) && isOwnTicket && (
                                                 <button 
                                                   onClick={() => editTicket(ticket)}
                                                   className="p-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-muted-foreground hover:text-white transition-colors"
@@ -181,7 +196,7 @@ export function HistorySection(props: HistorySectionProps) {
                                                   <Edit2 className="w-3 h-3" />
                                                 </button>
                                               )}
-                                              {ticket.sellerEmail?.toLowerCase() === user?.email?.toLowerCase() && (
+                                              {isOwnTicket && (
                                                 <button 
                                                   onClick={() => reuseTicket(ticket)}
                                                   className="p-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-muted-foreground hover:text-white transition-colors"
@@ -197,7 +212,7 @@ export function HistorySection(props: HistorySectionProps) {
                                               >
                                                 <TicketIcon className="w-3 h-3" />
                                               </button>
-                                              {ticket.status === 'active' && !isTicketClosed(ticket) && !isTicketHasResults(ticket) && ticket.sellerEmail?.toLowerCase() === user?.email?.toLowerCase() && (
+                                              {ticket.status === 'active' && !isTicketClosed(ticket) && !isTicketHasResults(ticket) && isOwnTicket && (
                                                 <button 
                                                   onClick={() => cancelTicket(ticket, lot.name)}
                                                   className="p-1.5 bg-red-500/10 hover:bg-red-500/20 rounded-lg text-red-400 transition-colors"

@@ -2,12 +2,14 @@ import { useCallback } from 'react';
 import { serverTimestamp } from '../firebase';
 import {
   buildArchivePayload,
+  buildUserArchivePayloads,
   buildDocsToDelete,
   mapSnapshotDocs,
   shouldResetOperationalStateAfterArchive,
 } from '../services/calculations/operationalArchive';
 import {
   createOperationalArchiveIfMissing,
+  createUserOperationalArchives,
   deleteOperationalLiveDocsInChunks,
   fetchOperationalArchiveSourceSnapshots,
   readOperationalArchiveByDate,
@@ -56,10 +58,26 @@ export function useOperationalArchive({
       trigger,
     });
 
+    const userArchivePayloads = buildUserArchivePayloads({
+      targetBusinessDay,
+      ticketsToArchive,
+      resultsToArchive,
+      settlementsToArchive,
+      injectionsToArchive,
+      createdAt: serverTimestamp(),
+      archivedBy,
+      trigger,
+    });
+
     const archiveAlreadyExists = await createOperationalArchiveIfMissing({
       archiveRef: archiveRead.archiveRef,
       archiveSnapshot: archiveRead.archiveSnapshot,
       archivePayload,
+    });
+
+    await createUserOperationalArchives({
+      targetBusinessDay,
+      userArchivePayloads,
     });
 
     const docsToDelete = buildDocsToDelete({

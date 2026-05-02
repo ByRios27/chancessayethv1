@@ -33,7 +33,8 @@ export function useAppDataScopes({
   archiveDate,
 }: UseAppDataScopesParams) {
   return useMemo(() => {
-    const hasPrivilegedRole = userRole === 'ceo' || userRole === 'admin';
+    const normalizedRole = String(userRole || '').toLowerCase();
+    const hasPrivilegedRole = normalizedRole === 'ceo' || normalizedRole === 'owner' || normalizedRole === 'admin';
     const canAccessManagedUsersData =
       canUseGlobalScope && (activeTab === 'users' || activeTab === 'liquidaciones' || activeTab === 'archivo' || activeTab === 'dashboard');
     const canAccessAllUsers =

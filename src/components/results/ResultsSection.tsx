@@ -1,14 +1,12 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { Edit2, Trash2 } from 'lucide-react';
-import { toast } from 'sonner';
 import { RESULTS_DOMAIN_SPEC } from '../../domains/results/domainSpec';
 
 type ResultsSectionProps = {
   canManageResults: boolean;
   editingResult: any;
   cancelResultEdition: () => void;
-  isCeoUser: boolean;
   setResultFormLotteryId: (value: string) => void;
   businessDayKey: string;
   resultFormLotteryId: string;
@@ -34,7 +32,6 @@ export function ResultsSection({
   canManageResults,
   editingResult,
   cancelResultEdition,
-  isCeoUser,
   setResultFormLotteryId,
   businessDayKey,
   resultFormLotteryId,
@@ -310,28 +307,18 @@ export function ResultsSection({
                     <div className="flex items-center gap-0.5 shrink-0">
                       <button
                         onClick={() => {
-                          if (!isCeoUser && res.date !== businessDayKey) {
-                            toast.error('Solo el CEO puede editar resultados fuera de la fecha operativa');
-                            return;
-                          }
                           setEditingResult(res);
                         }}
-                        disabled={!isCeoUser && res.date !== businessDayKey}
-                        className="p-1 hover:bg-white/10 rounded-lg text-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                        className="p-1 hover:bg-white/10 rounded-lg text-primary transition-colors"
                         title="Editar resultado"
                       >
                         <Edit2 className="w-3 h-3" />
                       </button>
                       <button
                         onClick={() => {
-                          if (!isCeoUser && res.date !== businessDayKey) {
-                            toast.error('Solo el CEO puede eliminar resultados fuera de la fecha operativa');
-                            return;
-                          }
                           deleteResult(res.id);
                         }}
-                        disabled={!isCeoUser && res.date !== businessDayKey}
-                        className="p-1 hover:bg-red-400/10 rounded-lg text-red-400 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent"
+                        className="p-1 hover:bg-red-400/10 rounded-lg text-red-400 transition-colors"
                         title="Eliminar resultado"
                       >
                         <Trash2 className="w-3 h-3" />

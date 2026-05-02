@@ -4,6 +4,7 @@ import { collection, db, doc, getDoc, getDocs, limit, query, where } from '../..
 import type { LotteryTicket } from '../../../types/bets';
 import type { Injection, Settlement } from '../../../types/finance';
 import type { LotteryResult } from '../../../types/results';
+import type { UserProfile } from '../../../types/users';
 
 interface ArchiveDomainParams {
   activeTab: string;
@@ -37,6 +38,7 @@ interface ArchiveDomainParams {
   setLiquidationSettlementsSnapshot: (items: Settlement[]) => void;
   setLiquidationTicketsSnapshot: (items: LotteryTicket[]) => void;
   setResults: Dispatch<SetStateAction<LotteryResult[]>>;
+  userProfile?: UserProfile | null;
 }
 
 export function useArchiveDomain({
@@ -62,8 +64,17 @@ export function useArchiveDomain({
   setLiquidationSettlementsSnapshot,
   setLiquidationTicketsSnapshot,
   setResults,
+  userProfile,
 }: ArchiveDomainParams) {
   const normalizeEmail = useCallback((value?: string | null) => (value || '').toLowerCase().trim(), []);
+  const normalizedRole = String(userProfile?.role || '').toLowerCase();
+  const isSellerArchiveScope = normalizedRole === 'seller';
+  const ownArchiveEmail = normalizeEmail(userProfile?.email);
+
+  const resolveArchiveUserEmail = useCallback((requestedEmail?: string | null) => {
+    if (isSellerArchiveScope) return ownArchiveEmail;
+    return normalizeEmail(requestedEmail);
+  }, [isSellerArchiveScope, normalizeEmail, ownArchiveEmail]);
 
   const toDateRange = useCallback((date: string) => {
     const { start, end } = getBusinessDayRange(date);
@@ -116,36 +127,76 @@ export function useArchiveDomain({
     return settlementsSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Settlement));
   }, [normalizeEmail]);
 
-  const fetchScopedDataByDate = useCallback(async (targetDate: string, userEmail?: string | null) => {
+  const fetchUserArchiveByDate = useCallback(async (targetDate: string, userEmail: string) => {
     const normalizedEmail = normalizeEmail(userEmail);
-    const archiveSnap = await getDoc(doc(db, 'daily_archives', targetDate));
+    if (!normalizedEmail) return null;
 
-    if (archiveSnap.exists()) {
-      const archive = archiveSnap.data() as {
-        tickets?: LotteryTicket[];
-        injections?: Injection[];
-        settlements?: Settlement[];
-        results?: LotteryResult[];
-      };
-      const liveSettlements = await fetchLiveSettlementsByDate(targetDate, userEmail);
+    const userArchiveSnap = await getDoc(doc(db, 'daily_archives', targetDate, 'users', normalizedEmail));
+    if (!userArchiveSnap.exists()) return null;
 
-      const scopedTickets = (archive.tickets || []).filter(ticket =>
-        !normalizedEmail || normalizeEmail(ticket.sellerEmail) === normalizedEmail
-      );
-      const scopedInjections = (archive.injections || []).filter(injection =>
-        !normalizedEmail || normalizeEmail(injection.userEmail) === normalizedEmail
-      );
-      const scopedSettlements = (archive.settlements || []).filter(settlement =>
-        (!normalizedEmail || normalizeEmail(settlement.userEmail) === normalizedEmail) &&
-        settlement.date === targetDate
-      );
+    const archive = userArchiveSnap.data() as {
+      tickets?: LotteryTicket[];
+      injections?: Injection[];
+      settlements?: Settlement[];
+      results?: LotteryResult[];
+    };
+    const liveSettlements = await fetchLiveSettlementsByDate(targetDate, normalizedEmail);
 
+    return {
+      tickets: archive.tickets || [],
+      injections: archive.injections || [],
+      settlements: dedupeById([...(archive.settlements || []), ...liveSettlements]),
+      results: archive.results || [],
+    };
+  }, [dedupeById, fetchLiveSettlementsByDate, normalizeEmail]);
+
+  const fetchScopedDataByDate = useCallback(async (targetDate: string, userEmail?: string | null) => {
+    const normalizedEmail = resolveArchiveUserEmail(userEmail);
+
+    if (isSellerArchiveScope && !normalizedEmail) {
       return {
-        tickets: scopedTickets,
-        injections: scopedInjections,
-        settlements: dedupeById([...scopedSettlements, ...liveSettlements]),
-        results: archive.results || [],
+        tickets: [],
+        injections: [],
+        settlements: [],
+        results: [],
       };
+    }
+
+    if (isSellerArchiveScope && normalizedEmail) {
+      const userArchive = await fetchUserArchiveByDate(targetDate, normalizedEmail);
+      if (userArchive) return userArchive;
+    }
+
+    if (!isSellerArchiveScope) {
+      const archiveSnap = await getDoc(doc(db, 'daily_archives', targetDate));
+
+      if (archiveSnap.exists()) {
+        const archive = archiveSnap.data() as {
+          tickets?: LotteryTicket[];
+          injections?: Injection[];
+          settlements?: Settlement[];
+          results?: LotteryResult[];
+        };
+        const liveSettlements = await fetchLiveSettlementsByDate(targetDate, userEmail);
+
+        const scopedTickets = (archive.tickets || []).filter(ticket =>
+          !normalizedEmail || normalizeEmail(ticket.sellerEmail) === normalizedEmail
+        );
+        const scopedInjections = (archive.injections || []).filter(injection =>
+          !normalizedEmail || normalizeEmail(injection.userEmail) === normalizedEmail
+        );
+        const scopedSettlements = (archive.settlements || []).filter(settlement =>
+          (!normalizedEmail || normalizeEmail(settlement.userEmail) === normalizedEmail) &&
+          settlement.date === targetDate
+        );
+
+        return {
+          tickets: scopedTickets,
+          injections: scopedInjections,
+          settlements: dedupeById([...scopedSettlements, ...liveSettlements]),
+          results: archive.results || [],
+        };
+      }
     }
 
     const { start, end } = toDateRange(targetDate);
@@ -206,7 +257,16 @@ export function useArchiveDomain({
       settlements: settlementsSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Settlement)),
       results: resultsSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as LotteryResult)),
     };
-  }, [dedupeById, fetchLiveSettlementsByDate, mergeTicketSnapshots, normalizeEmail, toDateRange]);
+  }, [
+    dedupeById,
+    fetchLiveSettlementsByDate,
+    fetchUserArchiveByDate,
+    isSellerArchiveScope,
+    mergeTicketSnapshots,
+    normalizeEmail,
+    resolveArchiveUserEmail,
+    toDateRange,
+  ]);
 
   const fetchUserOperationalDataByDate = useCallback(async (targetDate: string, userEmail: string) => {
     return fetchScopedDataByDate(targetDate, userEmail);
@@ -248,7 +308,7 @@ export function useArchiveDomain({
       tickets: uniqueTickets,
       injections: uniqueInjections,
       settlements: uniqueSettlements,
-      userEmail: normalizeEmail(userEmail) || undefined,
+      userEmail: resolveArchiveUserEmail(userEmail) || undefined,
       targetDate: dates.length === 1 ? dates[0] : undefined,
     });
 
@@ -260,7 +320,7 @@ export function useArchiveDomain({
       settlements: uniqueSettlements,
       results: uniqueResults,
     };
-  }, [buildFinancialSummary, dedupeById, fetchScopedDataByDate, getDatesInRange, normalizeEmail]);
+  }, [buildFinancialSummary, dedupeById, fetchScopedDataByDate, getDatesInRange, resolveArchiveUserEmail]);
 
   const searchArchiveTickets = useCallback(async ({
     dateFrom,
@@ -331,7 +391,8 @@ export function useArchiveDomain({
   }, [dedupeById, fetchScopedDataByDate, getDatesInRange]);
 
   const fetchArchiveData = useCallback(async () => {
-    if (!archiveUserEmail || !archiveDate) return;
+    const effectiveArchiveUserEmail = resolveArchiveUserEmail(archiveUserEmail);
+    if (!effectiveArchiveUserEmail || !archiveDate) return;
     setIsArchiveLoading(true);
     try {
       if (archiveDate === businessDayKey) {
@@ -339,13 +400,13 @@ export function useArchiveDomain({
           tickets,
           injections,
           settlements,
-          userEmail: archiveUserEmail,
+          userEmail: effectiveArchiveUserEmail,
           targetDate: archiveDate,
         });
         setArchiveTickets(currentSummary.tickets);
         setArchiveInjections(currentSummary.injections);
       } else {
-        const archiveData = await fetchUserOperationalDataByDate(archiveDate, archiveUserEmail);
+        const archiveData = await fetchUserOperationalDataByDate(archiveDate, effectiveArchiveUserEmail);
         setArchiveTickets(archiveData.tickets);
         setArchiveInjections(archiveData.injections);
         setResults(prev => {
@@ -373,6 +434,7 @@ export function useArchiveDomain({
     setArchiveTickets,
     setIsArchiveLoading,
     setResults,
+    resolveArchiveUserEmail,
   ]);
 
   useEffect(() => {

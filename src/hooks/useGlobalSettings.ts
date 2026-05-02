@@ -38,10 +38,11 @@ const INITIAL_CEO_GLOBAL_SETTINGS: GlobalSettings = {
 interface UseGlobalSettingsParams {
   enabled: boolean;
   userRole?: string;
+  isCeoOwner?: boolean;
   onError: (error: unknown, operation: 'get' | 'write', target: string) => void;
 }
 
-export function useGlobalSettings({ enabled, userRole, onError }: UseGlobalSettingsParams) {
+export function useGlobalSettings({ enabled, userRole, isCeoOwner = false, onError }: UseGlobalSettingsParams) {
   const [globalSettings, setGlobalSettings] = useState<GlobalSettings>(DEFAULT_GLOBAL_SETTINGS);
 
   useEffect(() => {
@@ -60,7 +61,7 @@ export function useGlobalSettings({ enabled, userRole, onError }: UseGlobalSetti
         return;
       }
 
-      if (userRole !== 'ceo') return;
+      if (!isCeoOwner) return;
 
       setDoc(settingsRef, INITIAL_CEO_GLOBAL_SETTINGS)
         .then(() => setDoc(doc(db, 'public', 'connectivity'), { lastTested: serverTimestamp() }))
@@ -74,7 +75,7 @@ export function useGlobalSettings({ enabled, userRole, onError }: UseGlobalSetti
     });
 
     return unsubscribe;
-  }, [enabled, onError, userRole]);
+  }, [enabled, isCeoOwner, onError, userRole]);
 
   return {
     globalSettings,

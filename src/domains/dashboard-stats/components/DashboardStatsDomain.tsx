@@ -1,14 +1,44 @@
 ﻿import { motion } from 'motion/react';
-import { ChevronDown, ChevronRight, Pin, Zap } from 'lucide-react';
+import { ChevronDown, ChevronRight, Moon, Pin, Sun, Zap } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useDashboardStatsDomain } from '../hooks/useDashboardStatsDomain';
 import { getTicketPrimaryLabel, getTicketSecondaryId } from '../../../utils/tickets';
+
+const genericGreetingTokens = new Set([
+  'ceo',
+  'owner',
+  'admin',
+  'administrador',
+  'seller',
+  'vendedor',
+  'usuario',
+  'user',
+  'primary',
+  'principal',
+]);
+
+const isGenericGreetingName = (value: string) => {
+  const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  if (!normalized) return true;
+  const tokens = normalized.split(/\s+/).filter(Boolean);
+  return tokens.length > 0 && tokens.every((token) => genericGreetingTokens.has(token));
+};
+
+const getEmailGreetingCandidates = (email?: string) => {
+  const prefix = String(email || '').split('@')[0]?.trim();
+  if (!prefix) return [];
+  const withoutTrailingNumbers = prefix.replace(/\d+$/, '').trim();
+  return withoutTrailingNumbers && withoutTrailingNumbers !== prefix
+    ? [withoutTrailingNumbers, prefix]
+    : [prefix];
+};
 
 export function DashboardStatsDomain(props: any) {
   const {
     mode,
     todayStats,
     todayStr,
+    user,
     userProfile,
     injections,
     operationalSellerId,
@@ -35,8 +65,21 @@ export function DashboardStatsDomain(props: any) {
   } = props;
 
   const role = String(userProfile?.role ?? '').toLowerCase();
-  const canViewInjections = role === 'ceo' || role === 'admin';
+  const canViewInjections = role === 'ceo' || role === 'owner' || role === 'admin';
+  const isSellerDashboard = mode === 'dashboard' && role === 'seller';
   const currentUserEmail = String(userProfile?.email || '').toLowerCase();
+  const currentHour = new Date().getHours();
+  const isDaytime = currentHour >= 6 && currentHour < 18;
+  const greetingName = [
+    userProfile?.name,
+    user?.displayName,
+    ...getEmailGreetingCandidates(userProfile?.email),
+    ...getEmailGreetingCandidates(user?.email),
+    userProfile?.sellerId,
+  ]
+    .map((value) => String(value || '').trim())
+    .find((value) => value && !isGenericGreetingName(value)) || 'USUARIO';
+  const greetingText = `${isDaytime ? 'BUENOS DIAS' : 'BUENAS NOCHES'} ${greetingName}`;
   const [selectedNumberDetail, setSelectedNumberDetail] = useState<{ lotteryName: string; number: string } | null>(null);
 
   const {
@@ -93,7 +136,10 @@ export function DashboardStatsDomain(props: any) {
     }
 
     return safeInjections.filter(
-      (inj: any) => inj?.date === todayStr && (!!operationalSellerId && inj?.sellerId === operationalSellerId)
+      (inj: any) =>
+        inj?.date === todayStr &&
+        ((!!operationalSellerId && inj?.sellerId === operationalSellerId) ||
+          (currentUserEmail && String(inj?.userEmail || '').toLowerCase() === currentUserEmail))
     );
   }, [canViewInjections, currentUserEmail, operationalSellerId, safeInjections, todayStr]);
 
@@ -299,6 +345,20 @@ export function DashboardStatsDomain(props: any) {
           )}
         </div>
 
+        <div className="dashboard-panel px-3 py-2 flex items-center gap-2">
+          <div className={`shrink-0 rounded-full border p-1.5 ${
+            isDaytime
+              ? 'border-yellow-300/25 bg-yellow-400/10 text-yellow-300'
+              : 'border-cyan-300/25 bg-cyan-400/10 text-cyan-200'
+          }`}>
+            {isDaytime ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
+          </div>
+          <p className="text-[11px] sm:text-xs font-black uppercase tracking-widest text-white truncate">
+            {greetingText}
+          </p>
+        </div>
+
+        {!isSellerDashboard && (
         <div className={`dashboard-panel p-2.5 space-y-1.5 ${visibleDashboardAlerts.some((alert: any) => Number(alert.priority || 0) >= 80) ? 'border-yellow-400/35' : ''}`}>
           <p className="text-[10px] font-black uppercase tracking-wider text-white">Alertas</p>
           {appAlertsLoading && visibleDashboardAlerts.length === 0 ? (
@@ -315,7 +375,7 @@ export function DashboardStatsDomain(props: any) {
                     ? 'text-blue-300'
                     : 'text-white/90';
               const canUnpin = alert.pinned && alert.alertId && (
-                alert.createdByEmail === currentUserEmail || role === 'ceo'
+                alert.createdByEmail === currentUserEmail || role === 'ceo' || role === 'owner'
               );
               return (
                 <div key={alert.id} className={`text-[11px] leading-snug ${alert.pinned ? 'rounded-md border border-primary/30 bg-primary/10 p-2' : ''}`}>
@@ -340,6 +400,7 @@ export function DashboardStatsDomain(props: any) {
             })
           )}
         </div>
+        )}
 
         {canViewInjections && (
           <div className={`dashboard-panel p-2.5 space-y-1.5 ${injectionNotifications.length > 0 ? 'border-red-400/35' : ''}`}>
@@ -422,6 +483,7 @@ export function DashboardStatsDomain(props: any) {
           )}
         </div>
 
+        {!isSellerDashboard && (
         <div className="dashboard-panel p-2.5">
           <p className="text-[10px] font-black uppercase tracking-wider text-white">
             {canViewInjections ? 'Ganancia/Perdida global' : 'Ganancia/Perdida personal'}
@@ -430,6 +492,7 @@ export function DashboardStatsDomain(props: any) {
             ${todayStats.netProfit.toFixed(2)}
           </p>
         </div>
+        )}
       </motion.div>
     );
   }

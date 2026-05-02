@@ -180,6 +180,8 @@ export function useAppSalesDepartment({
     isTicketHasResults,
   } = useTicketSalesActions({
     user,
+    userProfile,
+    operationalSellerId,
     lotteries: salesSortedLotteries,
     results,
     tickets,

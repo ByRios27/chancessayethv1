@@ -150,7 +150,6 @@ export function AppMainContent(props: any) {
     setInjectionDefaultType,
     setIsInjectionOnly,
     canManageResults,
-    isCeoUser,
     businessDayKey,
     setEditingResult,
     deleteResult,
@@ -275,6 +274,7 @@ export function AppMainContent(props: any) {
                 mode="dashboard"
                 todayStats={todayStats}
                 todayStr={todayStr}
+                user={user}
                 userProfile={userProfile}
                 injections={injections}
                 results={results}
@@ -367,6 +367,8 @@ export function AppMainContent(props: any) {
                 isTicketClosed={isTicketClosed}
                 isTicketHasResults={isTicketHasResults}
                 user={user}
+                userProfile={userProfile}
+                operationalSellerId={operationalSellerId}
                 editTicket={editTicket}
                 reuseTicket={reuseTicket}
               />
@@ -429,7 +431,6 @@ export function AppMainContent(props: any) {
                 canManageResults={canManageResults}
                 editingResult={editingResult}
                 cancelResultEdition={cancelResultEdition}
-                isCeoUser={isCeoUser}
                 setResultFormLotteryId={setResultFormLotteryId}
                 businessDayKey={businessDayKey}
                 resultFormLotteryId={resultFormLotteryId}
@@ -456,6 +457,7 @@ export function AppMainContent(props: any) {
             <Suspense fallback={<div className="text-xs text-muted-foreground">Cargando ajustes...</div>}>
               <GeneralConfigDomainLazy
                 userProfile={userProfile}
+                isPrimaryCeoUser={isPrimaryCeoUser}
                 setShowSettingsModal={setShowSettingsModal}
                 setEditingLottery={setEditingLottery}
                 setShowLotteryModal={setShowLotteryModal}
@@ -484,6 +486,7 @@ export function AppMainContent(props: any) {
                 setSelectedManageUserEmail={setSelectedManageUserEmail}
                 users={users}
                 userProfile={userProfile}
+                isPrimaryCeoUser={isPrimaryCeoUser}
                 userStats={userStats}
                 setEditingUser={setEditingUser}
                 setShowUserModal={setShowUserModal}

@@ -41,8 +41,9 @@ export function useNavigationState({
   userProfile,
   operationalSellerId,
 }: UseNavigationStateParams) {
-  const canAccessDashboard = currentUserRole === 'ceo' || currentUserRole === 'admin' || currentUserRole === 'seller';
-  const canAccessStats = currentUserRole === 'ceo' || currentUserRole === 'admin';
+  const normalizedRole = String(currentUserRole || '').toLowerCase();
+  const canAccessDashboard = normalizedRole === 'ceo' || normalizedRole === 'owner' || normalizedRole === 'admin' || normalizedRole === 'seller';
+  const canAccessStats = normalizedRole === 'ceo' || normalizedRole === 'owner' || normalizedRole === 'admin' || normalizedRole === 'seller';
   const canAccessCierres = canAccessCierresDomain(currentUserRole);
   const canAccessResults = canAccessResultsDomain(currentUserRole);
   const canAccessUsers = canAccessUsersDomain(currentUserRole);
@@ -54,7 +55,7 @@ export function useNavigationState({
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, role: ['ceo', 'admin', 'seller'] },
     { id: 'sales', label: 'Nueva Venta', icon: Plus },
     { id: 'history', label: 'Resumen de ventas', icon: History },
-    { id: 'stats', label: 'Estadisticas', icon: BarChart3, role: ['ceo', 'admin'] },
+    { id: 'stats', label: 'Estadisticas', icon: BarChart3, role: ['ceo', 'admin', 'seller'] },
     { id: 'cierres', label: 'Cierres', icon: Printer, role: [...CIERRES_DOMAIN_SPEC.allowedRoles] as DomainRole[] },
     { id: 'results', label: 'Resultados', icon: CheckCircle2, role: [...RESULTS_DOMAIN_SPEC.allowedRoles] as DomainRole[] },
     { id: 'users', label: 'Usuarios', icon: Users, role: [...USERS_DOMAIN_SPEC.allowedRoles] as DomainRole[] },

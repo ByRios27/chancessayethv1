@@ -53,6 +53,7 @@ export function useAppController() {
     shouldLoadUsersList: access.shouldLoadUsersList,
     user: access.user,
     userProfile: access.userProfile,
+    isPrimaryCeoUser: access.isPrimaryCeoUser,
   });
 
   const sales = useAppSalesDepartment({

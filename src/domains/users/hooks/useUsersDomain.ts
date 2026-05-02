@@ -20,6 +20,7 @@ interface UseUsersDomainParams {
   userRole?: string;
   currentUserEmail?: string;
   currentUserProfile?: UserProfile | null;
+  isPrimaryCeoUser?: boolean;
   editingUser: UserProfile | null;
   setEditingUser: (value: UserProfile | null) => void;
   setShowUserModal: (value: boolean) => void;
@@ -34,6 +35,7 @@ export function useUsersDomain({
   userRole,
   currentUserEmail,
   currentUserProfile,
+  isPrimaryCeoUser = false,
   editingUser,
   setEditingUser,
   setShowUserModal,
@@ -77,32 +79,16 @@ export function useUsersDomain({
     const actorUid = auth.currentUser?.uid || '';
     const actorEmail = (currentUserEmail || auth.currentUser?.email || '').toLowerCase();
     const actorSellerId = currentUserProfile?.sellerId || '';
+    const editingUserEmail = String(editingUser?.email || '').toLowerCase();
+    const requestedUserEmail = String(userProfileData.email || authEmail).toLowerCase();
+    const isSelfCeoEdit = Boolean(
+      editingUser &&
+      actorEmail &&
+      (editingUserEmail === actorEmail || requestedUserEmail === actorEmail)
+    );
 
-    const wasCreatedByCurrentActor = (targetUser: UserProfile | null) => {
-      if (!targetUser) return false;
-      const createdByEmail = String((targetUser as any).createdByEmail || '').toLowerCase();
-      const createdBySellerId = String((targetUser as any).createdBySellerId || '').toLowerCase();
-      const createdByUid = String((targetUser as any).createdBy || '');
-
-      return (
-        (!!createdByEmail && !!actorEmail && createdByEmail === actorEmail) ||
-        (!!createdBySellerId && !!actorSellerId && createdBySellerId === actorSellerId.toLowerCase()) ||
-        (!!createdByUid && !!actorUid && createdByUid === actorUid)
-      );
-    };
-
-    if (normalizedRole === 'admin' && targetRole !== 'seller') {
-      toast.error('Admin solo puede gestionar usuarios vendedor');
-      return;
-    }
-
-    if (normalizedRole === 'admin' && editingUser && editingUser.role !== 'seller') {
-      toast.error('Admin solo puede editar perfiles vendedor');
-      return;
-    }
-
-    if (normalizedRole === 'admin' && editingUser && !wasCreatedByCurrentActor(editingUser)) {
-      toast.error('Admin solo puede editar usuarios creados por el mismo');
+    if ((targetRole === 'ceo' || editingUser?.role === 'ceo') && !isPrimaryCeoUser && !isSelfCeoEdit) {
+      toast.error('Solo el CEO Owner puede crear o modificar perfiles CEO');
       return;
     }
 
@@ -375,6 +361,21 @@ export function useUsersDomain({
   const deleteUser = async (email: string) => {
     if (!canExecuteUsersAction(userRole, 'deleteUser')) {
       toast.error(USERS_DOMAIN_SPEC.expectedErrors.unauthorizedAction);
+      return;
+    }
+
+    const targetUser = users.find((userItem) => String(userItem.email || '').toLowerCase() === email.toLowerCase());
+    const targetIsProtectedOwner = targetUser?.isPrimaryCeo === true ||
+      String(targetUser?.email || '').toLowerCase() === (import.meta.env.VITE_CEO_EMAIL || 'zsayeth09@gmail.com').toLowerCase() ||
+      String(targetUser?.sellerId || '').toLowerCase() === 'ceo01';
+
+    if (targetIsProtectedOwner) {
+      toast.error('El CEO Owner no se puede eliminar');
+      return;
+    }
+
+    if (targetUser?.role === 'ceo' && !isPrimaryCeoUser) {
+      toast.error('Solo el CEO Owner puede eliminar otros CEOs');
       return;
     }
 

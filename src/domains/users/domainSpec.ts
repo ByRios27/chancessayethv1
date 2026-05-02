@@ -19,16 +19,21 @@ export const USERS_DOMAIN_SPEC = {
 } as const;
 
 export const USERS_ACTION_PERMISSIONS = {
-  createUser: ['ceo', 'admin'] as const,
-  editUser: ['ceo', 'admin'] as const,
+  createUser: ['ceo'] as const,
+  editUser: ['ceo'] as const,
   deleteUser: ['ceo'] as const,
   injectCapital: ['ceo', 'admin'] as const,
 } as const;
 
 type UsersAction = keyof typeof USERS_ACTION_PERMISSIONS;
 
+const normalizeUsersRole = (role?: string | null) => {
+  const normalizedRole = String(role || '').toLowerCase();
+  return normalizedRole === 'owner' ? 'ceo' : normalizedRole;
+};
+
 export const canAccessUsersDomain = (role?: string | null) =>
-  !!role && (USERS_DOMAIN_SPEC.allowedRoles as readonly string[]).includes(role);
+  !!role && (USERS_DOMAIN_SPEC.allowedRoles as readonly string[]).includes(normalizeUsersRole(role));
 
 export const canExecuteUsersAction = (role: string | null | undefined, action: UsersAction) =>
-  !!role && (USERS_ACTION_PERMISSIONS[action] as readonly string[]).includes(role);
+  !!role && (USERS_ACTION_PERMISSIONS[action] as readonly string[]).includes(normalizeUsersRole(role));

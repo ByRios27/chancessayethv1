@@ -20,6 +20,7 @@ export const ARCHIVE_DOMAIN_SPEC = {
 
 export const canAccessArchiveDomain = (role?: string | null, canLiquidate?: boolean) => {
   if (!role) return false;
-  if ((ARCHIVE_DOMAIN_SPEC.allowedRoles as readonly string[]).includes(role)) return true;
+  const normalizedRole = role.toLowerCase() === 'owner' ? 'ceo' : role.toLowerCase();
+  if ((ARCHIVE_DOMAIN_SPEC.allowedRoles as readonly string[]).includes(normalizedRole)) return true;
   return !!canLiquidate;
 };

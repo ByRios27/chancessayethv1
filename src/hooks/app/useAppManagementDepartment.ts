@@ -44,6 +44,7 @@ export function useAppManagementDepartment({
     userRole: userProfile?.role,
     currentUserEmail: userProfile?.email,
     currentUserProfile: userProfile ?? null,
+    isPrimaryCeoUser,
     editingUser,
     setEditingUser,
     setShowUserModal,
@@ -62,7 +63,6 @@ export function useAppManagementDepartment({
     userProfile,
     users,
     businessDayKey,
-    isPrimaryCeoUser,
     setInjections,
     setConfirmModal,
     onError: handleInjectionActionError,
@@ -92,7 +92,6 @@ export function useAppManagementDepartment({
 
   const {
     canManageResults,
-    isCeoUser,
     editingResult,
     setEditingResult,
     resultFormLotteryId,
@@ -167,7 +166,6 @@ export function useAppManagementDepartment({
     handleCreateResultFromForm,
     handleUpdateChancePrice,
     handleUpdatePassword,
-    isCeoUser,
     isSavingUser,
     isUpdatingChancePrice,
     isUpdatingSpecial4dPreference,

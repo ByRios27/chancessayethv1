@@ -37,6 +37,7 @@ export function useAppDataDepartment({
   shouldLoadUsersList,
   user,
   userProfile,
+  isPrimaryCeoUser,
 }: any) {
   const [selectedLottery, setSelectedLottery] = useState('');
   const [globalChancePriceFilter, setGlobalChancePriceFilter] = useState<string>('');
@@ -107,7 +108,8 @@ export function useAppDataDepartment({
   });
 
   const auditLogsDateScope = activeTab === 'archivo' ? archiveDate : businessDayKey;
-  const canReadAuditLogs = userProfile?.role === 'ceo';
+  const normalizedRole = String(userProfile?.role || '').toLowerCase();
+  const canReadAuditLogs = normalizedRole === 'ceo' || normalizedRole === 'owner' || normalizedRole === 'admin';
   const auditLogsEnabled = !!user?.uid && !!userProfile?.role && canReadAuditLogs && (activeTab === 'dashboard' || activeTab === 'archivo');
   const {
     logs: dailyAuditLogs,
@@ -219,6 +221,7 @@ export function useAppDataDepartment({
   const { globalSettings, setGlobalSettings } = useGlobalSettings({
     enabled: !!user?.uid && !!userProfile?.role && shouldListenGlobalSettings,
     userRole: userProfile?.role,
+    isCeoOwner: isPrimaryCeoUser,
     onError: handleGlobalSettingsError,
   });
 

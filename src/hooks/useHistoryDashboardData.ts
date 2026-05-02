@@ -91,16 +91,35 @@ export function useHistoryDashboardData({
   isLotteryOpenForSales,
 }: UseHistoryDashboardDataParams) {
   const todayStr = businessDayKey;
+  const normalizedCurrentEmail = String(currentUserEmail || '').toLowerCase();
+  const normalizedOperationalSellerId = String(operationalSellerId || '').toLowerCase();
+  const ticketMatchesCurrentScope = (ticket: LotteryTicket) => {
+    if (canAccessAllUsers) return true;
+    return Boolean(
+      (normalizedOperationalSellerId && String(ticket.sellerId || '').toLowerCase() === normalizedOperationalSellerId) ||
+      (normalizedOperationalSellerId && String(ticket.sellerCode || '').toLowerCase() === normalizedOperationalSellerId) ||
+      (normalizedCurrentEmail && String(ticket.sellerEmail || '').toLowerCase() === normalizedCurrentEmail) ||
+      (normalizedCurrentEmail && String((ticket as any).userEmail || '').toLowerCase() === normalizedCurrentEmail) ||
+      (normalizedCurrentEmail && String((ticket as any).createdByEmail || '').toLowerCase() === normalizedCurrentEmail)
+    );
+  };
+  const injectionMatchesCurrentScope = (injection: Injection) => {
+    if (canAccessAllUsers) return true;
+    return Boolean(
+      (normalizedOperationalSellerId && String(injection.sellerId || '').toLowerCase() === normalizedOperationalSellerId) ||
+      (normalizedCurrentEmail && String((injection as any).userEmail || '').toLowerCase() === normalizedCurrentEmail)
+    );
+  };
 
   const todayStats = useMemo(() => {
     const todayTickets = tickets.filter(t => {
       const tDate = getTicketDateKey(t);
       const matchesDate = tDate === todayStr;
-      const matchesUser = canAccessAllUsers || (!!operationalSellerId && t.sellerId === operationalSellerId);
+      const matchesUser = ticketMatchesCurrentScope(t);
       return matchesDate && matchesUser && t.status !== 'cancelled';
     });
     const todayInjections = injections.filter(i =>
-      i.date === todayStr && (canAccessAllUsers || (!!operationalSellerId && i.sellerId === operationalSellerId))
+      i.date === todayStr && injectionMatchesCurrentScope(i)
     );
     const summary = buildFinancialSummary({
       tickets: todayTickets,
@@ -119,7 +138,7 @@ export function useHistoryDashboardData({
       netProfit: summary.netProfit,
       pendingDebt,
     };
-  }, [buildFinancialSummary, canAccessAllUsers, getTicketDateKey, injections, operationalSellerId, tickets, todayStr, userProfile?.currentDebt]);
+  }, [buildFinancialSummary, getTicketDateKey, injections, ticketMatchesCurrentScope, injectionMatchesCurrentScope, tickets, todayStr, userProfile?.currentDebt]);
 
   const filteredTickets = useMemo(() => {
     const source = activeTab === 'history'
@@ -132,7 +151,7 @@ export function useHistoryDashboardData({
         : (t.timestamp?.seconds ? new Date(t.timestamp.seconds * 1000) : new Date());
       const ticketDate = format(tDate, 'yyyy-MM-dd');
       const matchesDate = activeTab === 'history' ? ticketDate === historyDate : true;
-      const matchesUser = canAccessAllUsers || (!!operationalSellerId && t.sellerId === operationalSellerId);
+      const matchesUser = ticketMatchesCurrentScope(t);
 
       return matchesDate && matchesUser;
     }).sort((a, b) => {
@@ -140,7 +159,7 @@ export function useHistoryDashboardData({
       const timeB = b.timestamp?.seconds || 0;
       return timeB - timeA;
     });
-  }, [activeTab, canAccessAllUsers, historyDate, historyTickets, operationalSellerId, tickets, todayStr]);
+  }, [activeTab, historyDate, historyTickets, ticketMatchesCurrentScope, tickets, todayStr]);
 
   const historyTypeFilterCode = useMemo(() => {
     return historyFilter === 'CHANCE' ? 'CH' :

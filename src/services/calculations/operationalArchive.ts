@@ -36,6 +36,79 @@ export const buildArchivePayload = ({
   archiveTrigger: trigger,
 });
 
+const normalizeEmail = (value?: unknown) => String(value || '').toLowerCase().trim();
+
+export const buildUserArchivePayloads = ({
+  targetBusinessDay,
+  ticketsToArchive,
+  resultsToArchive,
+  settlementsToArchive,
+  injectionsToArchive,
+  archivedBy,
+  trigger,
+  createdAt,
+}: {
+  targetBusinessDay: string;
+  ticketsToArchive: Array<Record<string, any>>;
+  resultsToArchive: Array<Record<string, any>>;
+  settlementsToArchive: Array<Record<string, any>>;
+  injectionsToArchive: Array<Record<string, any>>;
+  archivedBy: string;
+  trigger: 'manual' | 'automatic';
+  createdAt: any;
+}) => {
+  const archivesByEmail = new Map<string, {
+    date: string;
+    userEmail: string;
+    tickets: Array<Record<string, any>>;
+    results: Array<Record<string, any>>;
+    settlements: Array<Record<string, any>>;
+    injections: Array<Record<string, any>>;
+    createdAt: any;
+    archivedBy: string;
+    archiveTrigger: 'manual' | 'automatic';
+  }>();
+
+  const getArchive = (email: string) => {
+    const normalizedEmail = normalizeEmail(email);
+    if (!normalizedEmail) return null;
+
+    const existing = archivesByEmail.get(normalizedEmail);
+    if (existing) return existing;
+
+    const archive = {
+      date: targetBusinessDay,
+      userEmail: normalizedEmail,
+      tickets: [],
+      results: resultsToArchive,
+      settlements: [],
+      injections: [],
+      createdAt,
+      archivedBy,
+      archiveTrigger: trigger,
+    };
+    archivesByEmail.set(normalizedEmail, archive);
+    return archive;
+  };
+
+  ticketsToArchive.forEach((ticket) => {
+    const archive = getArchive(ticket.sellerEmail || ticket.userEmail);
+    if (archive) archive.tickets.push(ticket);
+  });
+
+  injectionsToArchive.forEach((injection) => {
+    const archive = getArchive(injection.userEmail || injection.sellerEmail);
+    if (archive) archive.injections.push(injection);
+  });
+
+  settlementsToArchive.forEach((settlement) => {
+    const archive = getArchive(settlement.userEmail || settlement.sellerEmail);
+    if (archive) archive.settlements.push(settlement);
+  });
+
+  return Array.from(archivesByEmail.values());
+};
+
 export const buildDocsToDelete = ({
   ticketsDocs,
   resultsDocs,

@@ -4,12 +4,14 @@ import { toast } from 'sonner';
 import { X } from 'lucide-react';
 import type { UserProfile } from '../../types/users';
 
-const UserModal = ({ show, userProfile, onSave, onClose, currentUserRole, isSaving = false }: {
+const UserModal = ({ show, userProfile, onSave, onClose, currentUserRole, currentUserEmail, currentUserIsCeoOwner = false, isSaving = false }: {
   show: boolean;
   userProfile: UserProfile | null;
   onSave: (user: UserProfile, password?: string) => void | Promise<void>;
   onClose: () => void;
   currentUserRole: string | undefined;
+  currentUserEmail?: string;
+  currentUserIsCeoOwner?: boolean;
   isSaving?: boolean;
 }) => {
   const [email, setEmail] = useState('');
@@ -44,6 +46,18 @@ const UserModal = ({ show, userProfile, onSave, onClose, currentUserRole, isSavi
   }, [userProfile, show]);
 
   if (!show) return null;
+
+  const normalizedCurrentUserRole = String(currentUserRole || '').toLowerCase();
+  const isSelfProfile = Boolean(
+    userProfile?.email &&
+    currentUserEmail &&
+    String(userProfile.email).toLowerCase() === String(currentUserEmail).toLowerCase()
+  );
+  const canEditProfileName = isSelfProfile;
+  const isCeoLikeRole = normalizedCurrentUserRole === 'ceo' || normalizedCurrentUserRole === 'owner';
+  const canEditRole = !isSelfProfile && (isCeoLikeRole || normalizedCurrentUserRole === 'admin');
+  const canEditCommission = isCeoLikeRole;
+  const canEditStatus = !isSelfProfile;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 bg-slate-950/75 backdrop-blur-sm">
@@ -107,8 +121,9 @@ const UserModal = ({ show, userProfile, onSave, onClose, currentUserRole, isSavi
                 <input
                   type="text"
                   value={name}
-                  readOnly
-                  className="h-11 w-full bg-white/[0.04] border border-white/10 px-3 rounded-xl font-mono text-sm opacity-60 cursor-not-allowed"
+                  onChange={(e) => setName(e.target.value)}
+                  readOnly={!canEditProfileName}
+                  className={`h-11 w-full bg-white/[0.04] border border-white/10 px-3 rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary/70 transition-all ${canEditProfileName ? '' : 'opacity-60 cursor-not-allowed'}`}
                 />
               </div>
             </>
@@ -119,12 +134,12 @@ const UserModal = ({ show, userProfile, onSave, onClose, currentUserRole, isSavi
             <select
               value={role}
               onChange={(e) => setRole(e.target.value as 'admin' | 'seller' | 'ceo')}
-              disabled={currentUserRole !== 'ceo' && currentUserRole !== 'admin'}
+              disabled={!canEditRole}
               className="h-11 w-full bg-white/[0.04] border border-white/10 px-3 rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary/70 transition-all disabled:opacity-50"
             >
               <option key="seller" value="seller" className="bg-slate-900">Vendedor</option>
-              {currentUserRole === 'ceo' && <option key="admin" value="admin" className="bg-slate-900">Administrador</option>}
-              {currentUserRole === 'ceo' && <option key="ceo" value="ceo" className="bg-slate-900">CEO</option>}
+              {isCeoLikeRole && <option key="admin" value="admin" className="bg-slate-900">Administrador</option>}
+              {currentUserIsCeoOwner && <option key="ceo" value="ceo" className="bg-slate-900">CEO</option>}
             </select>
           </div>
 
@@ -136,7 +151,7 @@ const UserModal = ({ show, userProfile, onSave, onClose, currentUserRole, isSavi
               onChange={(e) => setCommissionRateInput(e.target.value)}
               min="0"
               max="100"
-              disabled={currentUserRole !== 'ceo'}
+              disabled={!canEditCommission}
               className="h-11 w-full bg-white/[0.04] border border-white/10 px-3 rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary/70 transition-all disabled:opacity-50"
             />
           </div>
@@ -146,14 +161,15 @@ const UserModal = ({ show, userProfile, onSave, onClose, currentUserRole, isSavi
             <select
               value={status}
               onChange={(e) => setStatus(e.target.value as 'active' | 'inactive')}
-              className="h-11 w-full bg-white/[0.04] border border-white/10 px-3 rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary/70 transition-all"
+              disabled={!canEditStatus}
+              className="h-11 w-full bg-white/[0.04] border border-white/10 px-3 rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-primary/70 transition-all disabled:opacity-50"
             >
               <option key="active" value="active" className="bg-slate-900">Activo</option>
               <option key="inactive" value="inactive" className="bg-slate-900">Inactivo</option>
             </select>
           </div>
 
-          {currentUserRole === 'ceo' && role === 'admin' && (
+          {isCeoLikeRole && role === 'admin' && (
             <div className="flex items-center gap-3 p-3 bg-white/[0.04] rounded-xl border border-white/10 mt-2">
               <input
                 type="checkbox"

@@ -132,6 +132,11 @@ export function CierresDomain(props: CierresDomainProps) {
               </button>
             </div>
           )}
+          {!canUseGlobalScope && (
+            <div className="w-full h-8 rounded-lg border border-white/10 bg-black/25 text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center justify-center">
+              Propio
+            </div>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2">
             {canAccessAllUsers && (
               <select

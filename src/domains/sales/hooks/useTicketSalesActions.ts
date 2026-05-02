@@ -7,6 +7,7 @@ import { deleteTicket as deleteTicketById, updateTicket } from '../../../service
 import type { Bet, LotteryTicket } from '../../../types/bets';
 import type { Lottery } from '../../../types/lotteries';
 import type { LotteryResult } from '../../../types/results';
+import type { UserProfile } from '../../../types/users';
 import { unifyBets } from '../../../utils/bets';
 import { cleanText, normalizePlainText } from '../../../utils/text';
 import { isTicketClosedForSales, ticketHasResults } from '../../../utils/tickets';
@@ -14,6 +15,8 @@ import { toastSuccess } from '../../../utils/toast';
 
 interface UseTicketSalesActionsParams {
   user: any;
+  userProfile?: UserProfile | null;
+  operationalSellerId?: string;
   lotteries: Lottery[];
   results: LotteryResult[];
   tickets: LotteryTicket[];
@@ -45,6 +48,8 @@ interface UseTicketSalesActionsParams {
 
 export function useTicketSalesActions({
   user,
+  userProfile,
+  operationalSellerId,
   lotteries,
   results,
   tickets,
@@ -66,6 +71,21 @@ export function useTicketSalesActions({
 }: UseTicketSalesActionsParams) {
   const isTicketClosed = useCallback((ticket: LotteryTicket) => isTicketClosedForSales(ticket, lotteries), [lotteries]);
   const isTicketHasResults = useCallback((ticket: LotteryTicket) => ticketHasResults(ticket, results), [results]);
+  const ticketBelongsToCurrentUser = useCallback((ticket: LotteryTicket) => {
+    const currentEmail = String(userProfile?.email || user?.email || '').toLowerCase();
+    const currentSellerId = String(operationalSellerId || userProfile?.sellerId || '').toLowerCase();
+    const currentUid = String(user?.uid || '').toLowerCase();
+
+    return Boolean(
+      (currentEmail && String(ticket.sellerEmail || '').toLowerCase() === currentEmail) ||
+      (currentEmail && String((ticket as any).userEmail || '').toLowerCase() === currentEmail) ||
+      (currentEmail && String((ticket as any).createdByEmail || '').toLowerCase() === currentEmail) ||
+      (currentSellerId && String(ticket.sellerId || '').toLowerCase() === currentSellerId) ||
+      (currentSellerId && String(ticket.sellerCode || '').toLowerCase() === currentSellerId) ||
+      (currentUid && String((ticket as any).userId || '').toLowerCase() === currentUid) ||
+      (currentUid && String((ticket as any).createdBy || '').toLowerCase() === currentUid)
+    );
+  }, [operationalSellerId, user?.email, user?.uid, userProfile?.email, userProfile?.sellerId]);
 
   const cancelTicket = useCallback(async (ticketOrId: LotteryTicket | string, selectedLotteryName?: string) => {
     const ticket = typeof ticketOrId === 'string'
@@ -74,7 +94,7 @@ export function useTicketSalesActions({
     if (!ticket) return;
     const id = ticket.id;
 
-    if (ticket.sellerEmail?.toLowerCase() !== user?.email?.toLowerCase()) {
+    if (!ticketBelongsToCurrentUser(ticket)) {
       toast.error('No tienes permiso para borrar esta venta. Solo el vendedor original puede hacerlo.');
       return;
     }
@@ -191,17 +211,17 @@ export function useTicketSalesActions({
     setLiquidationTicketsSnapshot,
     setMultiDeleteModal,
     setTickets,
+    ticketBelongsToCurrentUser,
     tickets,
-    user?.email,
   ]);
 
   const reuseTicket = useCallback((ticket: LotteryTicket) => {
-    if (ticket.sellerEmail?.toLowerCase() !== user?.email?.toLowerCase()) {
+    if (!ticketBelongsToCurrentUser(ticket)) {
       toast.error('No tienes permiso para reutilizar esta venta. Solo el seller original puede hacerlo.');
       return;
     }
     setReuseModal({ show: true, ticket });
-  }, [setReuseModal, user?.email]);
+  }, [setReuseModal, ticketBelongsToCurrentUser]);
 
   const handleReuseSelect = useCallback((lotteryId: string) => {
     if (!reuseModal.ticket) return;
@@ -227,7 +247,7 @@ export function useTicketSalesActions({
   }, [lotteries, reuseModal.ticket, setActiveTab, setCart]);
 
   const editTicket = useCallback(async (ticket: LotteryTicket) => {
-    if (ticket.sellerEmail?.toLowerCase() !== user?.email?.toLowerCase()) {
+    if (!ticketBelongsToCurrentUser(ticket)) {
       toast.error('No tienes permiso para editar esta venta. Solo el vendedor original puede hacerlo.');
       return;
     }
@@ -280,7 +300,7 @@ export function useTicketSalesActions({
     setIsMultipleMode,
     setMultiLottery,
     setSelectedLottery,
-    user?.email,
+    ticketBelongsToCurrentUser,
   ]);
 
   const cancelEdit = useCallback(() => {

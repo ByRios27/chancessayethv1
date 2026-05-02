@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import { toast } from 'sonner';
 import { jsPDF } from 'jspdf';
@@ -66,24 +66,44 @@ export function ArchiveSection(props: ArchiveSectionProps) {
   };
 
   const role = safeLower(userProfile?.role);
-  const isCeo = role === 'ceo';
+  const isCeo = role === 'ceo' || role === 'owner';
   const isAdmin = role === 'admin';
-  const canViewGlobal = isCeo || (isAdmin && !!userProfile?.canLiquidate);
-  const canViewLogs = isCeo;
+  const isSeller = role === 'seller';
+  const canViewGlobal = isCeo || isAdmin;
+  const canViewLogs = canViewGlobal && !isSeller;
   const ownEmail = safeLower(userProfile?.email);
+  const availableTabs = useMemo<ArchiveTab[]>(
+    () => (canViewLogs ? ['ventas', 'tickets', 'logs', 'liquidaciones'] : ['ventas', 'tickets', 'liquidaciones']),
+    [canViewLogs]
+  );
 
   const safeUsers = Array.isArray(users) ? users : [];
   const safeAuditLogs = Array.isArray(auditLogs) ? auditLogs : [];
 
   const userOptions = useMemo(() => {
-    if (!canViewGlobal) return safeUsers.filter((u) => safeLower(u?.email) === ownEmail);
+    if (!canViewGlobal) {
+      return ownEmail
+        ? [{
+            email: ownEmail,
+            name: userProfile?.name || userProfile?.sellerId || ownEmail,
+            sellerId: userProfile?.sellerId || '',
+            status: userProfile?.status || 'active',
+          }]
+        : [];
+    }
     return safeUsers.filter((u) => u?.status === 'active' && u?.email);
-  }, [canViewGlobal, ownEmail, safeUsers]);
+  }, [canViewGlobal, ownEmail, safeUsers, userProfile?.name, userProfile?.sellerId, userProfile?.status]);
 
   const effectiveUserEmail = useMemo(() => {
     if (canViewGlobal) return safeLower(archiveUserEmail) || undefined;
     return ownEmail || undefined;
   }, [archiveUserEmail, canViewGlobal, ownEmail]);
+
+  useEffect(() => {
+    if (!availableTabs.includes(activeTab)) {
+      setActiveTab('ventas');
+    }
+  }, [activeTab, availableTabs]);
 
   const dateFrom = rangeMode === 'dia' ? archiveDate : rangeStart;
   const dateTo = rangeMode === 'dia' ? archiveDate : rangeEnd;
@@ -345,10 +365,11 @@ export function ArchiveSection(props: ArchiveSectionProps) {
   }, [logTypeFilter, safeAuditLogs]);
 
   const pendingLiquidations = useMemo(() => {
-    const candidates = safeUsers.filter((u) => Number(u?.currentDebt || 0) > 0);
+    const sourceUsers = canViewGlobal ? safeUsers : userOptions;
+    const candidates = sourceUsers.filter((u) => Number(u?.currentDebt || 0) > 0);
     if (canViewGlobal) return candidates;
     return candidates.filter((u) => safeLower(u?.email) === ownEmail);
-  }, [canViewGlobal, ownEmail, safeUsers]);
+  }, [canViewGlobal, ownEmail, safeUsers, userOptions]);
 
   const salesByLottery = useMemo(() => {
     if (!reportData?.tickets) return [];
@@ -522,8 +543,8 @@ export function ArchiveSection(props: ArchiveSectionProps) {
       className="space-y-3"
     >
       <div className="surface-panel p-3 space-y-3">
-        <div className="grid grid-cols-4 gap-2 w-full">
-          {(['ventas', 'tickets', 'logs', 'liquidaciones'] as ArchiveTab[]).map((tab) => (
+        <div className="grid gap-2 w-full" style={{ gridTemplateColumns: `repeat(${availableTabs.length}, minmax(0, 1fr))` }}>
+          {availableTabs.map((tab) => (
             <button
               key={tab}
               type="button"

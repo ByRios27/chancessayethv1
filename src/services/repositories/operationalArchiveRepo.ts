@@ -87,6 +87,29 @@ export const createOperationalArchiveIfMissing = async ({
   return archiveSnapshot.exists();
 };
 
+export const createUserOperationalArchives = async ({
+  targetBusinessDay,
+  userArchivePayloads,
+  chunkSize = 450,
+}: {
+  targetBusinessDay: string;
+  userArchivePayloads: Array<Record<string, any> & { userEmail?: string }>;
+  chunkSize?: number;
+}) => {
+  const validPayloads = userArchivePayloads.filter((payload) => String(payload.userEmail || '').trim() !== '');
+
+  for (let i = 0; i < validPayloads.length; i += chunkSize) {
+    const batch = writeBatch(db);
+    const chunk = validPayloads.slice(i, i + chunkSize);
+    chunk.forEach((payload) => {
+      const userEmail = String(payload.userEmail || '').toLowerCase().trim();
+      const userArchiveRef = doc(db, 'daily_archives', targetBusinessDay, 'users', userEmail);
+      batch.set(userArchiveRef, payload, { merge: true });
+    });
+    await batch.commit();
+  }
+};
+
 export const deleteOperationalLiveDocsInChunks = async ({
   docsToDelete,
   chunkSize = 450,

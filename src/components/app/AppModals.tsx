@@ -147,11 +147,15 @@ export function AppModals({
 }: AppModalsProps) {
   return (
     <Suspense fallback={null}>
-      {showSettingsModal && (
+      {showSettingsModal && isPrimaryCeoUser && (
         <GlobalSettingsModal
           show={showSettingsModal}
           settings={globalSettings}
           onSave={async (data) => {
+            if (!isPrimaryCeoUser) {
+              handleFirestoreError(new Error('Solo el CEO Owner puede guardar ajustes globales'), OperationType.WRITE, 'settings/global');
+              return;
+            }
             try {
               await setDoc(doc(db, 'settings', 'global'), data);
               setGlobalSettings(data);
@@ -251,6 +255,8 @@ export function AppModals({
           onSave={saveUser}
           onClose={() => { setShowUserModal(false); setEditingUser(null); }}
           currentUserRole={currentUserRole}
+          currentUserEmail={userProfile?.email}
+          currentUserIsCeoOwner={isPrimaryCeoUser}
           isSaving={isSavingUser}
         />
       )}

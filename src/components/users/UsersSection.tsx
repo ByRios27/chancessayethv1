@@ -3,12 +3,14 @@ import { motion } from 'motion/react';
 import { Edit2, Pin, Plus, Send, Settings, Trash2, User as UserIcon, Zap } from 'lucide-react';
 import { USERS_DOMAIN_SPEC, canExecuteUsersAction } from '../../domains/users/domainSpec';
 import type { Injection } from '../../types/finance';
+import { isProtectedCeoOwnerProfile } from '../../utils/roles';
 
 type UsersSectionProps = {
   selectedManageUserEmail: string;
   setSelectedManageUserEmail: (value: string) => void;
   users: any[];
   userProfile: any;
+  isPrimaryCeoUser?: boolean;
   userStats: Record<string, any>;
   setEditingUser: (value: any) => void;
   setShowUserModal: (value: boolean) => void;
@@ -30,6 +32,7 @@ export function UsersSection({
   setSelectedManageUserEmail,
   users,
   userProfile,
+  isPrimaryCeoUser = false,
   userStats,
   setEditingUser,
   setShowUserModal,
@@ -45,13 +48,14 @@ export function UsersSection({
   deleteInjection,
   sendUserMessage,
 }: UsersSectionProps) {
-  const role = userProfile?.role;
+  const role = String(userProfile?.role || '').toLowerCase();
+  const isCeoLikeRole = role === 'ceo' || role === 'owner';
   const canCreateUser = canExecuteUsersAction(role, 'createUser');
   const canEditUser = canExecuteUsersAction(role, 'editUser');
   const canDeleteUser = canExecuteUsersAction(role, 'deleteUser');
   const canInjectCapital = canExecuteUsersAction(role, 'injectCapital');
-  const canManageInjectionEntries = role === 'ceo' || role === 'admin';
-  const canSendMessages = role === 'ceo' || role === 'admin';
+  const canManageInjectionEntries = isCeoLikeRole || role === 'admin';
+  const canSendMessages = isCeoLikeRole;
   const currentUserEmail = String(userProfile?.email || '').toLowerCase();
   const currentSellerId = String(userProfile?.sellerId || '').toLowerCase();
 
@@ -64,38 +68,49 @@ export function UsersSection({
 
   const validUsers = useMemo(() => {
     const list = (users || []).filter((u) => u && u.email && u.name && u.name.trim() !== '');
-    if (userProfile?.role === 'ceo' && userProfile?.email && !list.some((u) => u.email === userProfile.email)) {
+    if (isCeoLikeRole && userProfile?.email && !list.some((u) => u.email === userProfile.email)) {
       return [userProfile, ...list];
     }
     return list;
-  }, [users, userProfile]);
+  }, [isCeoLikeRole, users, userProfile]);
 
   const selectedUser = useMemo(
     () => validUsers.find((u) => u.email === selectedManageUserEmail) || null,
     [selectedManageUserEmail, validUsers]
   );
 
-  const selectedUserWasCreatedByCurrentAdmin = useMemo(() => {
-    if (!selectedUser || role !== 'admin') return false;
-    const createdByEmail = String(selectedUser.createdByEmail || '').toLowerCase();
-    const createdBySellerId = String(selectedUser.createdBySellerId || '').toLowerCase();
+  const selectedUserIsCurrentUser = useMemo(() => {
+    if (!selectedUser) return false;
+    const selectedEmail = String(selectedUser.email || '').toLowerCase();
+    const selectedSellerId = String(selectedUser.sellerId || '').toLowerCase();
     return (
-      (!!createdByEmail && createdByEmail === currentUserEmail) ||
-      (!!createdBySellerId && createdBySellerId === currentSellerId)
+      (!!currentUserEmail && selectedEmail === currentUserEmail) ||
+      (!!currentSellerId && selectedSellerId === currentSellerId)
     );
-  }, [currentSellerId, currentUserEmail, role, selectedUser]);
+  }, [currentSellerId, currentUserEmail, selectedUser]);
 
   const canEditSelectedUser = Boolean(
     selectedUser &&
     canEditUser &&
     (
-      role === 'ceo' ||
+      selectedUserIsCurrentUser ||
       (
-        role === 'admin' &&
-        selectedUser.role === 'seller' &&
-        selectedUserWasCreatedByCurrentAdmin &&
-        selectedUser.isPrimaryCeo !== true
+        isCeoLikeRole &&
+        (
+          selectedUser.role !== 'ceo' ||
+          (isPrimaryCeoUser && !isProtectedCeoOwnerProfile(selectedUser))
+        )
       )
+    )
+  );
+
+  const canDeleteSelectedUser = Boolean(
+    selectedUser &&
+    canDeleteUser &&
+    !isProtectedCeoOwnerProfile(selectedUser) &&
+    (
+      selectedUser.role !== 'ceo' ||
+      isPrimaryCeoUser
     )
   );
 
@@ -299,7 +314,7 @@ export function UsersSection({
                     }}
                     disabled={!canEditSelectedUser}
                     className="h-10 flex-1 min-w-0 bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-white rounded-xl text-[10px] font-black uppercase tracking-wide transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                    title={!canEditSelectedUser && role === 'admin' ? 'Admin solo puede editar usuarios creados por el mismo' : 'Editar usuario'}
+                    title="Editar usuario"
                   >
                     <Settings className="w-3.5 h-3.5" /> Editar
                   </button>
@@ -319,7 +334,7 @@ export function UsersSection({
                   </button>
                 )}
 
-                {canDeleteUser && selectedUser.role !== 'ceo' && (
+                {canDeleteSelectedUser && (
                   <button
                     onClick={() => deleteUser(selectedUser.email)}
                     className="h-10 w-10 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 rounded-xl transition-all flex items-center justify-center"

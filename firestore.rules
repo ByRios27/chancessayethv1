@@ -100,10 +100,6 @@ service cloud.firestore {
       return profileEmail() == ownerCeoEmail();
     }
 
-    function profileHasCeoRole() {
-      return role() == 'ceo' || role() == 'owner';
-    }
-
     function isOwnerCeo() {
       return signedIn() && (
         authEmail() == ownerCeoEmail() ||
@@ -130,8 +126,26 @@ service cloud.firestore {
       return role() == 'seller' && isActiveUser();
     }
 
+    function isRegisteredUser() {
+      return isActiveUser() && role() in ['ceo', 'owner', 'admin', 'seller'];
+    }
+
     function isOwnerOrAdmin() {
       return isOwnerCeo() || isCeo() || isAdmin();
+    }
+
+    function canManageLotteryCatalog() {
+      return isCeo();
+    }
+
+    function canToggleLotteryActiveOnly() {
+      return isAdmin() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['active']) &&
+        request.resource.data.get('active', false) is bool;
+    }
+
+    function canManageGlobalSettings() {
+      return isOwnerCeo();
     }
 
     function isPrimaryCeo() {
@@ -173,21 +187,6 @@ service cloud.firestore {
         );
     }
 
-    function injectionBelongsToCurrentUser(data) {
-      return signedIn() &&
-        (
-          identityMatches(data.get('sellerId', '')) ||
-          identityMatches(data.get('userEmail', '')) ||
-          identityMatches(data.get('createdBy', '')) ||
-          identityMatches(data.get('addedBy', '')) ||
-          identityMatches(data.get('createdByEmail', '')) ||
-          identityMatches(data.get('createdBySellerId', '')) ||
-          identityMatches(data.get('actorEmail', '')) ||
-          identityMatches(data.get('actorSellerId', '')) ||
-          identityMatches(data.get('updatedByEmail', ''))
-        );
-    }
-
     function injectionTargetBelongsToCurrentUser(data) {
       return signedIn() &&
         (
@@ -220,16 +219,6 @@ service cloud.firestore {
         );
     }
 
-    function injectionHasAuthor(data) {
-      return
-        (data.get('createdBy', '') is string && data.get('createdBy', '') != '') ||
-        (data.get('addedBy', '') is string && data.get('addedBy', '') != '') ||
-        (data.get('createdByEmail', '') is string && data.get('createdByEmail', '') != '') ||
-        (data.get('createdBySellerId', '') is string && data.get('createdBySellerId', '') != '') ||
-        (data.get('actorEmail', '') is string && data.get('actorEmail', '') != '') ||
-        (data.get('actorSellerId', '') is string && data.get('actorSellerId', '') != '');
-    }
-
     function injectionAmountIsValid(data) {
       return data.get('amount', -1) is number && data.get('amount', -1) >= 0;
     }
@@ -240,24 +229,6 @@ service cloud.firestore {
           identityMatches(data.get('sellerId', '')) ||
           identityMatches(data.get('userEmail', '')) ||
           identityMatches(data.get('liquidatedBy', ''))
-        );
-    }
-
-    function archiveBelongsToCurrentUser(data) {
-      return signedIn() &&
-        (
-          identityMatches(data.get('archivedBy', '')) ||
-          identityMatches(data.get('userEmail', ''))
-        );
-    }
-
-    function auditEventBelongsToCurrentUser(data) {
-      return signedIn() &&
-        (
-          identityMatches(data.get('actorEmail', '')) ||
-          identityMatches(data.get('actorSellerId', '')) ||
-          identityMatches(data.get('targetEmail', '')) ||
-          identityMatches(data.get('targetSellerId', ''))
         );
     }
 
@@ -326,12 +297,6 @@ service cloud.firestore {
         resource.data.get('sellerId', '').lower() == ownerCeoSellerId();
     }
 
-    function createdByCurrentUser(data) {
-      return identityMatches(data.get('createdByEmail', '')) ||
-        identityMatches(data.get('createdBy', '')) ||
-        identityMatches(data.get('createdBySellerId', ''));
-    }
-
     function userCreateHasAuthor(data) {
       return identityMatches(data.get('createdByEmail', '')) &&
         data.get('createdByRole', '').lower() == role() &&
@@ -347,16 +312,8 @@ service cloud.firestore {
         );
     }
 
-    function userAuthorFieldsUnchanged() {
-      return request.resource.data.get('createdBy', '') == resource.data.get('createdBy', '') &&
-        request.resource.data.get('createdByEmail', '') == resource.data.get('createdByEmail', '') &&
-        request.resource.data.get('createdByRole', '') == resource.data.get('createdByRole', '') &&
-        request.resource.data.get('createdBySellerId', '') == resource.data.get('createdBySellerId', '') &&
-        request.resource.data.get('createdAt', null) == resource.data.get('createdAt', null);
-    }
-
     function ownerProfileUpdateIsSafe() {
-      return request.resource.data.diff(resource.data).changedKeys().hasOnly(['name', 'preferredChancePrice', 'sessionTimeoutMinutes', 'commissionRate', 'special4dEnabled']) &&
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'preferredChancePrice', 'sessionTimeoutMinutes', 'commissionRate', 'special4dEnabled', 'updatedAt', 'updatedBy', 'updatedByEmail', 'updatedByRole', 'updatedBySellerId']) &&
         request.resource.data.get('email', '').lower() == resource.data.get('email', '').lower() &&
         request.resource.data.get('role', '') == resource.data.get('role', '') &&
         request.resource.data.get('status', '') == resource.data.get('status', '') &&
@@ -376,13 +333,11 @@ service cloud.firestore {
 
     function canManageUserCreate() {
       return signedIn() && (
-        (
-          isCeo() &&
-          isValidUser(request.resource.data) &&
-          createdCeoHasValidPrimaryFlag() &&
-          userCreateHasAuthor(request.resource.data)
-        ) ||
-        (isAdmin() && isValidUser(request.resource.data) && request.resource.data.get('role', '') == 'seller' && userCreateHasAuthor(request.resource.data))
+        isCeo() &&
+        (request.resource.data.get('role', '') != 'ceo' || isOwnerCeo()) &&
+        isValidUser(request.resource.data) &&
+        createdCeoHasValidPrimaryFlag() &&
+        userCreateHasAuthor(request.resource.data)
       );
     }
 
@@ -391,14 +346,13 @@ service cloud.firestore {
         (
           isCeo() &&
           !targetUserIsProtectedOwner() &&
-          updatedUserKeepsPrimaryFlag()
-        ) ||
-        (
-          isAdmin() &&
-          resource.data.get('role', '') == 'seller' &&
-          request.resource.data.get('role', '') == 'seller' &&
-          createdByCurrentUser(resource.data) &&
-          userAuthorFieldsUnchanged() &&
+          (
+            (
+              resource.data.get('role', '') != 'ceo' &&
+              request.resource.data.get('role', '') != 'ceo'
+            ) ||
+            isOwnerCeo()
+          ) &&
           updatedUserKeepsPrimaryFlag()
         )
       );
@@ -406,8 +360,7 @@ service cloud.firestore {
 
     function canManageUserDelete() {
       return signedIn() && (
-        (isCeo() && !targetUserIsProtectedOwner()) ||
-        (isAdmin() && resource.data.get('role', '') == 'seller' && createdByCurrentUser(resource.data))
+        isCeo() && !targetUserIsProtectedOwner()
       );
     }
 
@@ -415,30 +368,28 @@ service cloud.firestore {
       allow read: if isOwnerCeo() || (signedIn() && (isOwnUserDoc(email) || isOwnerOrAdmin()));
       allow create: if isOwnerCeo() || canManageUserCreate() || canBootstrapPrimaryOwnerCreate(email);
       allow update: if isOwnerCeo() || canManageUserUpdate() || (isOwnUserDoc(email) && ownerProfileUpdateIsSafe());
-      allow delete: if isOwnerCeo() || (canManageUserDelete() && (resource.data.get('role', '') != 'ceo' || isCeo()));
+      allow delete: if
+        (isOwnerCeo() && !targetUserIsProtectedOwner()) ||
+        (canManageUserDelete() && resource.data.get('role', '') != 'ceo');
     }
 
     match /userProvisioning/{email} {
       allow read: if isOwnerCeo() || (signedIn() && (isOwner(email) || isOwnerOrAdmin()));
-      allow create: if isOwnerCeo() || (signedIn() && (isCeo() || (isAdmin() && request.resource.data.get('role', '') == 'seller')));
-      allow update: if isOwnerCeo() || (signedIn() && (isCeo() || (isAdmin() && resource.data.get('role', '') == 'seller' && request.resource.data.get('role', '') == 'seller')));
-      allow delete: if isOwnerCeo() || (signedIn() && (isCeo() || (isAdmin() && resource.data.get('role', '') == 'seller')));
+      allow create: if isOwnerCeo() || (signedIn() && isCeo() && request.resource.data.get('role', '') != 'ceo');
+      allow update: if isOwnerCeo() || (signedIn() && isCeo() && resource.data.get('role', '') != 'ceo' && request.resource.data.get('role', '') != 'ceo');
+      allow delete: if isOwnerCeo() || (signedIn() && isCeo() && resource.data.get('role', '') != 'ceo');
     }
 
     match /lotteries/{lotteryId} {
       allow read: if isOwnerCeo() || signedIn();
-      allow create, delete: if isOwnerCeo() || isCeo();
-      allow update: if isOwnerCeo() || isCeo() || (
-        isAdmin() &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['active']) &&
-        request.resource.data.get('active', false) is bool
-      );
+      allow create, delete: if canManageLotteryCatalog();
+      allow update: if canManageLotteryCatalog() || canToggleLotteryActiveOnly();
     }
 
     match /tickets/{ticketId} {
-      allow read: if isOwnerCeo() || (signedIn() && (isOwnerOrAdmin() || ticketBelongsToCurrentUser(resource.data)));
+      allow read: if isOwnerCeo() || (isRegisteredUser() && (isOwnerOrAdmin() || ticketBelongsToCurrentUser(resource.data)));
 
-      allow create: if isOwnerCeo() || (signedIn() && (
+      allow create: if isOwnerCeo() || (isRegisteredUser() && (
         isOwnerOrAdmin() ||
         ticketBelongsToCurrentUser(request.resource.data)
       ));
@@ -447,7 +398,7 @@ service cloud.firestore {
         isOwnerCeo() ||
         isOwnerOrAdmin() ||
         (
-          signedIn() &&
+          isRegisteredUser() &&
           ticketBelongsToCurrentUser(resource.data) &&
           ticketBelongsToCurrentUser(request.resource.data)
         );
@@ -456,7 +407,7 @@ service cloud.firestore {
         isOwnerCeo() ||
         isOwnerOrAdmin() ||
         (
-          signedIn() &&
+          isRegisteredUser() &&
           ticketBelongsToCurrentUser(resource.data)
         );
     }
@@ -484,7 +435,6 @@ service cloud.firestore {
           )
         );
       allow update: if
-        isOwnerCeo() ||
         (signedIn() && (
           (
             injectionAmountIsValid(request.resource.data) &&
@@ -493,22 +443,12 @@ service cloud.firestore {
             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['amount', 'updatedAt', 'updatedByEmail'])
           ) ||
           (
-            injectionAmountIsValid(request.resource.data) &&
-            isPrimaryCeo() &&
-            !injectionHasAuthor(resource.data) &&
-            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['amount', 'updatedAt', 'updatedByEmail'])
-          ) ||
-          (
             isOwnerOrAdmin() &&
             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['liquidated', 'settlementId'])
           )
         ));
       allow delete: if
-        isOwnerCeo() ||
-        (signedIn() && (
-          injectionCreatedByCurrentUser(resource.data) ||
-          (isPrimaryCeo() && !injectionHasAuthor(resource.data))
-        ));
+        signedIn() && injectionCreatedByCurrentUser(resource.data);
     }
 
     match /settlements/{settlementId} {
@@ -517,14 +457,21 @@ service cloud.firestore {
     }
 
     match /daily_archives/{archiveId} {
-      allow read: if isOwnerCeo() || (signedIn() && (isOwnerOrAdmin() || archiveBelongsToCurrentUser(resource.data)));
+      allow read: if isOwnerCeo() || isOwnerOrAdmin();
+      allow create: if isOwnerCeo() || isOwnerOrAdmin();
+      allow update: if isOwnerCeo() || isOwnerOrAdmin();
+      allow delete: if isOwnerCeo() || isCeo();
+    }
+
+    match /daily_archives/{archiveId}/users/{userId} {
+      allow read: if isOwnerCeo() || isOwnerOrAdmin() || (signedIn() && isOwnUserDoc(userId));
       allow create: if isOwnerCeo() || isOwnerOrAdmin();
       allow update: if isOwnerCeo() || isOwnerOrAdmin();
       allow delete: if isOwnerCeo() || isCeo();
     }
 
     match /daily_audit_logs/{logDate}/events/{eventId} {
-      allow read: if isOwnerCeo() || (signedIn() && (isOwnerOrAdmin() || auditEventBelongsToCurrentUser(resource.data)));
+      allow read: if isOwnerCeo() || isOwnerOrAdmin();
       allow create: if
         isOwnerCeo() ||
         (
@@ -549,7 +496,7 @@ service cloud.firestore {
 
     match /settings/global {
       allow read: if isOwnerCeo() || signedIn();
-      allow write: if isOwnerCeo() || isCeo();
+      allow write: if canManageGlobalSettings();
     }
 
     match /public/connectivity {

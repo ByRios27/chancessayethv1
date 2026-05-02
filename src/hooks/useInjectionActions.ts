@@ -13,7 +13,6 @@ interface UseInjectionActionsParams {
   userProfile?: UserProfile | null;
   users: UserProfile[];
   businessDayKey: string;
-  isPrimaryCeoUser: boolean;
   setInjections: Dispatch<SetStateAction<Injection[]>>;
   setConfirmModal: Dispatch<SetStateAction<{
     show: boolean;
@@ -29,7 +28,6 @@ export function useInjectionActions({
   userProfile,
   users,
   businessDayKey,
-  isPrimaryCeoUser,
   setInjections,
   setConfirmModal,
   onError,
@@ -48,16 +46,14 @@ export function useInjectionActions({
     const createdByUid = String(injection.createdBy || injection.addedBy || '');
     const hasAuthor = !!createdByEmail || !!createdBySellerId || !!createdByUid;
 
-    if (!hasAuthor) {
-      return !!isPrimaryCeoUser;
-    }
+    if (!hasAuthor) return false;
 
     return (
       (createdByEmail && createdByEmail === actorEmail) ||
       (createdBySellerId && createdBySellerId === actorSellerId) ||
       (createdByUid && createdByUid === actorUid)
     );
-  }, [isPrimaryCeoUser, user, userProfile]);
+  }, [user, userProfile]);
 
   const updateInjectionAmount = useCallback(async (injection: Injection, nextAmount: number) => {
     if (!canMutateInjection(injection)) {

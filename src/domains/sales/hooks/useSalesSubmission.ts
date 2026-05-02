@@ -103,6 +103,14 @@ export function useSalesSubmission({
     const unifiedCart = unifyBets(cart);
     const totalAmount = unifiedCart.reduce((acc, item) => acc + item.amount, 0);
     const finalCustomerName = customerName.trim() || 'Cliente General';
+    const sellerEmail = String(userProfile?.email || user?.email || '').toLowerCase();
+    const sellerIdForTicket = (
+      operationalSellerId ||
+      userProfile?.sellerId ||
+      sellerEmail.split('@')[0]?.toUpperCase() ||
+      user?.uid ||
+      ''
+    ).trim();
 
     for (const bet of unifiedCart) {
       const lot = bet.lotteryId
@@ -158,9 +166,13 @@ export function useSalesSubmission({
           totalAmount,
           chancePrice,
           timestamp: serverTimestamp(),
-          sellerId: operationalSellerId,
-          sellerCode: operationalSellerId,
-          sellerEmail: user?.email?.toLowerCase(),
+          sellerId: sellerIdForTicket,
+          sellerCode: sellerIdForTicket,
+          sellerEmail,
+          userEmail: sellerEmail,
+          userId: user?.uid || '',
+          createdBy: user?.uid || '',
+          createdByEmail: sellerEmail,
           sellerName: userProfile?.name || user.displayName || 'Vendedor',
           commissionRate: userProfile?.commissionRate || 0,
           status: 'active',
@@ -175,8 +187,9 @@ export function useSalesSubmission({
           totalAmount,
           chancePrice,
           timestamp: { toDate: () => new Date() },
-          sellerId: operationalSellerId,
-          sellerCode: operationalSellerId,
+          sellerId: sellerIdForTicket,
+          sellerCode: sellerIdForTicket,
+          sellerEmail,
           sellerName: userProfile?.name || user.displayName || 'Vendedor',
           commissionRate: userProfile?.commissionRate || 0,
           status: 'active',

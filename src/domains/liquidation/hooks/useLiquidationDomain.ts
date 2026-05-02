@@ -125,6 +125,8 @@ export function useLiquidationDomain(params: any) {
   }, [getQuickOperationalDate, recentOperationalDates]);
 
   const normalizeEmail = useCallback((value?: string | null) => (value || '').toLowerCase().trim(), []);
+  const normalizedUserRole = String(userProfile?.role || '').toLowerCase();
+  const isSellerUser = normalizedUserRole === 'seller';
 
   const getDatesInRange = useCallback((from: string, to: string) => {
     const safeFrom = from || to;
@@ -207,8 +209,31 @@ export function useLiquidationDomain(params: any) {
       };
     }
 
-    const archiveSnap = await getDoc(doc(db, 'daily_archives', targetDate));
-    if (archiveSnap.exists()) {
+    if (isSellerUser) {
+      const userArchiveSnap = await getDoc(doc(db, 'daily_archives', targetDate, 'users', normalizedEmail));
+      if (userArchiveSnap.exists()) {
+        const archive = userArchiveSnap.data() as {
+          tickets?: LotteryTicket[];
+          injections?: Injection[];
+          settlements?: Settlement[];
+          results?: LotteryResult[];
+        };
+        const liveSettlements = preloadedLiveSettlements ?? await fetchLiveSettlementsForDay(targetDate, normalizedEmail);
+
+        return {
+          tickets: archive.tickets || [],
+          injections: (archive.injections || []).filter((injection) => injection.date === targetDate),
+          settlements: dedupeById([
+            ...liveSettlements,
+            ...(archive.settlements || []).filter((settlement) => settlement.date === targetDate),
+          ]),
+          results: archive.results || [],
+        };
+      }
+    }
+
+    const archiveSnap = !isSellerUser ? await getDoc(doc(db, 'daily_archives', targetDate)) : null;
+    if (archiveSnap?.exists()) {
       const archive = archiveSnap.data() as {
         tickets?: LotteryTicket[];
         injections?: Injection[];
@@ -272,6 +297,7 @@ export function useLiquidationDomain(params: any) {
     fetchLiveSettlementsForDay,
     getBusinessDayRange,
     injections,
+    isSellerUser,
     normalizeEmail,
     results,
     settlements,

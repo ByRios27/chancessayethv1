@@ -14,6 +14,7 @@ import type { Lottery } from '../../types/lotteries';
 import type { LotteryResult } from '../../types/results';
 import { getBusinessDate } from '../../utils/dates';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreError';
+import { isCeoOwnerProfile } from '../../utils/roles';
 
 export function useAppAccessDepartment() {
   const enforceSessionByOperationalDay = false;
@@ -21,7 +22,8 @@ export function useAppAccessDepartment() {
   const { user, userProfile, setUserProfile, loading, handleLogout } = useAuthSession(enforceSessionByOperationalDay);
   const { tick, businessDayKey, getQuickOperationalDate, applyOperationalQuickDate } = useOperationalClock();
   const currentUserRole = userProfile?.role;
-  const canUseGlobalScope = userProfile?.role === 'ceo' || !!userProfile?.canLiquidate;
+  const normalizedRole = String(userProfile?.role || '').toLowerCase();
+  const canUseGlobalScope = normalizedRole === 'ceo' || normalizedRole === 'owner' || normalizedRole === 'admin';
   const [showGlobalScope, setShowGlobalScope] = useState(false);
   const [historyTickets, setHistoryTickets] = useState<LotteryTicket[]>([]);
   const [activeTab, setActiveTab] = useState<AppTabId>('sales');
@@ -83,13 +85,14 @@ export function useAppAccessDepartment() {
   });
 
   const { isMobile, isOnline, isSidebarOpen, setIsSidebarOpen } = useResponsiveShellState();
-  const primaryCeoEmail = (import.meta.env.VITE_CEO_EMAIL || 'zsayeth09@gmail.com').toLowerCase();
-  const primaryCeoSellerId = 'ceo01';
-  const isPrimaryCeoUser =
-    (userProfile?.email || '').toLowerCase() === primaryCeoEmail ||
-    userProfile?.isPrimaryCeo === true ||
-    String(userProfile?.sellerId || '').toLowerCase() === primaryCeoSellerId;
-  const operationalSellerId = (userProfile?.sellerId || '').trim();
+  const isPrimaryCeoUser = isCeoOwnerProfile(userProfile);
+  const operationalSellerId = (
+    userProfile?.sellerId ||
+    userProfile?.email?.split('@')[0]?.toUpperCase() ||
+    user?.email?.split('@')[0]?.toUpperCase() ||
+    user?.uid ||
+    ''
+  ).trim();
   const historyDataCacheRef = useRef<Map<string, HistoricalOperationalDataCacheEntry>>(new Map());
   const closedLotteryCardsCacheRef = useRef<Map<string, ClosedLotteryCardsCacheEntry>>(new Map());
 

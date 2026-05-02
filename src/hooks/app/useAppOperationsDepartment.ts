@@ -281,6 +281,7 @@ export function useAppOperationsDepartment({
     setLiquidationSettlementsSnapshot,
     setLiquidationTicketsSnapshot,
     setResults,
+    userProfile,
   });
 
   useBusinessDayTransitionReset({

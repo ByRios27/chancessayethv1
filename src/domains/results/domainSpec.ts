@@ -3,7 +3,7 @@ export const RESULTS_DOMAIN_SPEC = {
   primaryAction: 'registerLotteryResults',
   secondaryActions: ['editResult', 'deleteResult', 'viewRecentResults'],
   prohibitedActions: ['manageUsers', 'manageLotteries', 'runLiquidation'],
-  allowedRoles: ['ceo', 'admin'] as const,
+  allowedRoles: ['ceo', 'admin', 'seller'] as const,
   emptyStates: {
     noResults: 'No hay resultados registrados para la fecha seleccionada.',
     noAvailableLotteries: 'Todos los sorteos ya tienen resultado para esta fecha.',
@@ -23,7 +23,7 @@ export const RESULTS_ACTION_PERMISSIONS = {
   createResult: ['ceo', 'admin'] as const,
   editResult: ['ceo', 'admin'] as const,
   deleteResult: ['ceo', 'admin'] as const,
-  editHistoricalResult: ['ceo'] as const,
+  editHistoricalResult: ['ceo', 'admin'] as const,
 } as const;
 
 type ResultsAction = keyof typeof RESULTS_ACTION_PERMISSIONS;

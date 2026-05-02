@@ -3,7 +3,7 @@ export const CIERRES_DOMAIN_SPEC = {
   primaryAction: 'generateLotteryCloseReport',
   secondaryActions: ['filterByDate', 'filterByLottery', 'shareReport'],
   prohibitedActions: ['manageUsers', 'manageLotteries', 'editSalesData'],
-  allowedRoles: ['ceo', 'admin'] as const,
+  allowedRoles: ['ceo', 'admin', 'seller'] as const,
   emptyStates: {
     noLotterySelected: 'Seleccione un sorteo para generar el cierre.',
     noSalesData: 'No hay ventas para el sorteo y fecha seleccionados.',

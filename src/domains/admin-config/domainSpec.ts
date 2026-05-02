@@ -28,7 +28,18 @@ export const ADMIN_CONFIG_ACTION_PERMISSIONS = {
 type AdminConfigAction = keyof typeof ADMIN_CONFIG_ACTION_PERMISSIONS;
 
 export const canAccessAdminConfigDomain = (role?: string | null) =>
-  !!role && (ADMIN_CONFIG_DOMAIN_SPEC.allowedRoles as readonly string[]).includes(role);
+  !!role && (ADMIN_CONFIG_DOMAIN_SPEC.allowedRoles as readonly string[]).includes(role.toLowerCase());
 
-export const canExecuteAdminConfigAction = (role: string | null | undefined, action: AdminConfigAction) =>
-  !!role && (ADMIN_CONFIG_ACTION_PERMISSIONS[action] as readonly string[]).includes(role);
+export const canExecuteAdminConfigAction = (
+  role: string | null | undefined,
+  action: AdminConfigAction,
+  isCeoOwner = false
+) => {
+  const normalizedRole = role?.toLowerCase();
+
+  if (action === 'updateGlobalSettings' || action === 'accessDangerZone') {
+    return isCeoOwner;
+  }
+
+  return !!normalizedRole && (ADMIN_CONFIG_ACTION_PERMISSIONS[action] as readonly string[]).includes(normalizedRole);
+};
