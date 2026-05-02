@@ -10,17 +10,11 @@ import { useLotteries } from '../useLotteries';
 import { usePunctualRefresh } from '../usePunctualRefresh';
 import { useResults } from '../useResults';
 import { useSettlements } from '../useSettlements';
-import { useSpecial4DSettlements } from '../useSpecial4DSettlements';
-import { useSpecial4DTickets } from '../useSpecial4DTickets';
 import { useTicketFinancials } from '../useTicketFinancials';
 import { useTickets } from '../useTickets';
 import { useUsers } from '../useUsers';
 import { useUserMessages } from '../useUserMessages';
 import { buildSpecial4DLottery } from '../../config/special4d';
-import {
-  buildSpecial4DFinancialSummary as calculateSpecial4DFinancialSummary,
-  getSpecial4DTicketPrizes as calculateSpecial4DTicketPrizes,
-} from '../../services/calculations/special4d';
 import { updateAppAlertPinned } from '../../services/repositories/appAlertsRepo';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreError';
 import { getOperationalTimeSortValue } from '../../utils/tickets';
@@ -228,24 +222,6 @@ export function useAppDataDepartment({
     onError: handleGlobalSettingsError,
   });
 
-  const special4DDataEnabled = false;
-
-  const { special4DTickets, setSpecial4DTickets } = useSpecial4DTickets({
-    enabled: special4DDataEnabled,
-    canAccessAllUsers,
-    businessDayKey,
-    sellerId: operationalSellerId,
-    onError: handleOperationalHookError,
-  });
-
-  const { special4DSettlements, setSpecial4DSettlements } = useSpecial4DSettlements({
-    enabled: special4DDataEnabled,
-    canAccessAllUsers,
-    businessDayKey,
-    sellerId: operationalSellerId,
-    onError: handleOperationalHookError,
-  });
-
   const sortedLotteries = useMemo(() => [...lotteries].sort((a, b) => {
     return getOperationalTimeSortValue(a.drawTime || '00:00') - getOperationalTimeSortValue(b.drawTime || '00:00');
   }), [lotteries]);
@@ -271,29 +247,6 @@ export function useAppDataDepartment({
     canAccessAllUsers,
     globalChancePriceFilter,
   });
-
-  const getSpecial4DTicketPrizes = useCallback((ticket: any, resultsSource = results) => {
-    return calculateSpecial4DTicketPrizes({
-      ticket,
-      resultsSource,
-      settings: globalSettings.special4d,
-    });
-  }, [globalSettings.special4d, results]);
-
-  const buildSpecial4DFinancialSummary = useCallback((params: {
-    tickets?: any[];
-    settlements?: any[];
-    resultsSource?: any[];
-    userEmail?: string;
-    targetDate?: string;
-  }) => calculateSpecial4DFinancialSummary({
-    tickets: params.tickets || special4DTickets,
-    settlements: params.settlements || special4DSettlements,
-    resultsSource: params.resultsSource || results,
-    settings: globalSettings.special4d,
-    userEmail: params.userEmail,
-    targetDate: params.targetDate,
-  }), [globalSettings.special4d, results, special4DSettlements, special4DTickets]);
 
   return {
     appAlerts,
@@ -327,16 +280,10 @@ export function useAppDataDepartment({
     setResults,
     setSelectedLottery,
     setSettlements,
-    setSpecial4DSettlements,
-    setSpecial4DTickets,
     setTickets,
     setUsers,
     settlements,
-    special4DSettlements,
-    special4DTickets,
     sortedLotteries,
-    buildSpecial4DFinancialSummary,
-    getSpecial4DTicketPrizes,
     ticketMatchesGlobalChancePrice,
     tickets,
     users,

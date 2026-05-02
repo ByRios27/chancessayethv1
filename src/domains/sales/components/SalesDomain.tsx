@@ -59,18 +59,8 @@ interface SalesDomainProps {
   handleSell: (e: React.FormEvent) => void;
   setShowFastEntryModal: (value: boolean) => void;
   userProfile?: { role?: string; special4dEnabled?: boolean };
-  canSeeSpecial4D?: boolean;
   isSpecial4DSelected?: boolean;
   special4DUnitPrice?: number;
-  handleSpecial4DSell?: (e: React.FormEvent) => void;
-  isSubmittingSpecial4D?: boolean;
-  special4DSalesSummary?: {
-    totalSales: number;
-    totalPrizes: number;
-    totalCommissions: number;
-    netProfit: number;
-    pendingBalance: number;
-  };
   todayStr: string;
   todayStats: { sales: number; injections: number; prizes: number; bankProfit: number; pendingDebt: number; netProfit: number };
 }
@@ -156,12 +146,8 @@ export function SalesDomain(props: SalesDomainProps) {
     handleSell,
     setShowFastEntryModal,
     userProfile,
-    canSeeSpecial4D,
     isSpecial4DSelected: providedIsSpecial4DSelected,
     special4DUnitPrice: providedSpecial4DUnitPrice,
-    handleSpecial4DSell,
-    isSubmittingSpecial4D,
-    special4DSalesSummary,
     todayStr,
     todayStats,
   } = props;

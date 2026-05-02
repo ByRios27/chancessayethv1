@@ -33,11 +33,6 @@ export function useAppViewDepartment({ access, data, management, operations, sal
     operationalSellerId: access.operationalSellerId,
   });
 
-  const special4DSalesSummary = data.buildSpecial4DFinancialSummary?.({
-    userEmail: access.userProfile?.email,
-    targetDate: access.businessDayKey,
-  });
-
   const modalsProps = {
     showSettingsModal: ui.showSettingsModal,
     setShowSettingsModal: ui.setShowSettingsModal,
@@ -47,13 +42,6 @@ export function useAppViewDepartment({ access, data, management, operations, sal
     handleDeleteAllSalesData: operations.handleDeleteAllSalesData,
     showFastEntryModal: sales.showFastEntryModal,
     setShowFastEntryModal: sales.setShowFastEntryModal,
-    showSpecial4DCheckoutModal: sales.showSpecial4DCheckoutModal,
-    setShowSpecial4DCheckoutModal: sales.setShowSpecial4DCheckoutModal,
-    showSpecial4DTicketModal: sales.showSpecial4DTicketModal,
-    setShowSpecial4DTicketModal: sales.setShowSpecial4DTicketModal,
-    confirmSpecial4DSale: sales.confirmSpecial4DSale,
-    isSubmittingSpecial4D: sales.isSubmittingSpecial4D,
-    getSpecial4DTicketPrizes: data.getSpecial4DTicketPrizes,
     setCart: sales.setCart,
     fastEntrySelectedLotteries: sales.fastEntrySelectedLotteries,
     chancePrice: sales.chancePrice,
@@ -194,12 +182,8 @@ export function useAppViewDepartment({ access, data, management, operations, sal
     cartTotal: sales.cartTotal,
     handleSell: sales.handleSell,
     setShowFastEntryModal: sales.setShowFastEntryModal,
-    canSeeSpecial4D: sales.canSeeSpecial4D,
     isSpecial4DSelected: sales.isSpecial4DSelected,
     special4DUnitPrice: sales.special4DUnitPrice,
-    handleSpecial4DSell: sales.handleSpecial4DSell,
-    isSubmittingSpecial4D: sales.isSubmittingSpecial4D,
-    special4DSalesSummary,
     historyDate: access.historyDate,
     setHistoryDate: access.setHistoryDate,
     applyOperationalQuickDate: access.applyOperationalQuickDate,
@@ -307,10 +291,6 @@ export function useAppViewDepartment({ access, data, management, operations, sal
     handleLiquidate: operations.handleLiquidate,
     handleLiquidateRange: operations.handleLiquidateRange,
     liquidationPreview: operations.liquidationPreview,
-    special4DPreview: operations.special4DPreview,
-    special4DUserSummaries: operations.special4DUserSummaries,
-    isLiquidatingSpecial4D: operations.isLiquidatingSpecial4D,
-    handleLiquidateSpecial4D: operations.handleLiquidateSpecial4D,
     archiveDate: access.archiveDate,
     setArchiveDate: access.setArchiveDate,
     archiveUserEmail: access.archiveUserEmail,

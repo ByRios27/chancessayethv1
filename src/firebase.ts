@@ -31,7 +31,6 @@ import {
   getRedirectResult,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  sendPasswordResetEmail,
   signOut, 
   updatePassword
 } from "firebase/auth";
@@ -87,7 +86,6 @@ export {
   getRedirectResult,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  sendPasswordResetEmail,
   signOut, 
   updatePassword
 };

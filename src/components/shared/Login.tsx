@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { toast } from 'sonner';
-import { signInWithPopup, signInWithRedirect, signInWithEmailAndPassword, sendPasswordResetEmail, googleProvider, auth, db, doc, getDoc, signOut } from '../../firebase';
+import { signInWithPopup, signInWithRedirect, signInWithEmailAndPassword, googleProvider, auth, db, doc, getDoc, signOut } from '../../firebase';
 import { ChevronRight, Lock, Ticket as TicketIcon, User as UserIcon } from 'lucide-react';
 import { motion } from 'motion/react';
 import { format } from 'date-fns';
@@ -11,25 +11,6 @@ const Login = () => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-
-  const handleResetPassword = async () => {
-    if (!username) {
-      toast.error('Ingrese su correo para restablecer la contraseña');
-      return;
-    }
-    const cleanUsername = username.trim().toLowerCase().replace(/\s/g, '');
-    const email = username.includes('@') ? username.trim() : `${cleanUsername}@chancepro.local`;
-    
-    const toastId = toast.loading('Enviando correo de restablecimiento...');
-    try {
-      await sendPasswordResetEmail(auth, email);
-      toast.success('Correo de restablecimiento enviado. Revise su bandeja de entrada.', { id: toastId });
-    } catch (error: any) {
-      console.error("Reset password failed", error);
-      toast.error(`Error: ${error.message}`, { id: toastId });
-    }
-  };
-
   const handleCredentialsLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -86,7 +67,7 @@ const Login = () => {
       let errorMessage = "Credenciales incorrectas";
       
       if (error.code === 'auth/invalid-credential') {
-        errorMessage = "Credenciales incorrectas (usuario o contraseña no coinciden). Si olvidó su clave, use el botón de recuperar.";
+        errorMessage = "Credenciales incorrectas (usuario o contraseña no coinciden). Contacte al CEO o admin para actualizar su clave.";
         if (!username.includes('@')) {
           errorMessage += ". Verifique si debe usar su correo completo (ej: @gmail.com)";
         }
@@ -224,17 +205,6 @@ const Login = () => {
               />
             </div>
           </div>
-          
-          <div className="flex justify-end">
-            <button 
-              type="button"
-              onClick={handleResetPassword}
-              className="text-[10px] font-mono uppercase tracking-widest text-primary hover:underline"
-            >
-              <span>¿Olvidó su contraseña?</span>
-            </button>
-          </div>
-
           <button 
             type="submit"
             disabled={loading}

@@ -13,7 +13,6 @@ const GlobalSettingsModal = lazy(() => import('../modals/GlobalSettingsModal'));
 const LotteryModal = lazy(() => import('../modals/LotteryModal'));
 const LotterySelectorModal = lazy(() => import('../modals/LotterySelectorModal'));
 const MultiDeleteTicketModal = lazy(() => import('../modals/MultiDeleteTicketModal'));
-const Special4DTicketModal = lazy(() => import('../modals/Special4DTicketModal'));
 const TicketModal = lazy(() => import('../modals/TicketModal'));
 const TransactionModal = lazy(() => import('../modals/TransactionModal'));
 const UserModal = lazy(() => import('../modals/UserModal'));
@@ -27,13 +26,6 @@ interface AppModalsProps {
   handleDeleteAllSalesData: () => void;
   showFastEntryModal: boolean;
   setShowFastEntryModal: (show: boolean) => void;
-  showSpecial4DCheckoutModal: boolean;
-  setShowSpecial4DCheckoutModal: (show: boolean) => void;
-  showSpecial4DTicketModal: any;
-  setShowSpecial4DTicketModal: (ticket: any) => void;
-  confirmSpecial4DSale: () => void;
-  isSubmittingSpecial4D: boolean;
-  getSpecial4DTicketPrizes: (ticket: any) => any;
   setCart: (updater: (prevCart: any[]) => any[]) => void;
   fastEntrySelectedLotteries: any[];
   chancePrice: number;
@@ -103,13 +95,6 @@ export function AppModals({
   handleDeleteAllSalesData,
   showFastEntryModal,
   setShowFastEntryModal,
-  showSpecial4DCheckoutModal,
-  setShowSpecial4DCheckoutModal,
-  showSpecial4DTicketModal,
-  setShowSpecial4DTicketModal,
-  confirmSpecial4DSale,
-  isSubmittingSpecial4D,
-  getSpecial4DTicketPrizes,
   setCart,
   fastEntrySelectedLotteries,
   chancePrice,
@@ -196,25 +181,6 @@ export function AppModals({
           selectedLotteries={fastEntrySelectedLotteries}
           chancePrice={chancePrice}
           plAmount={plAmount}
-        />
-      )}
-
-      {showSpecial4DTicketModal && (
-        <Special4DTicketModal
-          ticket={showSpecial4DTicketModal}
-          prizeResult={getSpecial4DTicketPrizes(showSpecial4DTicketModal)}
-          onClose={() => setShowSpecial4DTicketModal(null)}
-        />
-      )}
-
-      {showSpecial4DCheckoutModal && (
-        <CheckoutModal
-          show={showSpecial4DCheckoutModal}
-          customerName={customerName}
-          setCustomerName={setCustomerName}
-          onConfirm={confirmSpecial4DSale}
-          onClose={() => setShowSpecial4DCheckoutModal(false)}
-          isSubmitting={isSubmittingSpecial4D}
         />
       )}
 

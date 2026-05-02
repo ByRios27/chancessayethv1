@@ -112,12 +112,8 @@ export function AppMainContent(props: any) {
     cartTotal,
     handleSell,
     setShowFastEntryModal,
-    canSeeSpecial4D,
     isSpecial4DSelected,
     special4DUnitPrice,
-    handleSpecial4DSell,
-    isSubmittingSpecial4D,
-    special4DSalesSummary,
     historyDate,
     setHistoryDate,
     applyOperationalQuickDate,
@@ -225,10 +221,6 @@ export function AppMainContent(props: any) {
     handleLiquidate,
     handleLiquidateRange,
     liquidationPreview,
-    special4DPreview,
-    special4DUserSummaries,
-    isLiquidatingSpecial4D,
-    handleLiquidateSpecial4D,
     archiveDate,
     setArchiveDate,
     archiveUserEmail,
@@ -349,12 +341,8 @@ export function AppMainContent(props: any) {
               cartTotal={cartTotal}
               handleSell={handleSell}
               setShowFastEntryModal={setShowFastEntryModal}
-              canSeeSpecial4D={canSeeSpecial4D}
               isSpecial4DSelected={isSpecial4DSelected}
               special4DUnitPrice={special4DUnitPrice}
-              handleSpecial4DSell={handleSpecial4DSell}
-              isSubmittingSpecial4D={isSubmittingSpecial4D}
-              special4DSalesSummary={special4DSalesSummary}
               userProfile={userProfile}
               todayStr={todayStr}
               todayStats={todayStats}
@@ -555,10 +543,6 @@ export function AppMainContent(props: any) {
                 handleLiquidate={handleLiquidate}
                 handleLiquidateRange={handleLiquidateRange}
                 liquidationPreview={liquidationPreview}
-                special4DPreview={special4DPreview}
-                special4DUserSummaries={special4DUserSummaries}
-                isLiquidatingSpecial4D={isLiquidatingSpecial4D}
-                handleLiquidateSpecial4D={handleLiquidateSpecial4D}
                 shareImageDataUrl={shareImageDataUrl}
                 downloadDataUrlFile={downloadDataUrlFile}
               />

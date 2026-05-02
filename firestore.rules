@@ -243,24 +243,6 @@ service cloud.firestore {
         );
     }
 
-    function special4TicketBelongsToCurrentUser(data) {
-      return signedIn() &&
-        (
-          identityMatches(data.get('sellerId', '')) ||
-          identityMatches(data.get('sellerEmail', '')) ||
-          identityMatches(data.get('createdByEmail', ''))
-        );
-    }
-
-    function special4SettlementBelongsToCurrentUser(data) {
-      return signedIn() &&
-        (
-          identityMatches(data.get('sellerId', '')) ||
-          identityMatches(data.get('userEmail', '')) ||
-          identityMatches(data.get('liquidatedBy', ''))
-        );
-    }
-
     function archiveBelongsToCurrentUser(data) {
       return signedIn() &&
         (
@@ -531,18 +513,6 @@ service cloud.firestore {
 
     match /settlements/{settlementId} {
       allow read: if isOwnerCeo() || (signedIn() && (isOwnerOrAdmin() || settlementBelongsToCurrentUser(resource.data)));
-      allow write: if isOwnerCeo() || isOwnerOrAdmin();
-    }
-
-    match /special4_tickets/{ticketId} {
-      allow read: if isOwnerCeo() || (signedIn() && (isOwnerOrAdmin() || special4TicketBelongsToCurrentUser(resource.data)));
-      allow create: if isOwnerCeo() || (signedIn() && isActiveUser() && special4TicketBelongsToCurrentUser(request.resource.data));
-      allow update: if isOwnerCeo() || isOwnerOrAdmin();
-      allow delete: if isOwnerCeo() || isCeo();
-    }
-
-    match /special4_settlements/{settlementId} {
-      allow read: if isOwnerCeo() || (signedIn() && (isOwnerOrAdmin() || special4SettlementBelongsToCurrentUser(resource.data)));
       allow write: if isOwnerCeo() || isOwnerOrAdmin();
     }
 
