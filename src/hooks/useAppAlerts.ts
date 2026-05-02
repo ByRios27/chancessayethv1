@@ -53,6 +53,10 @@ export function useAppAlerts({
         key: `email:${normalizedEmail}`,
         queryRef: query(collection(db, 'app_alerts'), where('targetUserEmail', '==', normalizedEmail), limit(limitCount)),
       });
+      alertQueries.push({
+        key: `created:${normalizedEmail}`,
+        queryRef: query(collection(db, 'app_alerts'), where('createdByEmail', '==', normalizedEmail), limit(limitCount)),
+      });
     }
     if (normalizedRole) {
       alertQueries.push({

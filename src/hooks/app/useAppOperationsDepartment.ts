@@ -181,6 +181,7 @@ export function useAppOperationsDepartment({
     liquidationRangeReport,
     isLiquidationRangeLoading,
     fetchLiquidationRangeReport,
+    handleLiquidateRange,
     handleLiquidate,
     generateConsolidatedReport,
   } = useLiquidationDomain({
@@ -326,6 +327,7 @@ export function useAppOperationsDepartment({
     generateConsolidatedReport,
     handleDeleteAllSalesData,
     handleLiquidate,
+    handleLiquidateRange,
     historyLotteryCards,
     historyTypeFilterCode,
     isGeneratingYesterdayReport,

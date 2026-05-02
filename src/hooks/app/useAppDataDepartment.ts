@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { toast } from 'sonner';
 
@@ -14,6 +14,7 @@ import { useTicketFinancials } from '../useTicketFinancials';
 import { useTickets } from '../useTickets';
 import { useUsers } from '../useUsers';
 import { useUserMessages } from '../useUserMessages';
+import { updateAppAlertPinned } from '../../services/repositories/appAlertsRepo';
 import { handleFirestoreError, OperationType } from '../../utils/firestoreError';
 import { getOperationalTimeSortValue } from '../../utils/tickets';
 
@@ -38,11 +39,18 @@ export function useAppDataDepartment({
 }: any) {
   const [selectedLottery, setSelectedLottery] = useState('');
   const [globalChancePriceFilter, setGlobalChancePriceFilter] = useState<string>('');
+  const notifiedMessageAlertIdsRef = useRef<Set<string>>(new Set());
+  const hasLoadedMessageAlertsRef = useRef(false);
   const { users, setUsers } = useUsers({
     role: userProfile?.role,
     enabled: shouldLoadUsersList,
     onError: handleUsersHookError
   });
+
+  useEffect(() => {
+    notifiedMessageAlertIdsRef.current = new Set();
+    hasLoadedMessageAlertsRef.current = false;
+  }, [userProfile?.email]);
   const ticketsRealtimeEnabled = !!user?.uid && !!userProfile?.role && needsRealtimeOperationalData;
   const injectionsRealtimeEnabled = !!user?.uid && !!userProfile?.role && shouldListenInjections;
   const settlementsRealtimeEnabled = !!user?.uid && !!userProfile?.role && shouldListenSettlements;
@@ -118,7 +126,7 @@ export function useAppDataDepartment({
     error: appAlertsError,
     refresh: refreshAppAlerts,
   } = useAppAlerts({
-    enabled: !!user?.uid && !!userProfile?.role && activeTab === 'dashboard',
+    enabled: !!user?.uid && !!userProfile?.role,
     userEmail: userProfile?.email,
     userRole: userProfile?.role,
     onError: handleOperationalHookError,
@@ -148,6 +156,32 @@ export function useAppDataDepartment({
   }, [appAlertsError]);
 
   useEffect(() => {
+    if (appAlertsLoading) return;
+
+    const normalizedCurrentEmail = String(userProfile?.email || '').toLowerCase();
+    const messageAlerts = (appAlerts || []).filter((alert: any) => String(alert?.type || '') === 'message');
+    const nextIds = new Set<string>();
+
+    messageAlerts.forEach((alert: any) => {
+      const id = String(alert?.id || alert?.actionRef || `${alert?.title || ''}-${alert?.createdAt?.seconds || ''}`);
+      if (!id) return;
+      nextIds.add(id);
+
+      if (!hasLoadedMessageAlertsRef.current) return;
+      if (notifiedMessageAlertIdsRef.current.has(id)) return;
+      if (String(alert?.createdByEmail || '').toLowerCase() === normalizedCurrentEmail) return;
+
+      toast.info(alert?.title || 'Mensaje interno', {
+        description: alert?.message || '',
+        duration: 6500,
+      });
+    });
+
+    notifiedMessageAlertIdsRef.current = new Set([...notifiedMessageAlertIdsRef.current, ...nextIds]);
+    hasLoadedMessageAlertsRef.current = true;
+  }, [appAlerts, appAlertsLoading, userProfile?.email]);
+
+  useEffect(() => {
     if (settlementsError) toast.error(`Liquidaciones: ${settlementsError}`);
   }, [settlementsError]);
 
@@ -161,9 +195,21 @@ export function useAppDataDepartment({
 
   const { sendUserMessage } = useUserMessages({
     userProfile,
+    businessDayKey,
     refreshAppAlerts,
     onError: handleUserMessageError,
   });
+
+  const handleUnpinAppAlert = useCallback(async (alertId: string) => {
+    if (!alertId) return;
+    try {
+      await updateAppAlertPinned({ alertId, pinned: false });
+      refreshAppAlerts();
+      toast.success('Mensaje desfijado');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'app_alerts');
+    }
+  }, [refreshAppAlerts]);
 
   const handleGlobalSettingsError = useCallback((error: unknown, operation: 'get' | 'write', target: string) => {
     handleFirestoreError(error, operation === 'write' ? OperationType.WRITE : OperationType.GET, target);
@@ -205,6 +251,7 @@ export function useAppDataDepartment({
     getTicketPrizesFromSource,
     globalChancePriceFilter,
     globalSettings,
+    handleUnpinAppAlert,
     handleMainTouchEnd,
     handleMainTouchMove,
     handleMainTouchStart,

@@ -84,6 +84,7 @@ export function LiquidationSection(props: LiquidationSectionProps) {
     liquidationRangeReport,
     isLiquidationRangeLoading,
     fetchLiquidationRangeReport,
+    handleLiquidateRange,
   } = props;
 
   const [liquidationMode, setLiquidationMode] = useState<'daily' | 'range'>('daily');
@@ -151,9 +152,41 @@ export function LiquidationSection(props: LiquidationSectionProps) {
     { label: 'Liquidacion total', value: formatSignedCurrency(dailyRemainingBalance), tone: 'text-orange-400', emphasis: true },
   ];
 
-  const rangeSummary = liquidationRangeReport?.summary;
+  const savedRangeSummary = liquidationRangeReport?.summary;
   const rangeDays = liquidationRangeReport?.days || [];
   const rangeUser = liquidationRangeReport?.user;
+  const rangeSummary = rangeDays.length > 0
+    ? rangeDays.reduce((acc: any, day: any) => ({
+      totalSales: acc.totalSales + Number(day.totalSales || 0),
+      totalPrizes: acc.totalPrizes + Number(day.totalPrizes || 0),
+      totalCommissions: acc.totalCommissions + Number(day.totalCommissions || 0),
+      totalInjections: acc.totalInjections + Number(day.totalInjections || 0),
+      operationalProfit: acc.operationalProfit + Number(day.operationalProfit || 0),
+      capital: acc.capital + Number(day.capital || 0),
+      amountReceived: acc.amountReceived + Number(day.amountReceived || 0),
+      amountSent: acc.amountSent + Number(day.amountSent || 0),
+      pending: acc.pending + Number(day.pending || 0),
+    }), {
+      totalSales: 0,
+      totalPrizes: 0,
+      totalCommissions: 0,
+      totalInjections: 0,
+      operationalProfit: 0,
+      capital: 0,
+      amountReceived: 0,
+      amountSent: 0,
+      pending: 0,
+    })
+    : savedRangeSummary;
+  const rangePendingDays = rangeDays.filter((day: any) => Math.abs(Number(day?.pending || 0)) > BALANCE_EPSILON);
+  const rangeAmountToReceive = rangePendingDays.reduce((sum: number, day: any) => {
+    const pending = Number(day.pending || 0);
+    return pending > 0 ? sum + pending : sum;
+  }, 0);
+  const rangeAmountToSend = rangePendingDays.reduce((sum: number, day: any) => {
+    const pending = Number(day.pending || 0);
+    return pending < 0 ? sum + Math.abs(pending) : sum;
+  }, 0);
 
   const rangeRows: Array<{ label: string; value: string; tone: string; emphasis?: boolean }> = [
     { label: 'Ventas acumuladas', value: formatCurrency(rangeSummary?.totalSales), tone: 'text-white' },
@@ -579,6 +612,7 @@ export function LiquidationSection(props: LiquidationSectionProps) {
                   )}
                   {rangeDays.map((day: any) => {
                     const dayLiquidatedAmount = Number(day.amountReceived || 0) - Number(day.amountSent || 0);
+                    const dayPending = Number(day.pending || 0);
                     const dayHasSales = Math.abs(Number(day.totalSales || 0)) > BALANCE_EPSILON;
                     const dayStatusLabel = !dayHasSales ? 'Sin Ventas' : day.status === 'liquidated' ? 'Liquidado' : 'Pendiente';
                     const dayStatusClass = !dayHasSales
@@ -615,12 +649,50 @@ export function LiquidationSection(props: LiquidationSectionProps) {
                           Liquidado <strong className={getResultTone(dayLiquidatedAmount)}>{formatSignedCurrency(dayLiquidatedAmount)}</strong>
                         </span>
                         <span className="flex justify-between gap-1 text-muted-foreground">
-                          Por liquidar <strong className={getResultTone(Number(day.pending || 0))}>{formatSignedCurrency(day.pending)}</strong>
+                          Por liquidar <strong className={getResultTone(dayPending)}>{formatSignedCurrency(day.pending)}</strong>
                         </span>
                       </div>
+                      {canManageDailyLiquidation && (
+                        <div className="mt-2 flex items-center justify-between gap-2 border-t border-white/10 pt-1.5">
+                          <span className="text-[8px] font-mono uppercase tracking-widest text-muted-foreground">
+                            Cierre completo del dia
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleLiquidateRange(day.date)}
+                            disabled={isLiquidationRangeLoading || Math.abs(dayPending) <= BALANCE_EPSILON}
+                            className="h-7 rounded-md border border-emerald-400/25 bg-emerald-500/10 px-2 text-[8px] font-black uppercase tracking-widest text-emerald-300 transition-all hover:bg-emerald-500/15 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            Liquidar dia
+                          </button>
+                        </div>
+                      )}
                     </div>
                     );
                   })}
+                </section>
+              )}
+
+              {canManageDailyLiquidation && (
+                <section className="mt-3 rounded-md border border-emerald-400/20 bg-emerald-500/10 p-2">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-emerald-300">Liquidar rango completo</p>
+                      <p className="mt-0.5 text-[10px] text-muted-foreground">
+                        {rangePendingDays.length > 0
+                          ? `${rangePendingDays.length} dia${rangePendingDays.length === 1 ? '' : 's'} pendiente${rangePendingDays.length === 1 ? '' : 's'} - recibir ${formatCurrency(rangeAmountToReceive)} / enviar ${formatCurrency(rangeAmountToSend)}`
+                          : 'El rango mostrado ya esta cerrado.'}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleLiquidateRange()}
+                      disabled={isLiquidationRangeLoading || rangePendingDays.length === 0}
+                      className="h-8 rounded-md bg-emerald-500 px-2 text-[8px] font-black uppercase tracking-widest text-black transition-all hover:brightness-110 active:scale-95 disabled:cursor-not-allowed disabled:opacity-45"
+                    >
+                      {isLiquidationRangeLoading ? 'Liquidando' : 'Liquidar rango'}
+                    </button>
+                  </div>
                 </section>
               )}
             </article>

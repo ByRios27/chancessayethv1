@@ -98,6 +98,24 @@ export function useArchiveDomain({
     return Array.from(map.values());
   }, []);
 
+  const fetchLiveSettlementsByDate = useCallback(async (targetDate: string, userEmail?: string | null) => {
+    const normalizedEmail = normalizeEmail(userEmail);
+    const settlementsQuery = normalizedEmail
+      ? query(
+          collection(db, 'settlements'),
+          where('userEmail', '==', normalizedEmail),
+          where('date', '==', targetDate),
+          limit(500)
+        )
+      : query(
+          collection(db, 'settlements'),
+          where('date', '==', targetDate),
+          limit(500)
+        );
+    const settlementsSnap = await getDocs(settlementsQuery);
+    return settlementsSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Settlement));
+  }, [normalizeEmail]);
+
   const fetchScopedDataByDate = useCallback(async (targetDate: string, userEmail?: string | null) => {
     const normalizedEmail = normalizeEmail(userEmail);
     const archiveSnap = await getDoc(doc(db, 'daily_archives', targetDate));
@@ -109,6 +127,7 @@ export function useArchiveDomain({
         settlements?: Settlement[];
         results?: LotteryResult[];
       };
+      const liveSettlements = await fetchLiveSettlementsByDate(targetDate, userEmail);
 
       const scopedTickets = (archive.tickets || []).filter(ticket =>
         !normalizedEmail || normalizeEmail(ticket.sellerEmail) === normalizedEmail
@@ -124,7 +143,7 @@ export function useArchiveDomain({
       return {
         tickets: scopedTickets,
         injections: scopedInjections,
-        settlements: scopedSettlements,
+        settlements: dedupeById([...scopedSettlements, ...liveSettlements]),
         results: archive.results || [],
       };
     }
@@ -187,7 +206,7 @@ export function useArchiveDomain({
       settlements: settlementsSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Settlement)),
       results: resultsSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as LotteryResult)),
     };
-  }, [dedupeById, mergeTicketSnapshots, normalizeEmail, toDateRange]);
+  }, [dedupeById, fetchLiveSettlementsByDate, mergeTicketSnapshots, normalizeEmail, toDateRange]);
 
   const fetchUserOperationalDataByDate = useCallback(async (targetDate: string, userEmail: string) => {
     return fetchScopedDataByDate(targetDate, userEmail);

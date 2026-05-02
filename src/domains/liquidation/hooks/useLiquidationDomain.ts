@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { format } from 'date-fns';
 import { jsPDF } from 'jspdf';
 import { toast } from 'sonner';
@@ -18,12 +18,16 @@ import {
   writeBatch,
 } from '../../../firebase';
 import { useLiquidation } from '../../../hooks/useLiquidation';
+import { findLatestSettlementForUserDate } from '../../../services/calculations/liquidation';
 import { createCeoAdminAlert } from '../../../services/repositories/appAlertsRepo';
 import type { Injection, Settlement } from '../../../types/finance';
 import type { LotteryResult } from '../../../types/results';
 import type { LotteryTicket } from '../../../types/bets';
 
 const BALANCE_EPSILON = 0.005;
+
+const getSettlementAmountReceived = (settlement: Settlement) => Number(settlement.amountReceived ?? settlement.amountPaid ?? 0);
+const getSettlementAmountSent = (settlement: Settlement) => Number(settlement.amountSent ?? 0);
 
 export function useLiquidationDomain(params: any) {
   const {
@@ -80,6 +84,7 @@ export function useLiquidationDomain(params: any) {
   const [liquidationRangeEndDate, setLiquidationRangeEndDate] = useState<string>(businessDayKey);
   const [liquidationRangeReport, setLiquidationRangeReport] = useState<any>(null);
   const [isLiquidationRangeLoading, setIsLiquidationRangeLoading] = useState(false);
+  const skipFastRangeSettlementsQueryRef = useRef(false);
 
   const {
     amountPaid,
@@ -148,14 +153,56 @@ export function useLiquidationDomain(params: any) {
     return Array.from(map.values());
   }, []);
 
-  const fetchLiquidationDayData = useCallback(async (targetDate: string, userEmail: string) => {
+  const fetchLiveSettlementsForDay = useCallback(async (targetDate: string, userEmail: string) => {
+    const normalizedEmail = normalizeEmail(userEmail);
+    const settlementsSnap = await getDocs(query(
+      collection(db, 'settlements'),
+      where('userEmail', '==', normalizedEmail),
+      where('date', '==', targetDate),
+      limit(500)
+    ));
+
+    return settlementsSnap.docs.map((docSnap: any) => ({ id: docSnap.id, ...docSnap.data() } as Settlement));
+  }, [normalizeEmail]);
+
+  const fetchLiveSettlementsForRange = useCallback(async (userEmail: string, startDate: string, endDate: string) => {
+    if (skipFastRangeSettlementsQueryRef.current) return null;
+
+    const normalizedEmail = normalizeEmail(userEmail);
+
+    try {
+      const settlementsSnap = await getDocs(query(
+        collection(db, 'settlements'),
+        where('userEmail', '==', normalizedEmail),
+        where('date', '>=', startDate),
+        where('date', '<=', endDate),
+        limit(3000)
+      ));
+      const byDate = new Map<string, Settlement[]>();
+      settlementsSnap.docs.forEach((docSnap: any) => {
+        const settlement = { id: docSnap.id, ...docSnap.data() } as Settlement;
+        const dateValue = String(settlement.date || '');
+        if (!dateValue) return;
+        const list = byDate.get(dateValue) || [];
+        list.push(settlement);
+        byDate.set(dateValue, list);
+      });
+      return byDate;
+    } catch (error) {
+      skipFastRangeSettlementsQueryRef.current = true;
+      console.warn('Fast range settlements query failed; falling back to day queries:', error);
+      return null;
+    }
+  }, [normalizeEmail]);
+
+  const fetchLiquidationDayData = useCallback(async (targetDate: string, userEmail: string, preloadedLiveSettlements?: Settlement[] | null) => {
     const normalizedEmail = normalizeEmail(userEmail);
 
     if (targetDate === businessDayKey) {
       return {
         tickets: tickets.filter((ticket: LotteryTicket) => normalizeEmail(ticket.sellerEmail) === normalizedEmail),
         injections: injections.filter((injection: Injection) => normalizeEmail(injection.userEmail) === normalizedEmail && injection.date === targetDate),
-        settlements: settlements.filter((settlement: Settlement) => normalizeEmail(settlement.userEmail) === normalizedEmail && settlement.date === targetDate),
+        settlements: preloadedLiveSettlements ?? settlements.filter((settlement: Settlement) => normalizeEmail(settlement.userEmail) === normalizedEmail && settlement.date === targetDate),
         results: results.filter((result: LotteryResult) => result.date === targetDate),
       };
     }
@@ -168,16 +215,29 @@ export function useLiquidationDomain(params: any) {
         settlements?: Settlement[];
         results?: LotteryResult[];
       };
+      const liveSettlements = preloadedLiveSettlements ?? await fetchLiveSettlementsForDay(targetDate, normalizedEmail);
 
       return {
         tickets: (archive.tickets || []).filter((ticket) => normalizeEmail(ticket.sellerEmail) === normalizedEmail),
         injections: (archive.injections || []).filter((injection) => normalizeEmail(injection.userEmail) === normalizedEmail && injection.date === targetDate),
-        settlements: (archive.settlements || []).filter((settlement) => normalizeEmail(settlement.userEmail) === normalizedEmail && settlement.date === targetDate),
+        settlements: dedupeById([
+          ...liveSettlements,
+          ...(archive.settlements || []).filter((settlement) => normalizeEmail(settlement.userEmail) === normalizedEmail && settlement.date === targetDate),
+        ]),
         results: archive.results || [],
       };
     }
 
     const { start, end } = getBusinessDayRange(targetDate);
+    const settlementsPromise = preloadedLiveSettlements
+      ? Promise.resolve(null)
+      : getDocs(query(
+          collection(db, 'settlements'),
+          where('userEmail', '==', normalizedEmail),
+          where('date', '==', targetDate),
+          limit(500)
+        ));
+
     const [ticketsSnap, injectionsSnap, settlementsSnap, resultsSnap] = await Promise.all([
       getDocs(query(
         collection(db, 'tickets'),
@@ -192,12 +252,7 @@ export function useLiquidationDomain(params: any) {
         where('date', '==', targetDate),
         limit(500)
       )),
-      getDocs(query(
-        collection(db, 'settlements'),
-        where('userEmail', '==', normalizedEmail),
-        where('date', '==', targetDate),
-        limit(500)
-      )),
+      settlementsPromise,
       getDocs(query(
         collection(db, 'results'),
         where('date', '==', targetDate),
@@ -208,11 +263,13 @@ export function useLiquidationDomain(params: any) {
     return {
       tickets: ticketsSnap.docs.map((docSnap: any) => ({ id: docSnap.id, ...docSnap.data() } as LotteryTicket)),
       injections: injectionsSnap.docs.map((docSnap: any) => ({ id: docSnap.id, ...docSnap.data() } as Injection)),
-      settlements: settlementsSnap.docs.map((docSnap: any) => ({ id: docSnap.id, ...docSnap.data() } as Settlement)),
+      settlements: preloadedLiveSettlements ?? settlementsSnap?.docs.map((docSnap: any) => ({ id: docSnap.id, ...docSnap.data() } as Settlement)) ?? [],
       results: resultsSnap.docs.map((docSnap: any) => ({ id: docSnap.id, ...docSnap.data() } as LotteryResult)),
     };
   }, [
     businessDayKey,
+    dedupeById,
+    fetchLiveSettlementsForDay,
     getBusinessDayRange,
     injections,
     normalizeEmail,
@@ -247,10 +304,18 @@ export function useLiquidationDomain(params: any) {
 
     try {
       const dates = getDatesInRange(liquidationRangeStartDate, liquidationRangeEndDate);
-      const days = [];
+      const liveSettlementsByDate = await fetchLiveSettlementsForRange(
+        selectedUserToLiquidate,
+        liquidationRangeStartDate,
+        liquidationRangeEndDate
+      );
 
-      for (const dateValue of dates) {
-        const dayData = await fetchLiquidationDayData(dateValue, selectedUserToLiquidate);
+      const days = await Promise.all(dates.map(async (dateValue) => {
+        const dayData = await fetchLiquidationDayData(
+          dateValue,
+          selectedUserToLiquidate,
+          liveSettlementsByDate ? (liveSettlementsByDate.get(dateValue) || []) : undefined
+        );
         const uniqueTickets = dedupeById<LotteryTicket>(dayData.tickets as LotteryTicket[]);
         const uniqueInjections = dedupeById<Injection>(dayData.injections as Injection[]);
         const uniqueSettlements = dedupeById<Settlement>(dayData.settlements as Settlement[]);
@@ -265,17 +330,13 @@ export function useLiquidationDomain(params: any) {
           prizeResolver: (ticketItem: LotteryTicket) => getTicketPrizesFromSource(ticketItem, uniqueResults),
         });
 
-        const amountReceived = uniqueSettlements.reduce((sum, settlement) => (
-          sum + Number(settlement.amountReceived ?? settlement.amountPaid ?? 0)
-        ), 0);
-        const amountSent = uniqueSettlements.reduce((sum, settlement) => (
-          sum + Number(settlement.amountSent ?? 0)
-        ), 0);
+        const amountReceived = uniqueSettlements.reduce((sum, settlement) => sum + getSettlementAmountReceived(settlement), 0);
+        const amountSent = uniqueSettlements.reduce((sum, settlement) => sum + getSettlementAmountSent(settlement), 0);
         const operationalProfit = Number(summary.operationalProfit ?? summary.netProfit ?? 0);
         const capital = operationalProfit + Number(summary.totalInjections || 0);
         const pending = capital - amountReceived + amountSent;
 
-        days.push({
+        return {
           date: dateValue,
           totalSales: summary.totalSales,
           totalPrizes: summary.totalPrizes,
@@ -287,8 +348,8 @@ export function useLiquidationDomain(params: any) {
           amountSent,
           pending,
           status: uniqueSettlements.length > 0 && Math.abs(pending) <= BALANCE_EPSILON ? 'liquidated' : 'pending',
-        });
-      }
+        };
+      }));
 
       const summary = days.reduce((acc, day) => ({
         totalSales: acc.totalSales + day.totalSales,
@@ -329,6 +390,7 @@ export function useLiquidationDomain(params: any) {
     buildFinancialSummary,
     dedupeById,
     fetchLiquidationDayData,
+    fetchLiveSettlementsForRange,
     getDatesInRange,
     getTicketPrizesFromSource,
     liquidationRangeEndDate,
@@ -611,6 +673,379 @@ export function useLiquidationDomain(params: any) {
           setAmountDirection(previewAmountDirection);
         } catch (error) {
           onError(error, 'write', 'settlements');
+        }
+      },
+    }));
+  };
+
+  const handleLiquidateRange = async (targetDate?: string) => {
+    if (!selectedUserToLiquidate) {
+      toast.error('Selecciona un vendedor para liquidar el rango');
+      return;
+    }
+
+    if (!userProfile || !['ceo', 'admin'].includes(userProfile.role)) {
+      toast.error('No tienes permisos para liquidar');
+      return;
+    }
+
+    if (!liquidationRangeReport) {
+      toast.error('Primero consulta el rango');
+      return;
+    }
+
+    const userToLiquidate = users.find((userItem: any) => normalizeEmail(userItem.email) === normalizeEmail(selectedUserToLiquidate));
+    if (!userToLiquidate) {
+      toast.error('No se encontro el vendedor');
+      return;
+    }
+
+    const targetDay = typeof targetDate === 'string' && targetDate ? targetDate : null;
+    const pendingDays = (liquidationRangeReport.days || []).filter((day: any) => (
+      Math.abs(Number(day?.pending || 0)) > BALANCE_EPSILON
+    )).filter((day: any) => (
+      targetDay ? String(day?.date || '') === targetDay : true
+    ));
+
+    if (pendingDays.length === 0) {
+      toast.success(targetDay ? 'Ese dia no tiene pendiente' : 'El rango no tiene dias pendientes');
+      return;
+    }
+
+    const totalToReceive = pendingDays.reduce((sum: number, day: any) => {
+      const pending = Number(day.pending || 0);
+      return pending > 0 ? sum + pending : sum;
+    }, 0);
+    const totalToSend = pendingDays.reduce((sum: number, day: any) => {
+      const pending = Number(day.pending || 0);
+      return pending < 0 ? sum + Math.abs(pending) : sum;
+    }, 0);
+    const rangeLabel = targetDay || `${liquidationRangeReport.startDate} a ${liquidationRangeReport.endDate}`;
+    const scopeLabel = targetDay ? 'dia' : 'rango';
+
+    setConfirmModal((prev: any) => ({
+      ...prev,
+      show: true,
+      title: targetDay ? 'Confirmar Liquidacion del Dia' : 'Confirmar Liquidacion por Rango',
+      message: `Seguro de liquidar por completo a ${userToLiquidate.name || userToLiquidate.email} del ${scopeLabel} ${rangeLabel}?\n\nDias pendientes: ${pendingDays.length}\nTotal a recibir: USD ${totalToReceive.toFixed(2)}\nTotal a enviar: USD ${totalToSend.toFixed(2)}\n\nEsta accion cerrara por completo ${targetDay ? 'el dia seleccionado' : 'cada dia pendiente dentro del rango mostrado'}.`,
+      onConfirm: async () => {
+        setIsLiquidationRangeLoading(true);
+        try {
+          const normalizedUserEmail = normalizeEmail(userToLiquidate.email);
+          let rollingDebt = Number(userToLiquidate.currentDebt || 0);
+          const settlementRecords: Settlement[] = [];
+          const currentDayTicketSettlements = new Map<string, string>();
+          const currentDayInjectionSettlements = new Map<string, string>();
+          let appliedAmountReceived = 0;
+          let appliedAmountSent = 0;
+          const closedDayAdjustments = new Map<string, {
+            received: number;
+            sent: number;
+            settlementId: string;
+          }>();
+
+          for (const reportDay of pendingDays) {
+            const dateValue = String(reportDay.date || '');
+            if (!dateValue) continue;
+
+            const dayData = await fetchLiquidationDayData(dateValue, normalizedUserEmail);
+            const uniqueTickets = dedupeById<LotteryTicket>(dayData.tickets as LotteryTicket[]);
+            const uniqueInjections = dedupeById<Injection>(dayData.injections as Injection[]);
+            const uniqueSettlements = dedupeById<Settlement>(dayData.settlements as Settlement[]);
+            const uniqueResults = dedupeById<LotteryResult>(dayData.results as LotteryResult[]);
+
+            const financialSummary = buildFinancialSummary({
+              tickets: uniqueTickets,
+              injections: uniqueInjections,
+              settlements: uniqueSettlements,
+              userEmail: normalizedUserEmail,
+              targetDate: dateValue,
+              prizeResolver: (ticketItem: LotteryTicket) => getTicketPrizesFromSource(ticketItem, uniqueResults),
+            });
+
+            const existingSettlement = findLatestSettlementForUserDate({
+              settlements: uniqueSettlements,
+              userEmail: normalizedUserEmail,
+              targetDate: dateValue,
+            });
+            const otherSettlements = existingSettlement
+              ? uniqueSettlements.filter((settlement) => settlement.id !== existingSettlement.id)
+              : uniqueSettlements;
+            const otherAmountReceived = otherSettlements.reduce((sum, settlement) => sum + getSettlementAmountReceived(settlement), 0);
+            const otherAmountSent = otherSettlements.reduce((sum, settlement) => sum + getSettlementAmountSent(settlement), 0);
+            const totalAmountReceived = uniqueSettlements.reduce((sum, settlement) => sum + getSettlementAmountReceived(settlement), 0);
+            const totalAmountSent = uniqueSettlements.reduce((sum, settlement) => sum + getSettlementAmountSent(settlement), 0);
+            const totalSales = Number(financialSummary.totalSales || 0);
+            const totalCommissions = Number(financialSummary.totalCommissions || 0);
+            const totalPrizes = Number(financialSummary.totalPrizes || 0);
+            const totalInjections = Number(financialSummary.totalInjections || 0);
+            const operationalProfit = Number(financialSummary.operationalProfit ?? financialSummary.netProfit ?? 0);
+            const liquidationBalance = operationalProfit + totalInjections;
+            const freshPending = liquidationBalance - totalAmountReceived + totalAmountSent;
+
+            if (Math.abs(freshPending) <= BALANCE_EPSILON) continue;
+            appliedAmountReceived += freshPending > 0 ? freshPending : 0;
+            appliedAmountSent += freshPending < 0 ? Math.abs(freshPending) : 0;
+
+            const finalSettlementNet = liquidationBalance - otherAmountReceived + otherAmountSent;
+            const finalAmountDirection = finalSettlementNet < 0 ? 'sent' : 'received';
+            const finalAmountReceived = finalSettlementNet >= 0 ? finalSettlementNet : 0;
+            const finalAmountSent = finalSettlementNet < 0 ? Math.abs(finalSettlementNet) : 0;
+            const finalAmountEntered = Math.abs(finalSettlementNet);
+            const existingDebtImpact = Number(existingSettlement?.debtAdded || 0);
+            const previousDebt = rollingDebt - existingDebtImpact;
+            const finalDebtAdded = 0;
+            const finalNewTotalDebt = previousDebt + finalDebtAdded;
+
+            const settlementPayload = {
+              userEmail: normalizedUserEmail,
+              sellerEmail: normalizedUserEmail,
+              sellerId: userToLiquidate.sellerId || null,
+              date: dateValue,
+              totalSales,
+              totalCommissions,
+              totalPrizes,
+              totalInjections,
+              sales: totalSales,
+              prizes: totalPrizes,
+              commission: totalCommissions,
+              dailyResult: operationalProfit,
+              dailyInjectionTotal: totalInjections,
+              previousBalance: previousDebt,
+              finalBalance: finalNewTotalDebt,
+              operationalProfit,
+              liquidationBalance,
+              netProfit: operationalProfit,
+              net: operationalProfit,
+              amountPaid: finalAmountReceived,
+              amountDirection: finalAmountDirection,
+              amountReceived: finalAmountReceived,
+              amountSent: finalAmountSent,
+              amountEntered: finalAmountEntered,
+              debtAdded: finalDebtAdded,
+              previousDebt,
+              newTotalDebt: finalNewTotalDebt,
+              status: 'closed',
+              closed: true,
+              closedAt: serverTimestamp(),
+              closedByEmail: userProfile?.email,
+              liquidatedBy: userProfile?.email,
+              updatedAt: serverTimestamp(),
+            };
+
+            let settlementId = existingSettlement?.id || '';
+            if (existingSettlement) {
+              await updateDoc(doc(db, 'settlements', existingSettlement.id), settlementPayload);
+            } else {
+              const settlementRef = await addDoc(collection(db, 'settlements'), {
+                ...settlementPayload,
+                timestamp: serverTimestamp(),
+              });
+              settlementId = settlementRef.id;
+            }
+
+            const effectiveSettlementId = settlementId || existingSettlement?.id || '';
+            rollingDebt = finalNewTotalDebt;
+            settlementRecords.push({
+              id: effectiveSettlementId,
+              userEmail: normalizedUserEmail,
+              sellerId: userToLiquidate.sellerId || null,
+              date: dateValue,
+              totalSales,
+              totalCommissions,
+              totalPrizes,
+              totalInjections,
+              sales: totalSales,
+              prizes: totalPrizes,
+              commission: totalCommissions,
+              dailyResult: operationalProfit,
+              dailyInjectionTotal: totalInjections,
+              previousBalance: previousDebt,
+              finalBalance: finalNewTotalDebt,
+              operationalProfit,
+              liquidationBalance,
+              netProfit: operationalProfit,
+              net: operationalProfit,
+              amountPaid: finalAmountReceived,
+              amountDirection: finalAmountDirection,
+              amountReceived: finalAmountReceived,
+              amountSent: finalAmountSent,
+              amountEntered: finalAmountEntered,
+              debtAdded: finalDebtAdded,
+              previousDebt,
+              newTotalDebt: finalNewTotalDebt,
+              status: 'closed',
+              closed: true,
+              closedByEmail: userProfile?.email,
+              liquidatedBy: userProfile?.email,
+              timestamp: existingSettlement?.timestamp,
+            } as Settlement);
+
+            closedDayAdjustments.set(dateValue, {
+              received: freshPending > 0 ? freshPending : 0,
+              sent: freshPending < 0 ? Math.abs(freshPending) : 0,
+              settlementId: effectiveSettlementId,
+            });
+
+            if (dateValue === businessDayKey && effectiveSettlementId) {
+              const ticketsToLiquidate = financialSummary.tickets.filter((ticket: LotteryTicket) =>
+                ticket.status === 'active' && !ticket.settlementId && !ticket.liquidated
+              );
+              const injectionsToLiquidate = financialSummary.injections.filter((injection: Injection) =>
+                !injection.settlementId && !injection.liquidated
+              );
+
+              for (let i = 0; i < ticketsToLiquidate.length; i += 450) {
+                const chunk = ticketsToLiquidate.slice(i, i + 450);
+                const batch = writeBatch(db);
+                chunk.forEach((ticket: LotteryTicket) => {
+                  currentDayTicketSettlements.set(ticket.id, effectiveSettlementId);
+                  batch.update(doc(db, 'tickets', ticket.id), {
+                    status: 'liquidated',
+                    liquidated: true,
+                    settlementId: effectiveSettlementId,
+                  });
+                });
+                await batch.commit();
+              }
+
+              for (let i = 0; i < injectionsToLiquidate.length; i += 500) {
+                const chunk = injectionsToLiquidate.slice(i, i + 500);
+                const batch = writeBatch(db);
+                chunk.forEach((injection: Injection) => {
+                  currentDayInjectionSettlements.set(injection.id, effectiveSettlementId);
+                  batch.update(doc(db, 'injections', injection.id), {
+                    liquidated: true,
+                    settlementId: effectiveSettlementId,
+                  });
+                });
+                await batch.commit();
+              }
+            }
+          }
+
+          if (settlementRecords.length === 0) {
+            toast.success('El rango ya estaba liquidado');
+            return;
+          }
+
+          await updateDoc(doc(db, 'users', userToLiquidate.email), { currentDebt: rollingDebt });
+          if (typeof setUsers === 'function') {
+            setUsers((prev: any[]) => prev.map((userItem) => (
+              normalizeEmail(userItem.email) === normalizedUserEmail
+                ? { ...userItem, currentDebt: rollingDebt }
+                : userItem
+            )));
+          }
+
+          if (currentDayTicketSettlements.size > 0) {
+            setTickets((prev: LotteryTicket[]) => prev.map(ticket => (
+              currentDayTicketSettlements.has(ticket.id)
+                ? { ...ticket, liquidated: true, settlementId: currentDayTicketSettlements.get(ticket.id), status: 'liquidated' as any }
+                : ticket
+            )));
+          }
+          if (currentDayInjectionSettlements.size > 0) {
+            setInjections((prev: Injection[]) => prev.map(injection => (
+              currentDayInjectionSettlements.has(injection.id)
+                ? { ...injection, liquidated: true, settlementId: currentDayInjectionSettlements.get(injection.id) }
+                : injection
+            )));
+          }
+
+          const upsertSettlements = (items: Settlement[]) => {
+            const map = new Map(items.map(item => [item.id, item]));
+            settlementRecords.forEach((record) => {
+              map.set(record.id, { ...(map.get(record.id) || {}), ...record });
+            });
+            return Array.from(map.values());
+          };
+
+          setLiquidationSettlementsSnapshot((prev: Settlement[]) => upsertSettlements(prev));
+          if (typeof setSettlements === 'function') {
+            setSettlements((prev: Settlement[]) => upsertSettlements(prev));
+          }
+
+          setLiquidationRangeReport((prev: any) => {
+            if (!prev) return prev;
+            const days = (prev.days || []).map((day: any) => {
+              const adjustment = closedDayAdjustments.get(String(day.date || ''));
+              if (!adjustment) return day;
+              return {
+                ...day,
+                amountReceived: Number(day.amountReceived || 0) + adjustment.received,
+                amountSent: Number(day.amountSent || 0) + adjustment.sent,
+                pending: 0,
+                settlementId: adjustment.settlementId,
+                status: 'liquidated',
+              };
+            });
+            const summary = days.reduce((acc: any, day: any) => ({
+              totalSales: acc.totalSales + Number(day.totalSales || 0),
+              totalPrizes: acc.totalPrizes + Number(day.totalPrizes || 0),
+              totalCommissions: acc.totalCommissions + Number(day.totalCommissions || 0),
+              totalInjections: acc.totalInjections + Number(day.totalInjections || 0),
+              operationalProfit: acc.operationalProfit + Number(day.operationalProfit || 0),
+              capital: acc.capital + Number(day.capital || 0),
+              amountReceived: acc.amountReceived + Number(day.amountReceived || 0),
+              amountSent: acc.amountSent + Number(day.amountSent || 0),
+              pending: acc.pending + Number(day.pending || 0),
+            }), {
+              totalSales: 0,
+              totalPrizes: 0,
+              totalCommissions: 0,
+              totalInjections: 0,
+              operationalProfit: 0,
+              capital: 0,
+              amountReceived: 0,
+              amountSent: 0,
+              pending: 0,
+            });
+
+            return { ...prev, days, summary };
+          });
+
+          const actorEmail = String(userProfile?.email || '').toLowerCase();
+          const actorRole = String(userProfile?.role || '').toLowerCase();
+          if (actorEmail && (actorRole === 'admin' || actorRole === 'ceo')) {
+            await createCeoAdminAlert({
+              type: `${actorRole}_liquidation_range_closed`,
+              priority: 78,
+              title: targetDay ? 'Liquidacion de dia registrada' : 'Liquidacion por rango registrada',
+              message: `${userProfile?.name || actorEmail} liquido ${scopeLabel} de ${userToLiquidate.name || normalizedUserEmail} del ${rangeLabel}: recibido USD ${appliedAmountReceived.toFixed(2)}, enviado USD ${appliedAmountSent.toFixed(2)}.`,
+              createdByEmail: actorEmail,
+              createdByRole: actorRole,
+              metadata: {
+                actorName: userProfile?.name || '',
+                actorSellerId: userProfile?.sellerId || '',
+                actorRole,
+                targetEmail: normalizedUserEmail,
+                targetName: userToLiquidate.name || '',
+                targetSellerId: userToLiquidate.sellerId || '',
+                startDate: liquidationRangeReport.startDate,
+                endDate: liquidationRangeReport.endDate,
+                date: targetDay || '',
+                daysClosed: settlementRecords.length,
+                amountReceived: appliedAmountReceived,
+                amountSent: appliedAmountSent,
+                settlementIds: settlementRecords.map((record) => record.id),
+                newTotalDebt: rollingDebt,
+              },
+              actionRef: targetDay
+                ? `settlements/range/${normalizedUserEmail}/${targetDay}`
+                : `settlements/range/${normalizedUserEmail}/${liquidationRangeReport.startDate}/${liquidationRangeReport.endDate}`,
+            }).catch((error) => {
+              console.error('App alert failed (range liquidation save):', error);
+            });
+          }
+
+          toastSuccess(targetDay
+            ? `Dia ${targetDay} liquidado por completo`
+            : `Rango liquidado por completo (${settlementRecords.length} dia${settlementRecords.length === 1 ? '' : 's'})`);
+        } catch (error) {
+          onError(error, 'write', 'settlements');
+        } finally {
+          setIsLiquidationRangeLoading(false);
         }
       },
     }));
@@ -1171,6 +1606,7 @@ export function useLiquidationDomain(params: any) {
     liquidationRangeReport,
     isLiquidationRangeLoading,
     fetchLiquidationRangeReport,
+    handleLiquidateRange,
     handleLiquidate,
     generateConsolidatedReport,
   };

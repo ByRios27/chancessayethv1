@@ -1,5 +1,5 @@
 ﻿import { motion } from 'motion/react';
-import { ChevronDown, ChevronRight, Zap } from 'lucide-react';
+import { ChevronDown, ChevronRight, Pin, Zap } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useDashboardStatsDomain } from '../hooks/useDashboardStatsDomain';
 import { getTicketPrimaryLabel, getTicketSecondaryId } from '../../../utils/tickets';
@@ -31,6 +31,7 @@ export function DashboardStatsDomain(props: any) {
     userStats,
     appAlerts,
     appAlertsLoading,
+    onUnpinAppAlert,
   } = props;
 
   const role = String(userProfile?.role ?? '').toLowerCase();
@@ -143,25 +144,45 @@ export function DashboardStatsDomain(props: any) {
 
   const visibleDashboardAlerts = useMemo(() => {
     const visibleAppAlerts = safeAppAlerts.filter((alert: any) => (
-      isSameOperationalDay(alert) && !isInjectionAlertType(alert?.type)
+      isSameOperationalDay(alert) &&
+      !isInjectionAlertType(alert?.type) &&
+      !(
+        String(alert?.type || '') === 'message' &&
+        String(alert?.createdByEmail || '').toLowerCase() === currentUserEmail &&
+        String(alert?.targetUserEmail || '').toLowerCase() !== currentUserEmail &&
+        alert?.global !== true &&
+        alert?.pinned !== true
+      )
     ));
 
     const appAlertRows = visibleAppAlerts.map((alert: any) => ({
       id: `app-${alert.id || alert.actionRef || alert.title}`,
+      alertId: alert.id || '',
       priority: Number(alert.priority || 0),
       title: alert.title || 'Alerta',
       message: alert.message || '',
       createdAtMs: timestampMs(alert.createdAt),
+      pinnedAtMs: timestampMs(alert.pinnedAt),
+      pinned: alert.pinned === true,
+      type: alert.type || '',
+      createdByEmail: String(alert.createdByEmail || '').toLowerCase(),
     }));
 
-    return appAlertRows
-      .sort((a, b) => {
-        const priorityDiff = Number(b.priority || 0) - Number(a.priority || 0);
-        if (priorityDiff !== 0) return priorityDiff;
-        return Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0);
-      })
-      .slice(0, 3);
-  }, [safeAppAlerts, todayBusinessRange.endMs, todayBusinessRange.startMs, todayStr]);
+    const sortedRows = appAlertRows.sort((a, b) => {
+      const priorityDiff = Number(b.priority || 0) - Number(a.priority || 0);
+      if (priorityDiff !== 0) return priorityDiff;
+      return Number(b.createdAtMs || 0) - Number(a.createdAtMs || 0);
+    });
+    const pinnedMessage = sortedRows
+      .filter((alert) => alert.pinned && String(alert.type || '') === 'message')
+      .sort((a, b) => Number(b.pinnedAtMs || b.createdAtMs || 0) - Number(a.pinnedAtMs || a.createdAtMs || 0))[0];
+
+    if (!pinnedMessage) return sortedRows.slice(0, 3);
+    return [
+      pinnedMessage,
+      ...sortedRows.filter((alert) => alert.id !== pinnedMessage.id).slice(0, 2),
+    ];
+  }, [currentUserEmail, safeAppAlerts, todayBusinessRange.endMs, todayBusinessRange.startMs, todayStr]);
 
   useEffect(() => {
     if (mode !== 'stats') return;
@@ -293,9 +314,26 @@ export function DashboardStatsDomain(props: any) {
                   : Number(alert.priority || 0) >= 70
                     ? 'text-blue-300'
                     : 'text-white/90';
+              const canUnpin = alert.pinned && alert.alertId && (
+                alert.createdByEmail === currentUserEmail || role === 'ceo'
+              );
               return (
-                <div key={alert.id} className="text-[11px] leading-snug">
-                  <p className={`font-semibold truncate ${tone}`}>{alert.title}</p>
+                <div key={alert.id} className={`text-[11px] leading-snug ${alert.pinned ? 'rounded-md border border-primary/30 bg-primary/10 p-2' : ''}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className={`font-semibold truncate ${alert.pinned ? 'text-primary' : tone}`}>
+                      {alert.pinned && <Pin className="mr-1 inline h-3 w-3" />}
+                      {alert.title}
+                    </p>
+                    {canUnpin && (
+                      <button
+                        type="button"
+                        onClick={() => onUnpinAppAlert?.(alert.alertId)}
+                        className="shrink-0 rounded border border-white/10 px-1.5 py-0.5 text-[8px] font-black uppercase tracking-widest text-white/70 hover:text-white"
+                      >
+                        Desfijar
+                      </button>
+                    )}
+                  </div>
                   <p className="text-white/70 truncate">{alert.message}</p>
                 </div>
               );

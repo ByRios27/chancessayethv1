@@ -67,6 +67,7 @@ export function AppMainContent(props: any) {
     dailyAuditLogs,
     appAlerts,
     appAlertsLoading,
+    onUnpinAppAlert,
     isMultipleMode,
     setIsMultipleMode,
     showMultiSelect,
@@ -215,6 +216,7 @@ export function AppMainContent(props: any) {
     amountDirection,
     setAmountDirection,
     handleLiquidate,
+    handleLiquidateRange,
     liquidationPreview,
     archiveDate,
     setArchiveDate,
@@ -282,6 +284,7 @@ export function AppMainContent(props: any) {
                 auditLogs={dailyAuditLogs}
                 appAlerts={appAlerts}
                 appAlertsLoading={appAlertsLoading}
+                onUnpinAppAlert={onUnpinAppAlert}
               />
             </Suspense>
           )}
@@ -531,6 +534,7 @@ export function AppMainContent(props: any) {
                 amountDirection={amountDirection}
                 setAmountDirection={setAmountDirection}
                 handleLiquidate={handleLiquidate}
+                handleLiquidateRange={handleLiquidateRange}
                 liquidationPreview={liquidationPreview}
                 shareImageDataUrl={shareImageDataUrl}
                 downloadDataUrlFile={downloadDataUrlFile}

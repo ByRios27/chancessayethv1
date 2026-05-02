@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { motion } from 'motion/react';
-import { Edit2, Plus, Send, Settings, Trash2, User as UserIcon, Zap } from 'lucide-react';
+import { Edit2, Pin, Plus, Send, Settings, Trash2, User as UserIcon, Zap } from 'lucide-react';
 import { USERS_DOMAIN_SPEC, canExecuteUsersAction } from '../../domains/users/domainSpec';
 import type { Injection } from '../../types/finance';
 
@@ -22,7 +22,7 @@ type UsersSectionProps = {
   canMutateInjection: (injection: Injection) => boolean;
   updateInjectionAmount: (injection: Injection, nextAmount: number) => Promise<void>;
   deleteInjection: (injection: Injection) => void;
-  sendUserMessage: (params: { message: string; targetUserEmail?: string; global?: boolean }) => Promise<void>;
+  sendUserMessage: (params: { message: string; targetUserEmail?: string; global?: boolean; pinned?: boolean }) => Promise<void>;
 };
 
 export function UsersSection({
@@ -59,6 +59,7 @@ export function UsersSection({
   const [editingInjectionAmount, setEditingInjectionAmount] = useState('');
   const [messageMode, setMessageMode] = useState<'individual' | 'global'>('individual');
   const [messageText, setMessageText] = useState('');
+  const [messagePinned, setMessagePinned] = useState(false);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
 
   const validUsers = useMemo(() => {
@@ -189,6 +190,19 @@ export function UsersSection({
               />
               <button
                 type="button"
+                onClick={() => setMessagePinned((value) => !value)}
+                className={`h-10 px-3 rounded-lg border text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 ${
+                  messagePinned
+                    ? 'border-primary/40 bg-primary/15 text-primary'
+                    : 'border-white/10 bg-black/20 text-muted-foreground hover:text-white'
+                }`}
+                title="Fijar mensaje en alertas"
+              >
+                <Pin className="w-3.5 h-3.5" />
+                Fijar
+              </button>
+              <button
+                type="button"
                 disabled={isSendingMessage || !messageText.trim() || (messageMode === 'individual' && !selectedUser?.email)}
                 onClick={async () => {
                   setIsSendingMessage(true);
@@ -197,8 +211,10 @@ export function UsersSection({
                       message: messageText,
                       global: messageMode === 'global',
                       targetUserEmail: messageMode === 'individual' ? selectedUser?.email : undefined,
+                      pinned: messagePinned,
                     });
                     setMessageText('');
+                    setMessagePinned(false);
                   } finally {
                     setIsSendingMessage(false);
                   }

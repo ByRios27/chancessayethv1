@@ -8,19 +8,22 @@ import { toastSuccess } from '../utils/toast';
 
 interface UseUserMessagesParams {
   userProfile?: UserProfile | null;
+  businessDayKey?: string;
   refreshAppAlerts: () => void;
   onError: (error: unknown, target: string) => void;
 }
 
-export function useUserMessages({ userProfile, refreshAppAlerts, onError }: UseUserMessagesParams) {
+export function useUserMessages({ userProfile, businessDayKey, refreshAppAlerts, onError }: UseUserMessagesParams) {
   const sendUserMessage = useCallback(async ({
     message,
     targetUserEmail,
     global,
+    pinned,
   }: {
     message: string;
     targetUserEmail?: string;
     global?: boolean;
+    pinned?: boolean;
   }) => {
     const normalizedRole = String(userProfile?.role || '').toLowerCase();
     if (normalizedRole !== 'ceo' && normalizedRole !== 'admin') {
@@ -51,10 +54,14 @@ export function useUserMessages({ userProfile, refreshAppAlerts, onError }: UseU
         targetUserEmail: global ? '' : normalizedTargetEmail,
         global: global === true,
         readBy: [],
+        pinned: pinned === true,
+        pinnedByEmail: userProfile?.email,
         metadata: {
           actorName: userProfile?.name || '',
           actorSellerId: userProfile?.sellerId || '',
           targetEmail: global ? '' : normalizedTargetEmail,
+          date: businessDayKey || '',
+          pinned: pinned === true,
         },
       });
       if (normalizedRole === 'admin') {
@@ -81,7 +88,7 @@ export function useUserMessages({ userProfile, refreshAppAlerts, onError }: UseU
     } catch (error) {
       onError(error, 'app_alerts');
     }
-  }, [onError, refreshAppAlerts, userProfile]);
+  }, [businessDayKey, onError, refreshAppAlerts, userProfile]);
 
   return { sendUserMessage };
 }

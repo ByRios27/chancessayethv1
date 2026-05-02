@@ -14,6 +14,9 @@ export interface AppAlert {
   metadata?: Record<string, unknown>;
   actionRef?: string;
   expiresAt?: any;
+  pinned?: boolean;
+  pinnedAt?: any;
+  pinnedByEmail?: string;
 }
 
 export type CreateAppAlertPayload = Omit<AppAlert, 'id'>;

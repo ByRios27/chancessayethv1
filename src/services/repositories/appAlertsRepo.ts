@@ -1,4 +1,4 @@
-import { addDoc, collection, db, serverTimestamp } from '../../firebase';
+import { addDoc, collection, db, doc, serverTimestamp, updateDoc } from '../../firebase';
 import type { CreateAppAlertPayload } from '../../types/alerts';
 
 const normalizeEmail = (value?: string) => String(value || '').trim().toLowerCase();
@@ -15,6 +15,25 @@ export const createAppAlert = async (payload: CreateAppAlertPayload) => {
     global: payload.global === true,
     readBy: Array.isArray(payload.readBy) ? payload.readBy : [],
     metadata: payload.metadata || {},
+    pinned: payload.pinned === true,
+    pinnedAt: payload.pinned ? (payload.pinnedAt || serverTimestamp()) : null,
+    pinnedByEmail: payload.pinned ? normalizeEmail(payload.pinnedByEmail || payload.createdByEmail) : '',
+  });
+};
+
+export const updateAppAlertPinned = async ({
+  alertId,
+  pinned,
+  pinnedByEmail,
+}: {
+  alertId: string;
+  pinned: boolean;
+  pinnedByEmail?: string;
+}) => {
+  return updateDoc(doc(db, 'app_alerts', alertId), {
+    pinned,
+    pinnedAt: pinned ? serverTimestamp() : null,
+    pinnedByEmail: pinned ? normalizeEmail(pinnedByEmail) : '',
   });
 };
 
