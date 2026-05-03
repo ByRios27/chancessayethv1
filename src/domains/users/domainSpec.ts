@@ -19,7 +19,7 @@ export const USERS_DOMAIN_SPEC = {
 } as const;
 
 export const USERS_ACTION_PERMISSIONS = {
-  createUser: ['ceo'] as const,
+  createUser: ['ceo', 'admin'] as const,
   editUser: ['ceo'] as const,
   deleteUser: ['ceo'] as const,
   injectCapital: ['ceo', 'admin'] as const,

@@ -86,7 +86,7 @@ const UserModal = ({ show, userProfile, onSave, onClose, currentUserRole, curren
 
           {!userProfile && (
             <div className="space-y-1.5">
-              <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Contrasena (opcional si ya existe en Auth)</label>
+              <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Contrasena</label>
               <input
                 type="password"
                 value={password}
@@ -198,7 +198,7 @@ const UserModal = ({ show, userProfile, onSave, onClose, currentUserRole, curren
                 toast.error('Comision invalida');
                 return;
               }
-              if (!userProfile && password && password.length < 6) {
+              if (!userProfile && password.length < 6) {
                 toast.error('La contrasena debe tener al menos 6 caracteres');
                 return;
               }

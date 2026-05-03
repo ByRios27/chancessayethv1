@@ -345,6 +345,10 @@ service cloud.firestore {
           data.get('targetUserEmail', '').lower() == profileEmail()
         ) ||
         (
+          data.get('createdByEmail', '') is string &&
+          data.get('createdByEmail', '').lower() == profileEmail()
+        ) ||
+        (
           data.get('targetRole', '') is string &&
           data.get('targetRole', '').lower() == role()
         )
@@ -438,8 +442,16 @@ service cloud.firestore {
 
     function canManageUserCreate() {
       return signedIn() && (
-        isCeo() &&
-        (request.resource.data.get('role', '') != 'ceo' || isOwnerCeo()) &&
+        (
+          (
+            isCeo() &&
+            (request.resource.data.get('role', '') != 'ceo' || isOwnerCeo())
+          ) ||
+          (
+            isAdmin() &&
+            request.resource.data.get('role', '') == 'seller'
+          )
+        ) &&
         isValidUser(request.resource.data) &&
         createdCeoHasValidPrimaryFlag() &&
         userCreateHasAuthor(request.resource.data)
@@ -480,7 +492,10 @@ service cloud.firestore {
 
     match /userProvisioning/{email} {
       allow read: if isOwnerCeo() || (signedIn() && (isOwner(email) || isOwnerOrAdmin()));
-      allow create: if isOwnerCeo() || (signedIn() && isCeo() && request.resource.data.get('role', '') != 'ceo');
+      allow create: if isOwnerCeo() || (signedIn() && (
+        (isCeo() && request.resource.data.get('role', '') != 'ceo') ||
+        (isAdmin() && request.resource.data.get('role', '') == 'seller')
+      ));
       allow update: if isOwnerCeo() || (signedIn() && isCeo() && resource.data.get('role', '') != 'ceo' && request.resource.data.get('role', '') != 'ceo');
       allow delete: if isOwnerCeo() || (signedIn() && isCeo() && resource.data.get('role', '') != 'ceo');
     }

@@ -1,7 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { auth, createUserWithEmailAndPassword, db, doc, secondaryAuth, serverTimestamp, signOut, updateDoc } from '../../../firebase';
+import { auth, db, doc, functions, httpsCallable, serverTimestamp, updateDoc } from '../../../firebase';
 import { logDailyAuditEvent } from '../../../services/repositories/auditLogsRepo';
 import { createCeoAdminAlert } from '../../../services/repositories/appAlertsRepo';
 import { deleteUserProfile, reserveNextSellerId, saveUserProfile } from '../../../services/repositories/usersRepo';
@@ -92,6 +92,11 @@ export function useUsersDomain({
       return;
     }
 
+    if (!editingUser && normalizedRole === 'admin' && targetRole !== 'seller') {
+      toast.error('Los administradores solo pueden crear vendedores');
+      return;
+    }
+
     if (userProfileData.role === 'admin') {
       const adminCount = users.filter(u => u.role === 'admin' && u.email !== authEmail).length;
       if (adminCount >= 10) {
@@ -130,30 +135,109 @@ export function useUsersDomain({
     setIsSavingUser(true);
 
     try {
+      if (!editingUser) {
+        if (!password || password.length < 6) {
+          toast.error('La contrasena debe tener al menos 6 caracteres');
+          return;
+        }
+
+        const provisionUser = httpsCallable(functions, 'provisionUser');
+        const result = await provisionUser({
+          email: rawEmail,
+          password,
+          role: userProfileData.role,
+          commissionRate: userProfileData.commissionRate,
+          status: userProfileData.status,
+          canLiquidate: userProfileData.role === 'admin' ? userProfileData.canLiquidate === true : false,
+          currentDebt: userProfileData.currentDebt || 0,
+        });
+        const provisionedUser = (result.data as { user?: UserProfile }).user;
+        if (!provisionedUser?.email) {
+          throw new Error('El backend no devolvio el perfil creado');
+        }
+
+        const normalizedFirestoreEmail = String(provisionedUser.email || '').toLowerCase();
+        upsertUserLocally(provisionedUser);
+        toast.success('Usuario creado correctamente');
+        setShowUserModal(false);
+        setEditingUser(null);
+
+        if (normalizedRole === 'ceo' || normalizedRole === 'admin') {
+          await logDailyAuditEvent({
+            type: 'USER_CREATED',
+            actor: {
+              email: currentUserEmail,
+              sellerId: currentUserProfile?.sellerId,
+              name: currentUserProfile?.name,
+              role: normalizedRole,
+            },
+            target: {
+              email: normalizedFirestoreEmail,
+              sellerId: provisionedUser.sellerId || '',
+              name: provisionedUser.name || '',
+            },
+            details: {
+              updatedFields: Object.keys(provisionedUser),
+              targetUsername: normalizedFirestoreEmail.split('@')[0] || normalizedFirestoreEmail,
+              targetRole: provisionedUser.role,
+              nextRole: provisionedUser.role,
+              previousRole: '',
+              commissionRate: Number(provisionedUser.commissionRate || 0),
+              nextCommissionRate: Number(provisionedUser.commissionRate || 0),
+              previousCommissionRate: 0,
+              nextName: String(provisionedUser.name || ''),
+              previousName: '',
+              nextSellerId: String(provisionedUser.sellerId || ''),
+              previousSellerId: '',
+              status: String(provisionedUser.status || ''),
+              createdByEmail: actorEmail,
+              updatedByEmail: actorEmail,
+            },
+          }).catch((error) => {
+            console.error('Daily audit log failed (users create):', error);
+          });
+
+          const actionLabel = 'creo';
+          const targetUsername = normalizedFirestoreEmail.split('@')[0] || normalizedFirestoreEmail;
+          await createCeoAdminAlert({
+            type: `${normalizedRole}_user_created`,
+            priority: 70,
+            title: 'Usuario creado',
+            message: `${currentUserProfile?.name || actorEmail || normalizedRole.toUpperCase()} ${actionLabel} usuario ${String(provisionedUser.name || targetUsername)} (${targetUsername}) con rol ${String(provisionedUser.role || 'seller')} y comision ${Number(provisionedUser.commissionRate || 0).toFixed(2)}%.`,
+            createdByEmail: actorEmail,
+            createdByRole: normalizedRole,
+            metadata: {
+              actorName: currentUserProfile?.name || '',
+              actorSellerId: currentUserProfile?.sellerId || '',
+              actorRole: normalizedRole,
+              targetEmail: normalizedFirestoreEmail,
+              targetUsername,
+              targetName: String(provisionedUser.name || ''),
+              targetSellerId: String(provisionedUser.sellerId || ''),
+              targetRole: String(provisionedUser.role || ''),
+              commissionRate: Number(provisionedUser.commissionRate || 0),
+              updatedFields: Object.keys(provisionedUser),
+              previousRole: '',
+              previousCommissionRate: 0,
+              nextRole: String(provisionedUser.role || ''),
+              nextCommissionRate: Number(provisionedUser.commissionRate || 0),
+            },
+            actionRef: `users/${normalizedFirestoreEmail}`,
+          }).catch((error) => {
+            console.error('App alert failed (users create):', error);
+          });
+        }
+
+        return;
+      }
+
       if (!userProfileData.sellerId) {
         const newSellerId = await reserveNextSellerId(userProfileData.role);
         userProfileData.sellerId = newSellerId;
         userProfileData.name = newSellerId;
       }
 
-      if (password) {
-        if (!secondaryAuth) {
-          throw new Error('Servicio de autenticacion secundaria no disponible');
-        }
-        try {
-          await signOut(secondaryAuth).catch(() => undefined);
-          await createUserWithEmailAndPassword(secondaryAuth, authEmail, password);
-        } catch (authError: any) {
-          if (authError.code === 'auth/email-already-in-use') {
-            toast.info('El usuario ya existe en el sistema. Actualizando su perfil...');
-          } else {
-            throw authError;
-          }
-        } finally {
-          await signOut(secondaryAuth).catch(() => undefined);
-        }
-        userProfileData.email = authEmail;
-      } else if (!userProfileData.email.includes('@')) {
+      if (!userProfileData.email.includes('@')) {
         userProfileData.email = authEmail;
       }
 

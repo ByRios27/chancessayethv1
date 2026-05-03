@@ -35,6 +35,10 @@ import {
   signOut, 
   updatePassword
 } from "firebase/auth";
+import {
+  getFunctions,
+  httpsCallable
+} from "firebase/functions";
 
 import firebaseConfig from '../firebase-applet-config.json';
 
@@ -43,6 +47,7 @@ const app = getApps().find(existingApp => existingApp.name === '[DEFAULT]')
 const secondaryApp = getApps().find(existingApp => existingApp.name === 'secondary')
   ?? initializeApp(firebaseConfig, 'secondary');
 export const db = getFirestore(app);
+export const functions = getFunctions(app, 'us-central1');
 export const auth = (() => {
   try {
     return initializeAuth(app, {
@@ -89,5 +94,6 @@ export {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut, 
-  updatePassword
+  updatePassword,
+  httpsCallable
 };
