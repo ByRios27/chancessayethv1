@@ -15,8 +15,10 @@ interface UseOperationalStateResetParams {
   setTickets: Dispatch<SetStateAction<LotteryTicket[]>>;
   setResults: Dispatch<SetStateAction<LotteryResult[]>>;
   setInjections: Dispatch<SetStateAction<Injection[]>>;
+  setSettlements: Dispatch<SetStateAction<Settlement[]>>;
   setHistoryTickets: Dispatch<SetStateAction<LotteryTicket[]>>;
   setHistoryInjections: Dispatch<SetStateAction<Injection[]>>;
+  setHistorySettlements: Dispatch<SetStateAction<Settlement[]>>;
   setLiquidationTicketsSnapshot: Dispatch<SetStateAction<LotteryTicket[]>>;
   setLiquidationResultsSnapshot: Dispatch<SetStateAction<LotteryResult[]>>;
   setLiquidationInjectionsSnapshot: Dispatch<SetStateAction<Injection[]>>;
@@ -32,8 +34,10 @@ export function useOperationalStateReset({
   setTickets,
   setResults,
   setInjections,
+  setSettlements,
   setHistoryTickets,
   setHistoryInjections,
+  setHistorySettlements,
   setLiquidationTicketsSnapshot,
   setLiquidationResultsSnapshot,
   setLiquidationInjectionsSnapshot,
@@ -68,8 +72,10 @@ export function useOperationalStateReset({
     setTickets([]);
     setResults([]);
     setInjections([]);
+    setSettlements([]);
     setHistoryTickets([]);
     setHistoryInjections([]);
+    setHistorySettlements([]);
     setLiquidationTicketsSnapshot([]);
     setLiquidationResultsSnapshot([]);
     setLiquidationInjectionsSnapshot([]);
@@ -77,8 +83,10 @@ export function useOperationalStateReset({
     syncChancePriceFromPreference();
   }, [
     setHistoryInjections,
+    setHistorySettlements,
     setHistoryTickets,
     setInjections,
+    setSettlements,
     setLiquidationInjectionsSnapshot,
     setLiquidationResultsSnapshot,
     setLiquidationSettlementsSnapshot,

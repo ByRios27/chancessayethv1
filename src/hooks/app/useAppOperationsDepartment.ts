@@ -1,7 +1,10 @@
 import { useCallback } from 'react';
 
+import { toast } from 'sonner';
+
 import { useArchiveDomain } from '../../domains/archive/hooks/useArchiveDomain';
 import { useLiquidationDomain } from '../../domains/liquidation/hooks/useLiquidationDomain';
+import { hardResetFirestoreData } from '../../services/repositories/hardResetRepo';
 import { useAutoOperationalCleanup } from '../useAutoOperationalCleanup';
 import { useBusinessDayTransitionReset } from '../useBusinessDayTransitionReset';
 import { useHistoricalOperationalData } from '../useHistoricalOperationalData';
@@ -16,6 +19,7 @@ import {
   getOperationalTimeSortValue,
   mergeTicketSnapshots,
 } from '../../utils/tickets';
+import { toastSuccess } from '../../utils/toast';
 
 export function useAppOperationsDepartment({
   activeTab,
@@ -93,15 +97,17 @@ export function useAppOperationsDepartment({
     setTickets,
     setResults,
     setInjections,
+    setSettlements,
     setHistoryTickets,
     setHistoryInjections,
+    setHistorySettlements,
     setLiquidationTicketsSnapshot,
     setLiquidationResultsSnapshot,
     setLiquidationInjectionsSnapshot,
     setLiquidationSettlementsSnapshot,
   });
 
-  const { runOperationalArchiveAndCleanup } = useOperationalArchive({
+  const { runOperationalArchiveAndCleanup, runOperationalDeleteOnly } = useOperationalArchive({
     businessDayKey,
     getBusinessDayRange,
     archivedBy: (userProfile?.email || user?.email || '').toLowerCase(),
@@ -223,8 +229,86 @@ export function useAppOperationsDepartment({
     isPrimaryCeoUser,
     businessDayKey,
     setConfirmModal,
-    runOperationalArchiveAndCleanup,
+    runOperationalDeleteOnly,
   });
+
+  const resetLocalStateAfterHardReset = useCallback(() => {
+    setTickets([]);
+    setResults([]);
+    setInjections([]);
+    setSettlements([]);
+    setHistoryTickets([]);
+    setHistoryInjections([]);
+    setHistorySettlements([]);
+    setArchiveTickets([]);
+    setArchiveInjections([]);
+    setLiquidationTicketsSnapshot([]);
+    setLiquidationInjectionsSnapshot([]);
+    setLiquidationResultsSnapshot([]);
+    setLiquidationSettlementsSnapshot([]);
+    historyDataCacheRef.current?.clear?.();
+    closedLotteryCardsCacheRef.current?.clear?.();
+    setUsers((prevUsers: any[]) => (
+      Array.isArray(prevUsers)
+        ? prevUsers.map((userItem) => ({
+          ...userItem,
+          currentDebt: 0,
+          requiresInjection: false,
+        }))
+        : prevUsers
+    ));
+  }, [
+    closedLotteryCardsCacheRef,
+    historyDataCacheRef,
+    setArchiveInjections,
+    setArchiveTickets,
+    setHistoryInjections,
+    setHistorySettlements,
+    setHistoryTickets,
+    setInjections,
+    setLiquidationInjectionsSnapshot,
+    setLiquidationResultsSnapshot,
+    setLiquidationSettlementsSnapshot,
+    setLiquidationTicketsSnapshot,
+    setResults,
+    setSettlements,
+    setTickets,
+    setUsers,
+  ]);
+
+  const handleHardResetFirestoreData = useCallback(async (password: string) => {
+    if (!user || !userProfile || !isPrimaryCeoUser) {
+      toast.error('Solo el CEO Owner puede ejecutar el hard reset');
+      return;
+    }
+
+    try {
+      const summary = await hardResetFirestoreData({
+        currentUser: user,
+        password,
+      });
+      resetLocalStateAfterHardReset();
+      const deletedTotal =
+        summary.tickets +
+        summary.results +
+        summary.injections +
+        summary.settlements +
+        summary.appAlerts +
+        summary.dailyArchiveDocs +
+        summary.dailyArchiveUserDocs +
+        summary.dailyAuditLogDocs +
+        summary.dailyAuditEventDocs +
+        summary.supportDocs;
+
+      toastSuccess(`Hard reset completado: ${deletedTotal} documentos eliminados`);
+      if (summary.usersNormalized > 0) {
+        toast.info(`${summary.usersNormalized} usuarios conservados con saldo operativo en cero`);
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, 'firestore/hard-reset');
+      throw error;
+    }
+  }, [isPrimaryCeoUser, resetLocalStateAfterHardReset, user, userProfile]);
 
   const {
     todayStr,
@@ -327,6 +411,7 @@ export function useAppOperationsDepartment({
     filteredTickets,
     generateConsolidatedReport,
     handleDeleteAllSalesData,
+    handleHardResetFirestoreData,
     handleLiquidate,
     handleLiquidateRange,
     historyLotteryCards,

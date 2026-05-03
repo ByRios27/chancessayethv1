@@ -113,13 +113,15 @@ export const buildDocsToDelete = ({
   ticketsDocs,
   resultsDocs,
   injectionsDocs,
+  settlementsDocs = [],
   appAlertsDocs = [],
 }: {
   ticketsDocs: QueryDocumentSnapshot[];
   resultsDocs: QueryDocumentSnapshot[];
   injectionsDocs: QueryDocumentSnapshot[];
+  settlementsDocs?: QueryDocumentSnapshot[];
   appAlertsDocs?: QueryDocumentSnapshot[];
-}) => ([...ticketsDocs, ...resultsDocs, ...injectionsDocs, ...appAlertsDocs]);
+}) => ([...ticketsDocs, ...resultsDocs, ...injectionsDocs, ...settlementsDocs, ...appAlertsDocs]);
 
 export const shouldResetOperationalStateAfterArchive = ({
   targetBusinessDay,

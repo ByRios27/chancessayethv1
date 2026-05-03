@@ -9,7 +9,8 @@ type Special4DPrizeKey = keyof Special4DSettings['payouts'];
 type Special4DPayoutField = keyof Special4DSettings['payouts']['p1'];
 type Special4DPayoutForm = Record<Special4DPrizeKey, Record<Special4DPayoutField, string>>;
 
-const CONFIRM_DELETE_PHRASE = 'BORRAR VENTAS';
+const CONFIRM_DELETE_PHRASE = 'REINICIAR DIA';
+const CONFIRM_HARD_RESET_PHRASE = 'RESET FIRESTORE';
 
 const numberToInput = (value: number) => (Number.isFinite(value) ? String(value) : '');
 
@@ -40,6 +41,7 @@ const GlobalSettingsModal = ({
   onClose,
   allowDangerZone = false,
   onDeleteAllSalesData,
+  onHardResetFirestoreData,
 }: {
   show: boolean;
   settings: GlobalSettings;
@@ -47,6 +49,7 @@ const GlobalSettingsModal = ({
   onClose: () => void;
   allowDangerZone?: boolean;
   onDeleteAllSalesData?: () => void;
+  onHardResetFirestoreData?: (password: string) => Promise<void>;
 }) => {
   const defaultBilletePrizes = useMemo(() => ({
     full4: 2000,
@@ -59,6 +62,9 @@ const GlobalSettingsModal = ({
 
   const [activeTab, setActiveTab] = useState<SettingsTab>('chances');
   const [deletePhrase, setDeletePhrase] = useState('');
+  const [hardResetPhrase, setHardResetPhrase] = useState('');
+  const [hardResetPassword, setHardResetPassword] = useState('');
+  const [isHardResetting, setIsHardResetting] = useState(false);
   const [chancePrices, setChancePrices] = useState<ChancePriceConfig[]>(settings.chancePrices || []);
   const [palesEnabled, setPalesEnabled] = useState(settings.palesEnabled);
   const [billetesEnabled, setBilletesEnabled] = useState(settings.billetesEnabled);
@@ -100,6 +106,9 @@ const GlobalSettingsModal = ({
     setSpecial4dPayouts(buildSpecial4DPayoutForm(nextSpecial4d));
     setActiveTab('chances');
     setDeletePhrase('');
+    setHardResetPhrase('');
+    setHardResetPassword('');
+    setIsHardResetting(false);
   }, [defaultBilletePrizes, settings, show]);
 
   if (!show) return null;
@@ -174,6 +183,26 @@ const GlobalSettingsModal = ({
     if (deletePhrase !== CONFIRM_DELETE_PHRASE || !allowDangerZone || !onDeleteAllSalesData) return;
     onDeleteAllSalesData();
     setDeletePhrase('');
+  };
+
+  const hardResetEnabled = Boolean(
+    allowDangerZone &&
+    onHardResetFirestoreData &&
+    hardResetPhrase === CONFIRM_HARD_RESET_PHRASE &&
+    hardResetPassword.trim() &&
+    !isHardResetting
+  );
+
+  const handleHardReset = async () => {
+    if (!hardResetEnabled || !onHardResetFirestoreData) return;
+    setIsHardResetting(true);
+    try {
+      await onHardResetFirestoreData(hardResetPassword);
+      setHardResetPhrase('');
+      setHardResetPassword('');
+    } finally {
+      setIsHardResetting(false);
+    }
   };
 
   const sectionTitle = activeTab === 'chances'
@@ -547,9 +576,9 @@ const GlobalSettingsModal = ({
                       <AlertTriangle className="w-5 h-5 text-red-300 mt-0.5 shrink-0" />
                       <div>
                         <p className="text-[10px] font-black uppercase tracking-widest text-red-200">Acciones irreversibles</p>
-                        <p className="text-sm font-black uppercase tracking-widest text-red-300">Borrar datos de ventas</p>
+                        <p className="text-sm font-black uppercase tracking-widest text-red-300">Reiniciar dia operativo</p>
                         <p className="mt-1 text-xs text-red-100/80">
-                          Esta accion archiva el dia operativo y limpia tickets, resultados e inyecciones operativas. Usuarios y sorteos se conservan.
+                          Esta accion borra tickets, resultados, inyecciones, liquidaciones y alertas del dia actual sin crear archivo. El historial anterior se conserva.
                         </p>
                       </div>
                     </div>
@@ -572,7 +601,64 @@ const GlobalSettingsModal = ({
                       disabled={deletePhrase !== CONFIRM_DELETE_PHRASE}
                       className="h-10 w-full rounded-xl border border-red-400/30 bg-red-500/15 text-red-200 font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-red-500/25 active:scale-[0.98] transition-all"
                     >
-                      <Trash2 className="w-4 h-4" /> Borrar ventas
+                      <Trash2 className="w-4 h-4" /> Reiniciar dia
+                    </button>
+                  </div>
+                )}
+
+                {allowDangerZone && (
+                  <div className="rounded-xl border border-red-500/35 bg-red-950/25 p-4 sm:p-5 space-y-4">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="w-5 h-5 text-red-200 mt-0.5 shrink-0" />
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-red-200">Hard reset Firestore</p>
+                        <p className="text-sm font-black uppercase tracking-widest text-red-300">Borrar base operativa completa</p>
+                        <p className="mt-1 text-xs text-red-100/80">
+                          Elimina tickets, resultados, inyecciones, liquidaciones, archivos diarios, logs y alertas. Conserva usuarios, sorteos y ajustes de premios.
+                        </p>
+                        <p className="mt-1 text-xs text-red-100/80">
+                          Los usuarios se mantienen, pero sus saldos operativos se reinician en cero.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="rounded-xl border border-red-400/20 bg-black/25 p-3 space-y-2">
+                        <label className="text-[10px] font-mono uppercase tracking-widest text-red-200">
+                          Escribe {CONFIRM_HARD_RESET_PHRASE}
+                        </label>
+                        <input
+                          value={hardResetPhrase}
+                          onChange={(event) => setHardResetPhrase(event.target.value.toUpperCase())}
+                          className="h-11 w-full rounded-xl border border-red-400/25 bg-black/30 px-3 font-mono text-sm text-white focus:outline-none focus:ring-2 focus:ring-red-400/50"
+                          placeholder={CONFIRM_HARD_RESET_PHRASE}
+                          disabled={isHardResetting}
+                        />
+                      </div>
+
+                      <div className="rounded-xl border border-red-400/20 bg-black/25 p-3 space-y-2">
+                        <label className="text-[10px] font-mono uppercase tracking-widest text-red-200">
+                          Contrasena CEO Owner
+                        </label>
+                        <input
+                          type="password"
+                          value={hardResetPassword}
+                          onChange={(event) => setHardResetPassword(event.target.value)}
+                          className="h-11 w-full rounded-xl border border-red-400/25 bg-black/30 px-3 font-mono text-sm text-white focus:outline-none focus:ring-2 focus:ring-red-400/50"
+                          placeholder="Contrasena"
+                          autoComplete="current-password"
+                          disabled={isHardResetting}
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => void handleHardReset()}
+                      disabled={!hardResetEnabled}
+                      className="h-10 w-full rounded-xl border border-red-300/40 bg-red-600/25 text-red-100 font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-red-600/35 active:scale-[0.98] transition-all"
+                    >
+                      <Trash2 className="w-4 h-4" /> {isHardResetting ? 'Ejecutando reset...' : 'Hard reset Firestore'}
                     </button>
                   </div>
                 )}

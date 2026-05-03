@@ -15,12 +15,10 @@ interface UseManualOperationalCleanupParams {
     message: string;
     onConfirm: () => void;
   }>>;
-  runOperationalArchiveAndCleanup: (params: {
+  runOperationalDeleteOnly: (params: {
     targetBusinessDay: string;
-    trigger: 'manual' | 'automatic';
   }) => Promise<{
     deletedCount: number;
-    archiveAlreadyExists: boolean;
   }>;
 }
 
@@ -29,37 +27,36 @@ export function useManualOperationalCleanup({
   isPrimaryCeoUser,
   businessDayKey,
   setConfirmModal,
-  runOperationalArchiveAndCleanup,
+  runOperationalDeleteOnly,
 }: UseManualOperationalCleanupParams) {
   const handleDeleteAllSalesData = useCallback(() => {
     if (!userProfile || !isPrimaryCeoUser) {
-      toast.error('No tienes permisos para ejecutar limpieza operativa');
+      toast.error('No tienes permisos para reiniciar el dia operativo');
       return;
     }
 
     setConfirmModal({
       show: true,
-      title: 'Archivar y Limpiar Día Operativo',
-      message: 'Se archivarán los datos del día operativo actual y luego se limpiarán tickets, resultados e inyecciones operativas. ¿Deseas continuar?',
+      title: 'Reiniciar Dia Operativo',
+      message: 'Se borraran los datos vivos del dia operativo actual sin crear archivo historico. Usuarios, sorteos, configuracion de premios e historial anterior se conservan. Deseas continuar?',
       onConfirm: async () => {
         try {
-          const result = await runOperationalArchiveAndCleanup({
+          const result = await runOperationalDeleteOnly({
             targetBusinessDay: businessDayKey,
-            trigger: 'manual',
           });
 
-          if (result.deletedCount > 0 || !result.archiveAlreadyExists) {
-            toastSuccess('Archivo diario creado y limpieza operativa completada');
+          if (result.deletedCount > 0) {
+            toastSuccess('Dia operativo reiniciado correctamente');
           } else {
-            toast.info('El archivo diario ya existía y no había datos pendientes por limpiar');
+            toast.info('No habia datos vivos del dia para borrar');
           }
         } catch (error) {
-          console.error('Error archivando datos operativos:', error);
-          toast.error('No se pudo crear el archivo diario. No se realizó limpieza.');
+          console.error('Error reiniciando dia operativo:', error);
+          toast.error('No se pudo reiniciar el dia operativo.');
         }
       },
     });
-  }, [businessDayKey, isPrimaryCeoUser, runOperationalArchiveAndCleanup, setConfirmModal, userProfile]);
+  }, [businessDayKey, isPrimaryCeoUser, runOperationalDeleteOnly, setConfirmModal, userProfile]);
 
   return { handleDeleteAllSalesData };
 }

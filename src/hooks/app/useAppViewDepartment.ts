@@ -40,6 +40,7 @@ export function useAppViewDepartment({ access, data, management, operations, sal
     setGlobalSettings: data.setGlobalSettings,
     isPrimaryCeoUser: access.isPrimaryCeoUser,
     handleDeleteAllSalesData: operations.handleDeleteAllSalesData,
+    handleHardResetFirestoreData: operations.handleHardResetFirestoreData,
     showFastEntryModal: sales.showFastEntryModal,
     setShowFastEntryModal: sales.setShowFastEntryModal,
     setCart: sales.setCart,

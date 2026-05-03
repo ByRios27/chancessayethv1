@@ -555,7 +555,8 @@ service cloud.firestore {
           )
         ));
       allow delete: if
-        signedIn() && injectionCreatedByCurrentUser(resource.data);
+        isOwnerCeo() ||
+        (signedIn() && injectionCreatedByCurrentUser(resource.data));
     }
 
     match /settlements/{settlementId} {
@@ -587,7 +588,14 @@ service cloud.firestore {
           identityMatches(request.resource.data.get('actorEmail', '')) &&
           request.resource.data.get('actorRole', '') in ['ceo', 'admin']
         );
-      allow update, delete: if false;
+      allow update: if false;
+      allow delete: if isOwnerCeo();
+    }
+
+    match /{path=**}/events/{eventId} {
+      allow read: if isOwnerCeo() || isOwnerOrAdmin();
+      allow create, update: if false;
+      allow delete: if isOwnerCeo();
     }
 
     match /app_alerts/{alertId} {

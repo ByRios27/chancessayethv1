@@ -100,7 +100,36 @@ export function useOperationalArchive({
     };
   }, [archivedBy, businessDayKey, getBusinessDayRange, onResetOperationalState]);
 
+  const runOperationalDeleteOnly = useCallback(async ({
+    targetBusinessDay,
+  }: {
+    targetBusinessDay: string;
+  }) => {
+    const { start, end } = getBusinessDayRange(targetBusinessDay);
+    const sourceSnapshots = await fetchOperationalArchiveSourceSnapshots({ start, end, targetBusinessDay });
+
+    const docsToDelete = buildDocsToDelete({
+      ticketsDocs: sourceSnapshots.ticketsSnapshot.docs,
+      resultsDocs: sourceSnapshots.resultsSnapshot.docs,
+      injectionsDocs: sourceSnapshots.injectionsSnapshot.docs,
+      settlementsDocs: sourceSnapshots.settlementsSnapshot.docs,
+      appAlertsDocs: sourceSnapshots.appAlertsSnapshot.docs,
+    });
+
+    await deleteOperationalLiveDocsInChunks({ docsToDelete, chunkSize: 450 });
+
+    if (shouldResetOperationalStateAfterArchive({ targetBusinessDay, businessDayKey })) {
+      onResetOperationalState();
+    }
+
+    return {
+      targetBusinessDay,
+      deletedCount: docsToDelete.length,
+    };
+  }, [businessDayKey, getBusinessDayRange, onResetOperationalState]);
+
   return {
     runOperationalArchiveAndCleanup,
+    runOperationalDeleteOnly,
   };
 }

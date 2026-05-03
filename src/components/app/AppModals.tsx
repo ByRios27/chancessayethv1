@@ -24,6 +24,7 @@ interface AppModalsProps {
   setGlobalSettings: (settings: any) => void;
   isPrimaryCeoUser: boolean;
   handleDeleteAllSalesData: () => void;
+  handleHardResetFirestoreData: (password: string) => Promise<void>;
   showFastEntryModal: boolean;
   setShowFastEntryModal: (show: boolean) => void;
   setCart: (updater: (prevCart: any[]) => any[]) => void;
@@ -93,6 +94,7 @@ export function AppModals({
   setGlobalSettings,
   isPrimaryCeoUser,
   handleDeleteAllSalesData,
+  handleHardResetFirestoreData,
   showFastEntryModal,
   setShowFastEntryModal,
   setCart,
@@ -168,6 +170,7 @@ export function AppModals({
           onClose={() => setShowSettingsModal(false)}
           allowDangerZone={isPrimaryCeoUser}
           onDeleteAllSalesData={handleDeleteAllSalesData}
+          onHardResetFirestoreData={handleHardResetFirestoreData}
         />
       )}
 
