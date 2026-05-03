@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { auth, db, doc, functions, httpsCallable, serverTimestamp, updateDoc } from '../../../firebase';
 import { logDailyAuditEvent } from '../../../services/repositories/auditLogsRepo';
@@ -46,6 +46,10 @@ export function useUsersDomain({
 }: UseUsersDomainParams) {
   const [selectedManageUserEmail, setSelectedManageUserEmail] = useState('');
   const [isSavingUser, setIsSavingUser] = useState(false);
+
+  useEffect(() => {
+    setSelectedManageUserEmail('');
+  }, [currentUserEmail]);
 
   const upsertUserLocally = (nextUser: UserProfile) => {
     const normalizedEmail = String(nextUser.email || '').toLowerCase();
@@ -163,6 +167,7 @@ export function useUsersDomain({
 
         const normalizedFirestoreEmail = String(provisionedUser.email || '').toLowerCase();
         upsertUserLocally(provisionedUser);
+        setSelectedManageUserEmail('');
         toast.success('Usuario creado correctamente');
         setShowUserModal(false);
         setEditingUser(null);

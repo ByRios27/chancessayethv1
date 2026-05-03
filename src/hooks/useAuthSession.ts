@@ -95,6 +95,7 @@ export function useAuthSession(enforceSessionByOperationalDay: boolean) {
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
       clearProfileListener();
       setLoading(true);
+      setUserProfile(u ? undefined : null);
       if (u) {
         try {
           await u.getIdToken(true);

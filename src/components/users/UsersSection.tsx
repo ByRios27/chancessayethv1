@@ -165,6 +165,7 @@ export function UsersSection({
             {canCreateUser && (
               <button
                 onClick={() => {
+                  setSelectedManageUserEmail('');
                   setEditingUser(null);
                   setShowUserModal(true);
                 }}
