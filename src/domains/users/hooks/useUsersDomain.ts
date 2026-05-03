@@ -97,6 +97,11 @@ export function useUsersDomain({
       return;
     }
 
+    if (!editingUser && users.some(u => String(u.email || '').toLowerCase() === authEmail)) {
+      toast.error('Ese usuario ya existe. Abrelo desde la lista y usa editar.');
+      return;
+    }
+
     if (userProfileData.role === 'admin') {
       const adminCount = users.filter(u => u.role === 'admin' && u.email !== authEmail).length;
       if (adminCount >= 10) {
@@ -413,7 +418,9 @@ export function useUsersDomain({
       const firebaseCode = error?.code || 'unknown';
       const targetEmail = (userProfileData.email || authEmail || '').toLowerCase();
 
-      if (error.code === 'auth/email-already-in-use') {
+      if (firebaseCode === 'functions/already-exists' || firebaseCode === 'already-exists') {
+        toast.error('Ese usuario ya existe. Abrelo desde la lista y usa editar.');
+      } else if (error.code === 'auth/email-already-in-use') {
         toast.error('El usuario ya existe');
       } else if (error.code === 'auth/invalid-email') {
         toast.error('El formato del usuario es invalido');

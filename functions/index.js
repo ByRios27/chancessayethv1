@@ -96,6 +96,11 @@ function buildClaims(profile, existingClaims = {}) {
 async function setClaimsForProfile(email, profile) {
   const userRecord = await auth.getUserByEmail(email);
   const claims = buildClaims(profile, userRecord.customClaims || {});
+  const displayName = String(profile.name || profile.sellerId || '').trim();
+  await auth.updateUser(userRecord.uid, compactProfile({
+    displayName: displayName || undefined,
+    disabled: normalizeStatus(profile.status) === 'inactive',
+  }));
   await auth.setCustomUserClaims(userRecord.uid, claims);
   return { uid: userRecord.uid, claims };
 }
@@ -189,8 +194,16 @@ exports.provisionUser = onCall({ region: REGION }, async (request) => {
 
   assertCanProvision(actor, email, role);
 
-  const authResult = await upsertAuthUser(email, password, status);
   const userRef = db.doc(`users/${email}`);
+  const existingProfileSnap = await userRef.get();
+  if (existingProfileSnap.exists) {
+    throw new HttpsError(
+      'already-exists',
+      'Ese usuario ya existe en la base de datos. Abrelo desde la lista y usa editar.'
+    );
+  }
+
+  const authResult = await upsertAuthUser(email, password, status);
   const settingsRef = db.doc('settings/global');
   let savedProfile = null;
 
@@ -199,33 +212,37 @@ exports.provisionUser = onCall({ region: REGION }, async (request) => {
       transaction.get(userRef),
       transaction.get(settingsRef),
     ]);
-    const existing = userSnap.exists ? userSnap.data() || {} : {};
-    const shouldGenerateSellerId = !String(payload.sellerId || existing.sellerId || '').trim();
+    if (userSnap.exists) {
+      throw new HttpsError(
+        'already-exists',
+        'Ese usuario ya existe en la base de datos. Abrelo desde la lista y usa editar.'
+      );
+    }
+
+    const shouldGenerateSellerId = !String(payload.sellerId || '').trim();
     const nextSellerNumber = Number(settingsSnap.exists ? settingsSnap.data().nextSellerNumber || 1 : 1);
     const sellerId = shouldGenerateSellerId
       ? `${rolePrefix(role)}${String(nextSellerNumber).padStart(2, '0')}`
-      : String(payload.sellerId || existing.sellerId).trim();
+      : String(payload.sellerId).trim();
     const requestedName = String(payload.name || '').trim();
-    const existingName = String(existing.name || '').trim();
-    const name = requestedName || existingName || sellerId;
+    const name = requestedName || sellerId;
     const now = FieldValue.serverTimestamp();
 
     savedProfile = compactProfile({
-      ...existing,
       email,
       name,
       role,
       status,
       commissionRate,
       canLiquidate: role === 'admin' ? payload.canLiquidate === true : role === 'ceo',
-      currentDebt: typeof existing.currentDebt === 'number' ? existing.currentDebt : Number(payload.currentDebt || 0),
+      currentDebt: Number(payload.currentDebt || 0),
       sellerId,
-      isPrimaryCeo: existing.isPrimaryCeo === true,
-      createdBy: existing.createdBy || actor.uid,
-      createdByEmail: String(existing.createdByEmail || actor.email).toLowerCase(),
-      createdByRole: existing.createdByRole || actor.role,
-      createdBySellerId: existing.createdBySellerId || actor.sellerId || '',
-      createdAt: existing.createdAt || now,
+      isPrimaryCeo: false,
+      createdBy: actor.uid,
+      createdByEmail: actor.email.toLowerCase(),
+      createdByRole: actor.role,
+      createdBySellerId: actor.sellerId || '',
+      createdAt: now,
       updatedBy: actor.uid,
       updatedByEmail: actor.email,
       updatedByRole: actor.role,
@@ -233,7 +250,7 @@ exports.provisionUser = onCall({ region: REGION }, async (request) => {
       updatedAt: now,
     });
 
-    transaction.set(userRef, savedProfile, { merge: true });
+    transaction.create(userRef, savedProfile);
 
     if (shouldGenerateSellerId) {
       transaction.set(settingsRef, { nextSellerNumber: nextSellerNumber + 1 }, { merge: true });

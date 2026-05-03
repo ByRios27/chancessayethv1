@@ -295,6 +295,8 @@ service cloud.firestore {
     function injectionTargetBelongsToCurrentUser(data) {
       return signedIn() &&
         (
+          data.get('sellerId', '') == profileSellerId() ||
+          data.get('userEmail', '') == profileEmail() ||
           identityMatches(data.get('sellerId', '')) ||
           identityMatches(data.get('userEmail', ''))
         );
@@ -340,6 +342,9 @@ service cloud.firestore {
     function alertTargetsCurrentUser(data) {
       return signedIn() && (
         data.get('global', false) == true ||
+        data.get('targetUserEmail', '') == profileEmail() ||
+        data.get('createdByEmail', '') == profileEmail() ||
+        data.get('targetRole', '') == role() ||
         (
           data.get('targetUserEmail', '') is string &&
           data.get('targetUserEmail', '').lower() == profileEmail()
