@@ -27,8 +27,19 @@ function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase();
 }
 
-function buildClaims(role, isPrimary = false, existingClaims = {}) {
+function buildClaims(role, isPrimary = false, existingClaims = {}, profile = {}) {
   const merged = { ...existingClaims, role };
+  const sellerId = String(profile.sellerId || '').trim().toLowerCase();
+  const status = String(profile.status || '').trim().toLowerCase();
+
+  if (sellerId) {
+    merged.sellerId = sellerId;
+  }
+
+  if (status) {
+    merged.status = status;
+  }
+
   if (role === 'ceo') {
     merged.isPrimaryCeo = !!isPrimary;
   } else if (Object.prototype.hasOwnProperty.call(merged, 'isPrimaryCeo')) {
@@ -62,7 +73,7 @@ async function syncClaimsFromUsersCollection(auth, db) {
     const data = docSnap.data() || {};
     const email = normalizeEmail(data.email || docSnap.id);
     const role = String(data.role || '').trim().toLowerCase();
-    const isPrimaryCeo = !!data.isPrimary;
+    const isPrimaryCeo = !!data.isPrimaryCeo || !!data.isPrimary;
 
     if (!email || !VALID_ROLES.has(role)) {
       skipped += 1;
@@ -71,7 +82,10 @@ async function syncClaimsFromUsersCollection(auth, db) {
 
     try {
       const user = await auth.getUserByEmail(email);
-      const nextClaims = buildClaims(role, isPrimaryCeo, user.customClaims || {});
+      const nextClaims = buildClaims(role, isPrimaryCeo, user.customClaims || {}, {
+        sellerId: data.sellerId,
+        status: data.status || 'active',
+      });
 
       if (areClaimsEqual(user.customClaims || {}, nextClaims)) {
         unchanged += 1;

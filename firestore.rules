@@ -134,6 +134,34 @@ service cloud.firestore {
       return isOwnerCeo() || isCeo() || isAdmin();
     }
 
+    function tokenRole() {
+      return signedIn() && request.auth.token.get('role', '') is string
+        ? request.auth.token.get('role', '').lower()
+        : '';
+    }
+
+    function tokenHasRegisteredRole() {
+      return tokenStatus() != 'inactive' &&
+        tokenRole() in ['ceo', 'owner', 'admin', 'seller'];
+    }
+
+    function tokenCanManageTickets() {
+      return tokenStatus() != 'inactive' &&
+        tokenRole() in ['ceo', 'owner', 'admin'];
+    }
+
+    function tokenSellerId() {
+      return signedIn() && request.auth.token.get('sellerId', '') is string
+        ? request.auth.token.get('sellerId', '').lower()
+        : '';
+    }
+
+    function tokenStatus() {
+      return signedIn() && request.auth.token.get('status', 'active') is string
+        ? request.auth.token.get('status', 'active').lower()
+        : 'active';
+    }
+
     function canManageLotteryCatalog() {
       return isCeo();
     }
@@ -184,6 +212,83 @@ service cloud.firestore {
           identityMatches(data.get('userEmail', '')) ||
           identityMatches(data.get('createdBy', '')) ||
           identityMatches(data.get('createdByEmail', ''))
+        );
+    }
+
+    function authEmailMatches(value) {
+      return signedIn() &&
+        value is string &&
+        value != '' &&
+        value.lower() == authEmail();
+    }
+
+    function authUidMatches(value) {
+      return signedIn() &&
+        value is string &&
+        value != '' &&
+        value == authUid();
+    }
+
+    function tokenSellerIdMatches(value) {
+      return signedIn() &&
+        value is string &&
+        value != '' &&
+        tokenSellerId() != '' &&
+        value.lower() == tokenSellerId();
+    }
+
+    function ticketBelongsToAuthToken(data) {
+      return signedIn() &&
+        (
+          tokenSellerIdMatches(data.get('sellerId', '')) ||
+          tokenSellerIdMatches(data.get('sellerCode', '')) ||
+          authUidMatches(data.get('userId', '')) ||
+          authUidMatches(data.get('createdBy', '')) ||
+          authEmailMatches(data.get('sellerEmail', '')) ||
+          authEmailMatches(data.get('userEmail', '')) ||
+          authEmailMatches(data.get('createdByEmail', ''))
+        );
+    }
+
+    function ticketCoreFieldsAreSafe(data) {
+      return data.get('totalAmount', 0) is number &&
+        data.get('totalAmount', 0) >= 0 &&
+        data.get('status', 'active') in ['active', 'cancelled', 'winner'];
+    }
+
+    function canCreateTicketFast(data) {
+      return tokenHasRegisteredRole() &&
+        ticketCoreFieldsAreSafe(data) &&
+        (
+          tokenCanManageTickets() ||
+          ticketBelongsToAuthToken(data)
+        );
+    }
+
+    function canReadTicketFast(data) {
+      return tokenHasRegisteredRole() &&
+        (
+          tokenCanManageTickets() ||
+          ticketBelongsToAuthToken(data)
+        );
+    }
+
+    function canUpdateTicketFast(before, after) {
+      return tokenHasRegisteredRole() &&
+        (
+          tokenCanManageTickets() ||
+          (
+            ticketBelongsToAuthToken(before) &&
+            ticketBelongsToAuthToken(after)
+          )
+        );
+    }
+
+    function canDeleteTicketFast(data) {
+      return tokenHasRegisteredRole() &&
+        (
+          tokenCanManageTickets() ||
+          ticketBelongsToAuthToken(data)
         );
     }
 
@@ -387,14 +492,15 @@ service cloud.firestore {
     }
 
     match /tickets/{ticketId} {
-      allow read: if isOwnerCeo() || (isRegisteredUser() && (isOwnerOrAdmin() || ticketBelongsToCurrentUser(resource.data)));
+      allow read: if canReadTicketFast(resource.data) || isOwnerCeo() || (isRegisteredUser() && (isOwnerOrAdmin() || ticketBelongsToCurrentUser(resource.data)));
 
-      allow create: if isOwnerCeo() || (isRegisteredUser() && (
+      allow create: if canCreateTicketFast(request.resource.data) || isOwnerCeo() || (isRegisteredUser() && (
         isOwnerOrAdmin() ||
         ticketBelongsToCurrentUser(request.resource.data)
       ));
 
       allow update: if
+        canUpdateTicketFast(resource.data, request.resource.data) ||
         isOwnerCeo() ||
         isOwnerOrAdmin() ||
         (
@@ -404,6 +510,7 @@ service cloud.firestore {
         );
 
       allow delete: if
+        canDeleteTicketFast(resource.data) ||
         isOwnerCeo() ||
         isOwnerOrAdmin() ||
         (

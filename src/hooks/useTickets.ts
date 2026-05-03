@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { collection, limit, onSnapshot, query, where } from '../firebase';
+import { collection, limit, onSnapshot, orderBy, query, where } from '../firebase';
 import { db } from '../firebase';
 import type { LotteryTicket } from '../types/bets';
 import { getStartOfBusinessDay } from '../utils/dates';
@@ -45,6 +45,7 @@ export function useTickets({
       const qToday = query(
         collection(db, 'tickets'),
         where('timestamp', '>=', startOfToday),
+        orderBy('timestamp', 'desc'),
         limit(2000)
       );
 
@@ -62,6 +63,7 @@ export function useTickets({
       collection(db, 'tickets'),
       where('sellerId', '==', sellerId),
       where('timestamp', '>=', startOfToday),
+      orderBy('timestamp', 'desc'),
       limit(500)
     );
 

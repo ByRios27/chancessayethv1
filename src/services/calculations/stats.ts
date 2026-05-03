@@ -207,7 +207,7 @@ export function calculateUserStats({
 
   injections.forEach(injection => {
     const email = injection.userEmail?.toLowerCase();
-    if (email && stats[email] && injection.date === targetDate) {
+    if (email && stats[email] && injection.date === targetDate && (injection.type || 'injection') === 'injection') {
       stats[email].injections += injection.amount;
     }
   });

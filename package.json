@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 3000",
+    "test:business": "tsx scripts/business-consistency.test.ts",
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0 --port 4173",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
